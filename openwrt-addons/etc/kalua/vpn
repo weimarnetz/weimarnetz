@@ -253,41 +253,48 @@ _vpn_build_vars ()
   VTUNDTYPE="$( _vpn probe_vtund_type )"
 
   # ugly hack
-  local TABLE=
+  #local TABLE=
 
-  for i in $(seq 1 10) 
-  do
-    HOST=$i.$PREFIX.$DOMAIN
-    URL="http://$HOST$JSONPATH"
-    if ! JSON=$( _wget do "$URL" 2>/dev/null ); then
-      _log do $FUNC daemon err "error fetching $URL"
-    else
-       json_cleanup # json_get_var variables are not cleaned otherwise.
-       json_load "$JSON" 2>/dev/null
-       SERVER=     json_get_var SERVER server
-       CLIENTS=-1  json_get_var CLIENTS clients
-       MTU=-1      json_get_var MTU maxmtu
-       PORT=-1     json_get_var PORT port_vtun_${VTUNDTYPE}
+  #for i in $(seq 1 10) 
+  #do
+  #  HOST=$i.$PREFIX.$DOMAIN
+  #  URL="http://$HOST$JSONPATH"
+  #  if ! JSON=$( _wget do "$URL" 2>/dev/null ); then
+  #    _log do $FUNC daemon err "error fetching $URL"
+  #  else
+  #     json_cleanup # json_get_var variables are not cleaned otherwise.
+  #     json_load "$JSON" 2>/dev/null
+  #     SERVER=     json_get_var SERVER server
+  #     CLIENTS=-1  json_get_var CLIENTS clients
+  #     MTU=-1      json_get_var MTU maxmtu
+  #     PORT=-1     json_get_var PORT port_vtun_${VTUNDTYPE}
+  #
+  #       if ! PING="$( _net ping_getlatency "$SERVER" )"; then
+  #	    _log do $FUNC daemon info "ping not possible"
+  #     elif [ 2>/dev/null -n "$SERVER" -a "$CLIENTS" -ge 0 -a "$MTU" -ge 0 -a "$PORT" -ge 0 -a -n "$PING" ]; then
+  #           _log do $FUNC daemon notice "got $SERVER - ping: ${PING}ms"
+  #           TABLE="$TABLE;$PING $i $CLIENTS $MTU $PORT $SERVER"
+  #     else
+  #          _log do $FUNC daemon err "error: invalid data on $URL"
+  #     fi
+  #  fi
+  #done
 
-       if ! PING="$( _net ping_getlatency "$SERVER" )"; then
-	    _log do $FUNC daemon info "ping not possible"
-       elif [ 2>/dev/null -n "$SERVER" -a "$CLIENTS" -ge 0 -a "$MTU" -ge 0 -a "$PORT" -ge 0 -a -n "$PING" ]; then
-             _log do $FUNC daemon notice "got $SERVER - ping: ${PING}ms"
-             TABLE="$TABLE;$PING $i $CLIENTS $MTU $PORT $SERVER"
-       else
-            _log do $FUNC daemon err "error: invalid data on $URL"
-       fi
-    fi
-  done
-
-# no vpn exit early
-[ -n "$TABLE" ] || return 1
+  # no vpn exit early
+  #[ -n "$TABLE" ] || return 1
 
 # get VPN with lowest latency
 # warning: leading spaces somehow break this
-read PING NUMBER CLIENTS MTU PORT SERVER <<EOF 
-  $( echo $TABLE | tr ';' '\n' | sed '/^$/d' | sort -n | head -n1 )
-EOF
+#read PING NUMBER CLIENTS MTU PORT SERVER <<EOF 
+#  $( echo $TABLE | tr ';' '\n' | sed '/^$/d' | sort -n | head -n1 )
+#EOF
+
+# hardcode all the things \o/
+ SERVER=2.v.weimarnetz.de
+ PING="$( _net ping_getlatency "$SERVER" )"
+ MTU=1450
+ PORT=11657
+
 
  VPN_SERVER="$SERVER"
 
