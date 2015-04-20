@@ -269,7 +269,7 @@ _vpn_build_vars ()
        MTU=-1      json_get_var MTU maxmtu
        PORT=-1     json_get_var PORT port_vtun_${VTUNDTYPE}
 
-       if PING="$( _net ping_getlatency "$SERVER" )"; then
+       if ! PING="$( _net ping_getlatency "$SERVER" )"; then
 	    _log do $FUNC daemon info "ping not possible"
        elif [ 2>/dev/null -n "$SERVER" -a "$CLIENTS" -ge 0 -a "$MTU" -ge 0 -a "$PORT" -ge 0 -a -n "$PING" ]; then
              _log do $FUNC daemon notice "got $SERVER - ping: ${PING}ms"
