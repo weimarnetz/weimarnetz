@@ -778,6 +778,9 @@ _netfilter_masquerade_start()
 
 	mkdir -p "/tmp/NETFILTER"
 
+    # ugly hack but waiting a while here avoid missing a slow dhcp lease for the wan port 
+    sleep 10
+
 	devname="$( _net local_inet_offer )"
 	case "$devname" in
 		wifi)
