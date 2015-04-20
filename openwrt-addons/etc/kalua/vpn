@@ -153,7 +153,6 @@ Node$KNOT {
 
 		program "ip address add $WIFIVPNCLIENTADR/$WIFIVPNPRE dev %% " wait ;
 		program "sleep 10" wait;
-		program "ip address add $WIFIVPNCLIENTADR/32 dev %%" wait;
 		program "ip -6 address add $VPN6ADR/$VPN6MSK dev %%" wait;
 		program "ip link set dev %% mtu $MTU up" wait;
 		program "ip route add $VPN_SERVER via $STATIC_ROUTE" wait;		# + table local?
