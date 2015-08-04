@@ -235,9 +235,9 @@ merge_options()
 
 }
 
-SIM_ARG1="$( merge_options "$1" $( uci get meshwizard.community.ipschema ) $( uci get system.@profile[0].name | cut -d'_' -f1 ) )"
-SIM_ARG2="$( merge_options "$2" $( uci get meshwizard.community.wifimode ) $( uci get system.@profile[0].name | cut -d'_' -f2 ) )"
-SIM_ARG3="$( merge_options "$3" $( uci get meshwizard.community.nodenumber ) $( uci get system.@profile[0].nodenumber ) )"
+SIM_ARG1="$( merge_options "$1" $( uci -q get meshwizard.community.ipschema ) $( uci -q get system.@profile[0].name | cut -d'_' -f1 ) )"
+SIM_ARG2="$( merge_options "$2" $( uci -q get meshwizard.community.wifimode ) $( uci -q get system.@profile[0].name | cut -d'_' -f2 ) )"
+SIM_ARG3="$( merge_options "$3" $( uci -q get meshwizard.community.nodenumber ) $( uci -q get system.@profile[0].nodenumber ) )"
 
 has_default_route ()
 {
@@ -253,7 +253,7 @@ has_default_route ()
 }
 
 has_default_route && {
-	[ "$( uci get network.wan.proto )" = "dhcp" ] && {
+	[ "$( uci -q get network.wan.proto )" = "dhcp" ] && {
 		SIM_ARG4="dhcp"		# auf masq=1 testen?
 	}
 }
@@ -382,9 +382,9 @@ case "$HARDWARE" in
 esac
 
 #get old hostname or hostname set in system config
-OLD_HOSTNAME="$( uci get -q meshwizard.system.hostname )"
+OLD_HOSTNAME="$( uci -q get -q meshwizard.system.hostname )"
 [ -z "$OLD_HOSTNAME" ] && {
-	OLD_HOSTNAME="$( uci get system.@system[0].hostname )"
+	OLD_HOSTNAME="$( uci -q get system.@system[0].hostname )"
 }
 
 case "$OLD_HOSTNAME" in
@@ -405,36 +405,35 @@ _config_system ()
 
 	echo "${OLD_HOSTNAME}" >/proc/sys/kernel/hostname
 
-	rm /etc/config/system
 	touch /etc/config/system
 
 	#system section of system
-	uci set system.system="system"
-	uci set system.system.hostname="$OLD_HOSTNAME"
-	uci set system.system.timezone="${TIMEZONE:-GMT0}"
-	uci set system.system.cronloglevel="9"
-	uci set system.system.log_size="16"
+	uci set system.@system[0].hostname="$OLD_HOSTNAME"
+	uci set system.@system[0].timezone="${TIMEZONE:-GMT0}"
+	uci set system.@system[0].cronloglevel="9"
+	uci set system.@system[0].log_size="16"
 	if [ "$INSTALLATION" = "ffweimar" ]; then       #restore all settings in profile ffweimar 
-                uci set system.system.keepsettings="1"
-                uci set system.system.noswinstall="1"
-	else
-                uci set system.system.keepsettings="0"
-	fi
-	[ -n "$( uci get meshwizard.system.conloglevel )" ] && {
-		uci set system.system.conloglevel="$( uci get meshwizard.system.conloglevel )"
-	}
-	[ -n "$( uci get meshwizard.system.latitude )" ] && {
-		uci set system.system.latitude="$( uci get meshwizard.system.latitude )"
-	}
-	[ -n "$( uci get meshwizard.system.longitude )" ] && {
-		uci set system.system.longitude="$( uci get meshwizard.system.longitude )"
-	}
-	[ -n "$( uci get meshwizard.system.location )" ] && {
-		uci set system.system.location="$( uci get meshwizard.system.location )"
+                uci set system.@system[0].noswinstall="1"
+	fi	
+	# set location only when data is fresh from meshkit, else leave all values
+	[ -n "$FRESHMESHKIT" ] && {
+		[ -n "$( uci -q get meshwizard.system.conloglevel )" ] && {
+			uci set system.@system[0].conloglevel="$( uci -q get meshwizard.system.conloglevel )"
+		}
+		[ -n "$( uci -q get meshwizard.system.latitude )" ] && {
+			uci set system.@system[0].latitude="$( uci -q get meshwizard.system.latitude )"
+		}
+		[ -n "$( uci -q get meshwizard.system.longitude )" ] && {
+			uci set system.@system[0].longitude="$( uci -q get meshwizard.system.longitude )"
+		}
+		[ -n "$( uci -q get meshwizard.system.location )" ] && {
+			uci set system.@system[0].location="$( uci -q get meshwizard.system.location )"
+		}
 	}
 	
 	#ntp section of system
 
+	uci delete system.ntp
 	uci set system.ntp="timeserver"
 	uci add_list system.ntp.server="0.openwrt.pool.ntp.org"
 	uci add_list system.ntp.server="1.openwrt.pool.ntp.org"
@@ -444,23 +443,11 @@ _config_system ()
 
 	#weblogin section of system
 
-	case "${INSTALLATION}" in
-		*)
-			weblogin_hide=
-		;;
-	esac
-
 	local hide_lang="#"	# default-lang
 
-	case "${INSTALLATION}" in
-		preskil*|shankar*|castelfalfi*)
-			hide_lang=
-		;;
-	esac
-	
 	uci set system.weblogin="weblogin"
 
-	[ -z "$weblogin_hide" ] && {
+	[ -z "$( uci -q get system.weblogin.enabled )" ] && {
 		uci set system.weblogin.enabled="1"
 	}
 	uci set system.weblogin.namespace="capital_citys_de"
@@ -468,15 +455,6 @@ _config_system ()
 		uci set system.weblogin.adminlang="en"
 	}
 
-	case "${NODE}_${INSTALLATION}" in
-		42_ejbw*)
-			uci set system.weblogin.authserver="192.168.111.183"
-		;;
-		6_monami*)
-			uci set system.weblogin.authserver="10.63.7.1"
-		;;
-	esac
-	
 	#profile section of system
 	uci set system.profile="profile"
 	uci set system.profile.name="${INSTALLATION}_${PROFILE_MODE}"
@@ -489,14 +467,13 @@ _config_system ()
 
 	#fwupdate section of system
 	uci set system.fwupdate="fwupdate"
-	uci set url="http://intercity-vpn.de/firmware"
-        if [ "$INSTALLATION" = "ffweimar" ]; then	# autoupdate only stable versions in profile ffweimar
+	uci set system.fwupdate.url="http://weimarnetz.de/freifunk/firmware/"
+	if [ -z "$( uci -q get system.fwupdate.mode )" ]; then	# if not set make it stable
 		uci set system.fwupdate.mode="stable"
-	else
-		uci set system.fwupdate.mode="testing"
-        fi
+	fi
 
 	#admin section of system
+	uci delete system.@admin[0]
 	uci set system.admin="admin"
 	uci set system.admin.location="$( contact location )"
 	uci set system.admin.latlon="$( contact latlon )"
@@ -519,27 +496,30 @@ _config_system ()
 
 _config_freifunk ()
 {
-	#contact section of freifunk
-	uci set freifunk.contact="public"
-	[ -n "$( uci get meshwizard.contact.name )" ] && {
-		uci set freifunk.contact.name="$( uci get meshwizard.contact.name )"
-	}
-	[ -n "$( uci get meshwizard.contact.nickname )" ] && {
-		uci set freifunk.contact.nickname="$( uci get meshwizard.contact.nickname )"
-	}
-	[ -n "$( uci get meshwizard.contact.mail )" ] && {
-		uci set freifunk.contact.mail="$( uci get meshwizard.contact.mail )"
-	}
-	[ -n "$( uci get meshwizard.contact.phone )" ] && {
-		uci set freifunk.contact.phone="$( uci get meshwizard.contact.phone )"
-	}
-	[ -n "$( uci get meshwizard.contact.note )" ] && {
-		uci set freifunk.contact.note="$( uci get meshwizard.contact.note )"
-	}
-	#community section of freifunk
-	uci set freifunk.community="public"
-	[ -n "$( uci get meshwizard.community.name )" ] && {
-		uci set freifunk.community.name="$( uci get meshwizard.community.name )"
+	# set contact and user info only when data is fresh from meshkit, else leave all values
+	[ -n "$FRESHMESHKIT" ] && {
+		#contact section of freifunk
+		uci set freifunk.contact="public"
+		[ -n "$( uci -q get meshwizard.contact.name )" ] && {
+			uci set freifunk.contact.name="$( uci -q get meshwizard.contact.name )"
+		}
+		[ -n "$( uci -q get meshwizard.contact.nickname )" ] && {
+			uci set freifunk.contact.nickname="$( uci -q get meshwizard.contact.nickname )"
+		}
+		[ -n "$( uci -q get meshwizard.contact.mail )" ] && {
+			uci set freifunk.contact.mail="$( uci -q get meshwizard.contact.mail )"
+		}
+		[ -n "$( uci -q get meshwizard.contact.phone )" ] && {
+			uci set freifunk.contact.phone="$( uci -q get meshwizard.contact.phone )"
+		}
+		[ -n "$( uci -q get meshwizard.contact.note )" ] && {
+			uci set freifunk.contact.note="$( uci -q get meshwizard.contact.note )"
+		}
+		#community section of freifunk
+		uci set freifunk.community="public"
+		[ -n "$( uci -q get meshwizard.community.name )" ] && {
+			uci set freifunk.community.name="$( uci -q get meshwizard.community.name )"
+		}
 	}
 	if [ "$INSTALLATION" = "ffweimar" ]; then
 		uci set freifunk.community.owm_api="http://mapapi.weimarnetz.de"
@@ -583,39 +563,39 @@ _config_wireless ()			# fixme! channels hardcoded
 	[ -z "$TXPOWER" ] && hidetx="#"
 	
 	for radiocard in 0 1 2 3; do {
-		[ "$( uci get wireless.radio${radiocard}.disabled )" = "1" ] && {
+		[ "$( uci -q get wireless.radio${radiocard}.disabled )" = "1" ] && {
 			uci set wireless.radio${radiocard}.disabled=0
 		}
 	} done
 
 	local profile_mode_tmp=$PROFILE_MODE
 
-for radiocard in 0 1 2 3; do {
+	for radiocard in 0 1 2 3; do {
 
-	driver_path="$( uci get wireless.radio${radiocard}.path )"		# e.g. 'platform/ath9k' or 'platform/ar231x-wmac.0'
+		driver_path="$( uci -q get wireless.radio${radiocard}.path )"		# e.g. 'platform/ath9k' or 'platform/ar231x-wmac.0'
+		
+		# check if real wifi card or only VAP/hybrid interface
+		pointing2device="$( uci -q get wireless.@wifi-iface[${radiocard}].device )"		# e.g. radio1
+		[ "$( uci -q get wireless.${pointing2device} )" = "wifi-device" ] || continue
+		[ -n "$( uci -q get wireless.${pointing2device}.type )" ] || continue
+		
+		radiotype="$( uci -q get wireless.radio${radiocard}.type )"	# e.g. 'mac80211' or 'atheros'
+		[ -z "$radiotype" ] && continue
+		
+		[ $radiocard -gt 0 ] && {
+			echo >> "$temp"
+			echo "### next radio ###" >> "$temp"
+			echo >> "$temp"
+			PROFILE_MODE="adhoc"					# only first wifi card will profide an ap
+			network_append="RADIO${radiocard}"
+		}
 
-	# check if real wifi card or only VAP/hybrid interface                                                                     
-        pointing2device="$( uci get wireless.@wifi-iface[${radiocard}].device )" # e.g. radio1                                     
-        [ "$( uci get wireless.${pointing2device} )" = "wifi-device" ] || continue                                                 
-        [ -n "$( uci get wireless.${pointing2device}.type )" ] || continue                                                         
-                                                                                                                                   
-        radiotype="$( uci get wireless.radio${radiocard}.type )" # e.g. 'mac80211' or 'atheros'                                    
-        [ -z "$radiotype" ] && continue                                                                                            
-                                                                                                                                   
-        [ $radiocard -gt 0 ] && {                                                                                                  
-                echo >>"$temp"                                                                                                     
-                echo "### next radio ###" >>"$temp"                                                                                
-                echo >>"$temp"                                                                                                     
-                PROFILE_MODE="adhoc"                                            # only first wifi card will profide an ap          
-                network_append="RADIO${radiocard}"                                                                                 
-        }
-
-	[ $radiocard -gt 0 ] && echo "" >>"$temp"
+	[ $radiocard -gt 0 ] && echo "" >> "$temp"
 
 	log "configuring radio${radiocard} ..."
 
 	local hide_mac="#"
-	MAC="$( uci get wireless.radio${radiocard}.macaddr )"
+	MAC="$( uci -q get wireless.radio${radiocard}.macaddr )"
 	if [ -z "$MAC" ]; then
 		[ -z "$driver_path" ] && {
 			hide_mac=
@@ -626,7 +606,7 @@ for radiocard in 0 1 2 3; do {
 		hide_mac=
 	fi
 
-	hwmode="$( uci get wireless.radio${radiocard}.hwmode )"		# backup current state
+	hwmode="$( uci -q get wireless.radio${radiocard}.hwmode )"		# backup current state
 	hwmode="${hwmode:-11g}"
 
 	case "$hwmode" in
@@ -635,20 +615,20 @@ for radiocard in 0 1 2 3; do {
 		;;
 	esac
 
-	case "$( wireless.radio${radiocard}.htmode )" in		# maybe switched off by user
+	case "$( uci -q get wireless.radio${radiocard}.htmode )" in		# maybe switched off by user
 		"")
 			hideht=""
 		;;
 	esac
 
-	radiotype="$( uci get wireless.radio${radiocard}.type )"	# e.g. 'mac80211' or 'atheros'
+	radiotype="$( uci -q get wireless.radio${radiocard}.type )"		# e.g. 'mac80211' or 'atheros'
 
-	ht_cap_list="$( uci get wireless.radio${radiocard}.ht_capab )"	# backup current state
+	ht_cap_list="$( uci -q get wireless.radio${radiocard}.ht_capab )"	# backup current state
 
 	ht_cap_uci_output()
 	{
 		for ht_cap in $ht_cap_list; do {
-			echo "	list ht_capab	'$ht_cap'"
+			echo "	list ht_capab		\"$ht_cap\""
 		} done
 	}
 
@@ -683,8 +663,8 @@ for radiocard in 0 1 2 3; do {
 
 	case "$hwmode" in
 		11na|11a)
-			local channel_now="$( uci get wireless.radio${radiocard}.channel )"
-			local bssid_now="$( uci get wireless.@wifi-iface[${radiocard}].bssid )"
+			local channel_now="$( uci -q get wireless.radio${radiocard}.channel )"
+			local bssid_now="$( uci -q get wireless.@wifi-iface[${radiocard}].bssid )"
 
 			if [ "$bssid_now" = "$( bssid_wellformed "$channel_now" "$BSSID" )" ]; then
 				log "[OK] using already configured channel $channel_now"
@@ -735,7 +715,7 @@ for radiocard in 0 1 2 3; do {
 
 	[ "$hideht" = "#" ] && hide_noscan="#"
 
-	local chanbw="$( uci get wireless.radio${radiocard}.ath9k_chanbw )$( uci get wireless.radio${radiocard}.chanbw )"
+	local chanbw="$( uci -q get wireless.radio${radiocard}.ath9k_chanbw )$( uci -q get wireless.radio${radiocard}.chanbw )"
 	case "$chanbw" in
 		5|10|20)
 			hide_chanbw=
@@ -758,66 +738,66 @@ for radiocard in 0 1 2 3; do {
 
 	case "$PROFILE_MODE" in
 		hybrid)
-			local ssid_adhoc='weimarnetz'			# fixme! work with 'hidden'
-			local ssid_ap="$( uci get wireless.@wifi-iface[$(( ${radiocard} + 1 ))].ssid )"
-			[ -z "$ssid_ap" ] && ssid_ap="Weimarnetz - Knoten $NODE"
+			local ssid_adhoc="weimarnetz"			# fixme! work with 'hidden'
+			local ssid_ap="$( uci -q get wireless.@wifi-iface[$(( ${radiocard} + 1 ))].ssid )"
+			[ -z "$ssid_ap" -o "$ssid_ap" = "OpenWrt" ] && ssid_ap="Weimarnetz - Knoten $NODE"
 
-			cat >>"$temp" <<EOF
+			cat >> "$temp" <<EOF
 config wifi-device radio${radiocard}
-	option type	$radiotype
-	option country	$country
-	option channel	$CHANNEL
-#	option ath9k_chanbw $chanbw		# temporary, 5, 10 or 20 (default)
-$hide_chanbw	option chanbw	$chanbw		# since r32596
-$hide_mac	option macaddr	$MAC
-	option frag	off
-$hidetx	option txpower	$TXPOWER
-	option beacon_int 1000
-${hide_noscan}	option noscan	1
+	option type		"$radiotype"
+	option country		"$country"
+	option channel		"$CHANNEL"
+#	option ath9k_chanbw	"$chanbw"		# temporary, 5, 10 or 20 (default)
+$hide_chanbw	option chanbw		"$chanbw"	# since r32596
+$hide_mac	option macaddr		"$MAC"
+	option frag		"off"
+$hidetx	option txpower		"$TXPOWER"
+	option beacon_int 	"1000"
+$hide_noscan	option noscan		"1"
 EOF
 
-			[ -n "$driver_path" ] && echo "	option path '$driver_path'" >>"$temp"
+			[ -n "$driver_path" ] && echo "	option path		\"$driver_path\"" >> "$temp"
 
 
-			cat >>"$temp" <<EOF
-	option hwmode   $hwmode
-${hideht}	option htmode   $htmode
+			cat >> "$temp" <<EOF
+	option hwmode		"$hwmode"
+$hideht	option htmode		"$htmode"
 $( ht_cap_uci_output )
 EOF
 
 	case "$HARDWARE" in
 		"Buffalo WHR-HP-G54")
-			echo >>"$temp" "	option rxantenna 1"
-			echo >>"$temp" "	option rxantenna 1"
+			echo >> "$temp" "	option rxantenna	1"
+			echo >> "$temp" "	option rxantenna	1"
 		;;
 		"Linksys WRT54G"*|"ASUS WL-500g Premium")
-			echo >>"$temp" "	option rxantenna 0"
-			echo >>"$temp" "	option rxantenna 0"
+			echo >> "$temp" "	option rxantenna	0"
+			echo >> "$temp" "	option rxantenna	0"
 		;;
 	esac
 
 			[ -z "$BSSID" ] && BSSID="$( bssid_wellformed "$CHANNEL" )"
 
-			cat >>"$temp" <<EOF
+			cat >> "$temp" <<EOF
 
 config wifi-iface
-	option device	radio${radiocard}
-	option network	wlanadhoc${network_append}
-	option mode	adhoc
-	option bssid	'$BSSID'
-	option ssid	'${ssid_adhoc}'
-	option mcast_rate ${MCAST_RATE}
-#	option bintval	1000
+	option device		"radio${radiocard}"
+	option network		"wlanadhoc${network_append}"
+	option mode		"adhoc"
+	option bssid		"${BSSID}"
+	option ssid		"${ssid_adhoc}"
+	option mcast_rate	"${MCAST_RATE}"
+#	option bintval		"1000"
 
 config wifi-iface
-	option device	radio${radiocard}
-	option network	wlan${network_append}
-	option mode	ap
-	option ssid	'${ssid_ap}'
+	option device		"radio${radiocard}"
+	option network		"wlan${network_append}"
+	option mode		"ap"
+	option ssid		"${ssid_ap}"
 EOF
 		;;
 		ap*)
-			local old_essid="$( uci get wireless.@wifi-iface[${radiocard}].ssid )"
+			local old_essid="$( uci -q get wireless.@wifi-iface[${radiocard}].ssid )"
 			local new_essid="${INSTALLATION} $NODE"
 
 			[ -n "$SSID_ENFORCED" ] && {
@@ -839,129 +819,99 @@ EOF
 				;;
 			esac
 
-			cat >>"$temp" <<EOF
+			cat >> "$temp" <<EOF
 config wifi-device radio${radiocard}
-	option type	$radiotype
-	option country	$country
-$hidetx	option txpower	$TXPOWER
-	option channel	$CHANNEL
-$hide_mac	option macaddr	$MAC
-	option frag	off
-${hide_noscan}	option noscan	1
+	option type		"$radiotype"
+	option country		"$country"
+$hidetx	option txpower		"$TXPOWER"
+	option channel		"$CHANNEL"
+$hide_mac	option macaddr		"$MAC"
+	option frag		"off"
+${hide_noscan}	option noscan		"1"
 EOF
 
-			[ -n "$driver_path" ] && echo "	option path '$driver_path'" >>"$temp"
+			[ -n "$driver_path" ] && echo "	option path 		\"$driver_path\"" >> "$temp"
 
-	grep -q ^"b43 " "/proc/modules" && cat >>"$temp" <<EOF
+	grep -q ^"b43 " "/proc/modules" && cat >> "$temp" <<EOF
 	option bitrates '6 9 12 18 24 36 48 54'
 EOF
 
-			cat >>"$temp" <<EOF
-	option hwmode   $hwmode
-${hideht}	option htmode   $htmode
+			cat >> "$temp" <<EOF
+	option hwmode		"$hwmode"
+${hideht}	option htmode		"$htmode"
 $( ht_cap_uci_output )
 EOF
 
-			cat >>"$temp" <<EOF
+			cat >> "$temp" <<EOF
 
 config wifi-iface
-	option device	radio${radiocard}
-	option network	wlan${network_append}
-	option mode	ap
-	option ssid	'${new_essid}'
-	option max_num_sta 64		# since r33400
-	option max_inactivity 300	# since r33412 [sec]
+	option device		"radio${radiocard}"
+	option network		"wlan${network_append}"
+	option mode		"ap"
+	option ssid		"${new_essid}"
+	option max_num_sta	"64"		# since r33400
+	option max_inactivity	"300"		# since r33412 [sec]
 EOF
 		;;
 		*)
 			local new_essid="bb"
 
 			case "${INSTALLATION}" in
-				aschbach*) new_essid="Berghotel" ;;
 				ffweimar*) new_essid="weimarnetz" ;;
 			esac
 
-			cat >>"$temp" <<EOF
+			cat >> "$temp" <<EOF
 config wifi-device radio${radiocard}
-	option type	$radiotype
-	option country	$country
-	option channel	$CHANNEL
-#	option ath9k_chanbw $chanbw		# temporary, 5, 10 or 20 (default)
-$hide_chanbw	option chanbw	$chanbw		# since r32596
-$hide_mac	option macaddr	$MAC
-	option frag	off
-$hidetx	option txpower	$TXPOWER
-	option beacon_int 1000
-${hide_noscan}	option noscan	1
+	option type		"$radiotype"
+	option country		"$country"
+	option channel		"$CHANNEL"
+#	option ath9k_chanbw	"$chanbw"		# temporary, 5, 10 or 20 (default)
+$hide_chanbw	option chanbw		"$chanbw"		# since r32596
+$hide_mac	option macaddr		"$MAC"
+	option frag		"off"
+$hidetx	option txpower		"$TXPOWER"
+	option beacon_int	"1000"
+$hide_noscan	option noscan		"1"
 EOF
 
-			[ -n "$driver_path" ] && echo "	option path '$driver_path'" >>"$temp"
+			[ -n "$driver_path" ] && echo "	option path		\"$driver_path\"" >> "$temp"
 
-	grep -q ^"b43 " "/proc/modules" && cat >>"$temp" <<EOF
+	grep -q ^"b43 " "/proc/modules" && cat >> "$temp" <<EOF
 	option bitrates '6 9 12 18 24 36 48 54'
 EOF
 
-			cat >>"$temp" <<EOF
-	option hwmode	$hwmode
-${hideht}	option htmode	$htmode
+			cat >> "$temp" <<EOF
+	option hwmode		"$hwmode"
+${hideht}	option htmode		"$htmode"
 $( ht_cap_uci_output )
 EOF
 
 			[ -z "$BSSID" ] && BSSID="$( bssid_wellformed "$CHANNEL" )"
 
-			cat >>"$temp" <<EOF
+			cat >> "$temp" <<EOF
 
 config wifi-iface
-	option device	radio${radiocard}
-	option network	wlan${network_append}
-	option mode	adhoc
-	option bssid	'$BSSID'
-	option ssid	'${new_essid}'
-	option mcast_rate ${MCAST_RATE}
-#	option bintval	1000
+	option device		"radio${radiocard}"
+	option network		"wlan${network_append}"
+	option mode		"adhoc"
+	option bssid		"${BSSID}"
+	option ssid		"${new_essid}"
+	option mcast_rate	"${MCAST_RATE}"
+#	option bintval		"1000"
 EOF
 		;;
 	esac
 
 } done
 
-	cat >>"$temp" <<EOF
+	cat >> "$temp" <<EOF
 
 config auto_optimize
-	option neigh	'off'
+	option neigh		"off"
 EOF
 
 	mv "$temp" /etc/config/wireless
-	PROFILE_MODE=$profile_mode_tmp                                  #reset original profile mode
-}
-
-_config_mail ()
-{
-	cat >/etc/config/mail <<EOF
-config pop3
-	option username	'$POP3_USERNAME'
-	option password	'$POP3_PASSWORD'
-	option server	'pop.gmx.net'
-	option port	'110'
-
-config smtp
-	option server	'mail.gmx.net'
-	option port 	'25'
-	option auth	'pop-before-smtp'
-	option mail	'wlan-assistance@gmx.de'
-	option name	'Ticket-Assistent'
-EOF
-}
-
-_config_sms ()
-{
-	cat >/etc/config/sms <<EOF
-config sms
-	option username	'$SMS77_USERNAME'
-	option password	'$SMS77_PASSWORD'
-	option post	''
-	option phonebook	''
-EOF
+	PROFILE_MODE=$profile_mode_tmp		#reset original profile mode
 }
 
 _config_network ()
@@ -976,8 +926,8 @@ _config_network ()
 		;;
 	esac
 
-	LANDEV="$( uci get network.lan.ifname )"
-	WANDEV="$( uci get network.wan.ifname )"
+	LANDEV="$( uci -q get network.lan.ifname )"
+	WANDEV="$( uci -q get network.wan.ifname )"
 
 	if [ "$GATEWAY" = "dhcp" ]; then
 		PROTO="dhcp"
@@ -1072,7 +1022,7 @@ for radiocard in 0 1 2 3; do {
 	local alias_ifname alias_proto alias_ipaddr alias_netmask alias_network
 	local hide="#"
 	
-	local pointing2type="$( uci get wireless.@wifi-iface[${radiocard}].type )"
+	local pointing2type="$( uci -q get wireless.@wifi-iface[${radiocard}].type )"
 	
 	case "$pointing2type" in
 		mac80211)
@@ -1157,15 +1107,15 @@ EOF
 _config_dhcp ()			# domain = .olsr
 {
 	local NODE="$1"
-	local wan_dns="$( uci get network.wan.dns )"
-	local cache, domain
+	local wan_dns="$( uci -q get network.wan.dns )"
+	local cache domain
 
 	if [ "$INSTALLATION" = "ffweimar" ]; then       #set domain to olsr for profile ffweimar
 		domain="olsr" 
-        else
-                domain="lan"
-        fi
-
+	else
+		domain="lan"
+	fi
+	
 	case $HARDWARE in
 		"TP-LINK TL-WR1043ND"|"BulletM")
 			cache="1000"
@@ -1177,56 +1127,61 @@ _config_dhcp ()			# domain = .olsr
 
 	[ -n "$wan_dns" ] && DNSSERVER="$wan_dns"
 
-	cat >/etc/config/dhcp <<EOF
-config dnsmasq
-	option cachesize	$cache	# query with 'kill -SIGUSR1 \$( pidof dnsmasq ); logread | tail -n5'
-	option domainneeded	0	# forward querys without dots
-	option boguspriv	1
-	option filterwin2k	0	# enable for dial on demand
-	option localise_queries	1
-	option rebind_protection 0	# disable if upstream must serve RFC1918 addresses
-	option rebind_localhost 0	# enable for RBL checking and similar services
-	# list rebind_domain example.lan # whitelist RFC1918 responses for domains
-	option local	'/$domain/'
-	option domain	'$domain'
-	option expandhosts	1
-	option nonegcache	0
-	option authoritative	1
-	option readethers	1
-	option leasefile	'/tmp/dhcp.leases'
-	option resolvfile	'/tmp/resolv.conf.auto'
-	list addnhosts		'/var/etc/hosts'
-	list addnhosts		'/etc/local.hosts'
-	list server 		'$DNSSERVER'
+	uci -q delete dhcp.@dnsmasq[0]
+	uci -q add dhcp dnsmasq
+	uci -q set dhcp.@dnsmasq[0].cachesize="$cache"	# query with 'kill -SIGUSR1 \$( pidof dnsmasq ); logread | tail -n5'
+	uci -q set dhcp.@dnsmasq[0].domainneeded="0"	# forward querys without dots
+	uci -q set dhcp.@dnsmasq[0].boguspriv="1"
+	uci -q set dhcp.@dnsmasq[0].filterwin2k="0"	# enable for dial on demand
+	uci -q set dhcp.@dnsmasq[0].localise_queries="1"
+	uci -q set dhcp.@dnsmasq[0].rebind_protection="0"	# disable if upstream must serve RFC1918 addresses
+	uci -q set dhcp.@dnsmasq[0].rebind_localhost="0"	# enable for RBL checking and similar services
+	## list rebind_domain example.lan # whitelist RFC1918 responses for domains
+	uci -q set dhcp.@dnsmasq[0].local="/$domain/"
+	uci -q set dhcp.@dnsmasq[0].domain="$domain"
+	uci -q set dhcp.@dnsmasq[0].expandhosts="1"
+	uci -q set dhcp.@dnsmasq[0].nonegcache="0"
+	uci -q set dhcp.@dnsmasq[0].authoritative="1"
+	uci -q set dhcp.@dnsmasq[0].readethers="1"
+	uci -q set dhcp.@dnsmasq[0].leasefile="/tmp/dhcp.leases"
+	uci -q set dhcp.@dnsmasq[0].resolvfile="/tmp/resolv.conf.auto"
+	uci -q add_list dhcp.@dnsmasq[0].addnhosts="/var/etc/hosts"
+	uci -q add_list dhcp.@dnsmasq[0].addnhosts="/etc/local.hosts"
+	uci -q add_list dhcp.@dnsmasq[0].server="$DNSSERVER"
 	# list server		'/mycompany.local/1.2.3.4'
 	# option nonwildcard	1
 	# list interface	br-lan
-	list notinterface	wan
-	option dhcpscript	'/etc/dhcp-script.d/10dhcpscript'
-
-config dhcp lan
-	option interface	lan
-	option start 		$( _ipsystem do "$NODE" | grep ^"LANDHCPSTART=" | cut -d'=' -f2 )
-	option limit		$( _ipsystem do "$NODE" | grep ^"LANDHCPNUM="   | cut -d'=' -f2 )
-	option leasetime	2h
-	option force		1
-	option ignore		${DHCP_IGNORE_LAN:-0}
-	list dhcp_option        '121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d"=" -f2 )'
-
-config dhcp wlan
-	option interface	wlan
-	option start 		$( _ipsystem do "$NODE" | grep ^"WIFIDHCPSTART=" | cut -d'=' -f2 | cut -d'.' -f4 )
-	option netmask		$( _net cidr2mask "$( _ipsystem do "$NODE" | grep ^"WIFI_DHCP_PRE=" | cut -d'=' -f2 )" ) # 255.255.255.240?
-	option limit		$( _ipsystem do "$NODE" | grep ^"WIFIDHCPNUM=" | cut -d'=' -f2 )			 # fixme! better: 21
-	option leasetime	1h
-	option force		1
-	option ignore		${DHCP_IGNORE_WLAN:-0}
-	list dhcp_option        '121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d"=" -f2 )'
-
-config dhcp wan
-	option interface	wan
-	option ignore		1
-EOF
+	uci -q add_list dhcp.@dnsmasq[0].notinterface="wan"
+	uci -q set dhcp.@dnsmasq[0].dhcpscript="/etc/dhcp-script.d/10dhcpscript"
+	
+	uci -q delete dhcp.lan
+	uci -q set dhcp.lan="dhcp"
+	
+	uci -q set dhcp.lan.interface="lan"
+	uci -q set dhcp.lan.start=$( _ipsystem do "$NODE" | grep ^"LANDHCPSTART=" | cut -d'=' -f2 )
+	uci -q set dhcp.lan.limit=$( _ipsystem do "$NODE" | grep ^"LANDHCPNUM="   | cut -d'=' -f2 )
+	uci -q set dhcp.lan.leasetime="2h"
+	uci -q set dhcp.lan.force="1"
+	uci -q set dhcp.lan.ignore=${DHCP_IGNORE_LAN:-0}
+	uci -q add_list dhcp.lan.dhcp_option="121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d'=' -f2 )"
+	
+	uci -q delete dhcp.wlan
+	uci -q set dhcp.wlan="dhcp"
+	uci -q set dhcp.wlan.interface="wlan"
+	uci -q set dhcp.wlan.start=$( _ipsystem do "$NODE" | grep ^"WIFIDHCPSTART=" | cut -d'=' -f2 | cut -d'.' -f4 )
+	uci -q set dhcp.wlan.netmask=$( _net cidr2mask "$( _ipsystem do "$NODE" | grep ^"WIFI_DHCP_PRE=" | cut -d'=' -f2 )" ) # 255.255.255.240?
+	uci -q set dhcp.wlan.limit=$( _ipsystem do "$NODE" | grep ^"WIFIDHCPNUM=" | cut -d'=' -f2 )			 # fixme! better: 21
+	uci -q set dhcp.wlan.leasetime="1h"
+	uci -q set dhcp.wlan.force="1"
+	uci -q set dhcp.wlan.ignore=${DHCP_IGNORE_WLAN:-0}
+	uci -q add_list dhcp.wlan.dhcp_option="121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d'=' -f2 )"
+	
+	uci -q delete dhcp.wan
+	uci -q set dhcp.wan="dhcp"
+	uci -q set dhcp.wan.interface="wan"
+	uci -q set dhcp.wan.ignore="1"
+	
+	uci commit dhcp
 }
 
 _config_aliases ()
@@ -1331,11 +1286,11 @@ _config_olsrd ()	# example here: http://olsr.org/git/?p=olsrd.git;a=blob;f=files
 		} done
 	}
 
-	[ -z "$( uci get network.wan.ifname )" ] && {
+	[ -z "$( uci -q get network.wan.ifname )" ] && {
 		wandev=
 	}
 
-	[ "$( uci get network.wan.proto )" = "static" ] || {
+	[ "$( uci -q get network.wan.proto )" = "static" ] || {
 		case "$NETWORK" in
 			satama*|ejbw*)
 			;;
@@ -1365,9 +1320,9 @@ _config_olsrd ()	# example here: http://olsr.org/git/?p=olsrd.git;a=blob;f=files
 		;;
 	esac
 
-	main_ip="$( uci get network.lan.ipaddr )"
+	main_ip="$( uci -q get network.lan.ipaddr )"
 	[ -z "$main_ip" ] && {
-		main_ip="$( uci get network.wan.ipaddr )"
+		main_ip="$( uci -q get network.wan.ipaddr )"
 	}
 
 	local fisheye hello_interval tc_interval
@@ -1466,7 +1421,7 @@ EOF
 	local interface_mode="mesh"
 #	case "$PROFILE_MODE" in
 #		adhoc*)
-#			case "$( uci get wireless.radio0.hwmode )" in
+#			case "$( uci -q get wireless.radio0.hwmode )" in
 #				*"a"*)
 #					interface_mode="ether"		# fixme! not a good idea for multipoint-stations
 #				;;
@@ -1578,6 +1533,7 @@ EOF
 # the file shouldn't exist in sysupgrade packages from our homepage
 [ -e /rom/etc/config/meshwizard ] && {
 	cp "/rom/etc/config/meshwizard" "/etc/config/meshwizard"
+  FRESHMESHKIT="YO"
 }
 
 # copy opkg.conf from build system
@@ -1585,18 +1541,8 @@ EOF
 	cp "/rom/etc/opkg.conf" "/etc/opkg.conf"
 }
 
-# keep important settings
-local keepsettings="$( uci get system.@system[0].keepsettings )"           
-[ "$keepsettings" != "1" ] && { 
-	for SECTION in softwareinstall system mail wireless network dhcp aliases firewall sms polipo; do {
-		log "....working on section '$SECTION'"
-		_config_$SECTION "$NODENUMBER"
-		log "[ok] ready with section '$SECTION'"
-	} done
-}
-
 # rewrite new settings
-for SECTION in freifunk olsrd; do {
+for SECTION in softwareinstall wireless network system freifunk olsrd dhcp aliases; do {
 	log "....working on section '$SECTION'"
 	_config_$SECTION "$NODENUMBER"
 	log "[ok] ready with section '$SECTION'"
@@ -1625,6 +1571,9 @@ for SECTION in freifunk olsrd; do {
 	/etc/init.d/freifunk disable
 	}
 
+[ -e "/etc/init.d/S90olsr-prio" -a -x "/usr/sbin/tc" ] && {
+  /etc/init.d/S90olsr-prio enable
+}
 
 # webserver-related stuff
 uci set uhttpd.main.index_page="weimar-splash-index.sh"
@@ -1644,6 +1593,7 @@ uci set luci.main.mediaurlbase="/luci-static/bootstrap"
 uci set uhttpd.main.max_requests="5"
 # uci set uhttpd.main.script_timeout=5			// fixme! needs testing
 # uci set uhttpd.main.network_timeout=5
+uci set uhttpd.main.redirect_https="0"
 if [ -e "/usr/lib/libcyassl.so" ]; then
 	uci set uhttpd.main.listen_https="0.0.0.0:443"
 else

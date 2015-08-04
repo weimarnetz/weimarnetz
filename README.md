@@ -51,6 +51,8 @@ feature packs:
 
 feature | explanation
 ------- | -----------
+busybox | configures busybox standard features
+busybox_swap | use swap tools from busybox instead of heavy original tools
 ffweimar_standard | contains packages suitable and required for all weimarnetz installations
 ffweimar_luci_standard | adds luci as standard web interface
 hostapd | installs hostapd-mini to enable wireless AP (note: WPA isn't included)
@@ -200,7 +202,7 @@ piggyback kalua on a new router model without building from scratch
 	# some seconds, connect via LAN with 'telnet 192.168.1.1' and
 
 	# look with which IP was given on WAN, then do:
-	ifconfig $(uci get network.wan.ifname) | fgrep "inet addr:"
+	ifconfig $(uci -q get network.wan.ifname) | fgrep "inet addr:"
 	/etc/init.d/firewall stop
 	/etc/init.d/firewall disable
 	exit
