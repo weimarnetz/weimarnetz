@@ -1,5 +1,8 @@
-#!/bin/sh
+#!/bin/sh /etc/rc.common
+
 . /tmp/loader
+
+START=41
 
 if [ -n "$FAILSAFE" ] || [ -n "$READONLY" ] || [ ! -e "/www/SOFTWARE_FULLY_INSTALLED" ]; then exit; fi
 
