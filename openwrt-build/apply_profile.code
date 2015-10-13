@@ -1177,8 +1177,12 @@ _config_dhcp ()			# domain = .olsr
 	uci -q set dhcp.wlan.leasetime="1h"
 	uci -q set dhcp.wlan.force="1"
 	uci -q set dhcp.wlan.ignore=${DHCP_IGNORE_WLAN:-0}
-	uci -q add_list dhcp.wlan.dhcp_option="121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d'=' -f2 )"
-	
+
+# FIXME!
+# disable since we have a proper fix:
+# the gateway must be valid: in normal wifi mode = WIFIADR and in hybrid-mode = WIFIADR + 1
+#	uci -q add_list dhcp.wlan.dhcp_option="121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d'=' -f2 )"
+
 	uci -q delete dhcp.wan
 	uci -q set dhcp.wan="dhcp"
 	uci -q set dhcp.wan.interface="wan"
