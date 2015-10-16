@@ -16,6 +16,8 @@ default {
   keepalive yes ;
   multi killold ;
   stat no ;
+  proto udp ;
+  nat_hack server ;
 }
 EOF
 
