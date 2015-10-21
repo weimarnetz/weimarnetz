@@ -8,7 +8,7 @@ HOST="${4:-unset}"
 
 case "$MAC" in
 	*"-"*)
-		_log do dhcp_script daemon info "ignore non-ethernet events: $MAC"
+		_log it dhcp_script daemon info "ignore non-ethernet events: $MAC"
 		exit 0
 	;;
 esac
@@ -33,13 +33,13 @@ esac
 if [ "$MODE" = "old" ]; then
 	[ -e "/tmp/CRON_OVERLOAD" ] && exit 0
 else
-	_log do dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV"
+	_log it dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV"
 fi
 
 case "$MODE-$HOST" in
 	'add-check_if_reachable')
 		MODE="$HOST"
-		_log do dhcp_add_check_if_reachable daemon info "MAC: $MAC IP: $IP DEV: $DEV"
+		_log it dhcp_add_check_if_reachable daemon info "MAC: $MAC IP: $IP DEV: $DEV"
 		_netfilter user_add "$MAC" "$IP"
 	;;
 esac
@@ -71,16 +71,16 @@ case "$MODE" in
 			if _weblogin login_check "$USER" "" "$MAC" "$SIGNAL" ; then
 				# for "very fast unsplashing" and not showing 'please use credentials'
 				$IPT -t mangle -I PREROUTING -j ACCEPT
-				_log do $SIGNAL daemon info "[OK] _weblogin login_check $USER"
+				_log it $SIGNAL daemon info "[OK] _weblogin login_check $USER"
 				_netfilter user_add "$MAC" "$IP"
 				# remove the hack for "very fast unsplashing"
 				$IPT -t mangle -D PREROUTING -j ACCEPT
 			else
 				if _weblogin login_check "$USER" "$NODE_HOSTNAME" "$MAC" "$SIGNAL" ; then
-					_log do $SIGNAL daemon info "[OK] _weblogin login_check $USER/$NODE_HOSTNAME (2nd try)"
+					_log it $SIGNAL daemon info "[OK] _weblogin login_check $USER/$NODE_HOSTNAME (2nd try)"
 					_netfilter user_add "$MAC" "$IP"
 				else
-					_log do $SIGNAL daemon info "[ERR] _weblogin login_check $USER/$NODE_HOSTNAME"
+					_log it $SIGNAL daemon info "[ERR] _weblogin login_check $USER/$NODE_HOSTNAME"
 				fi
 			fi
 		}

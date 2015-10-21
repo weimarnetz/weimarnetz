@@ -21,14 +21,14 @@ _watch_space_tmpfs()
 		[ -e "$file" ] && {
 			success="true"
 			rm "$file"
-			_log do $funcname daemon info "removed: '$file'"
+			_log it $funcname daemon info "removed: '$file'"
 		}
 	} done
 
 	if [ "$success" = "true" ]; then
 		[ "$nothing_deleted" = "true" ] && {
 		nothing_deleted=
-		_log do $funcname daemon alert "success"
+		_log it $funcname daemon alert "success"
 	}
 	else
 		# if there are no files to remove, give up
@@ -69,7 +69,7 @@ _watch_dhcp_space()
 		}
 	}
 
-	_log do $funcname daemon $logprio "clients: lan: $clients_lan/$max_lan wifi: $clients_wifi/$max_wifi"
+	_log it $funcname daemon $logprio "clients: lan: $clients_lan/$max_lan wifi: $clients_wifi/$max_wifi"
 }
 
 _watch_vpn()
@@ -77,18 +77,18 @@ _watch_vpn()
 	local func="watch_vpn"
 
 	if pidof vtund >/dev/null; then
-	        _log do $func daemon debug "daemon running"
+	        _log it $func daemon debug "daemon running"
 	        grep -sq ^"Interface .*tap0" /etc/olsrd.conf /var/etc/olsrd.conf || {   # fixme! more abstraction: tun/tapXY + conf-filename
-			_log do $FUNC daemon info "daemon running but tunnel-device not used by olsr"
+			_log it $FUNC daemon info "daemon running but tunnel-device not used by olsr"
 	        	return 1
 		}
-	        _log do $func daemon debug "tunnel-device is in olsr.conf"
+	        _log it $func daemon debug "tunnel-device is in olsr.conf"
 
 	        ps | grep vtund | grep -q connecting && {
-			_log do $func daemon info "daemon running but connection seems broken"
+			_log it $func daemon info "daemon running but connection seems broken"
 	                return 1
 	        }
-	        _log do $func daemon debug "connection seems active"
+	        _log it $func daemon debug "connection seems active"
 
 		vpn_server_is_neigh()
 		{
@@ -96,14 +96,14 @@ _watch_vpn()
 		}
 
 		if vpn_server_is_neigh; then
-			_log do $func daemon debug "tunnel-olsr neigh available"
+			_log it $func daemon debug "tunnel-olsr neigh available"
 	        	return 0
 	        else
-			_log do $func daemon info "no tunnel-olsr neigh available?!"
+			_log it $func daemon info "no tunnel-olsr neigh available?!"
 	        	return 1
 	        fi
 	else
-		_log do $func daemon info "daemon NOT running"
+		_log it $func daemon info "daemon NOT running"
 		return 1
 	fi
 }
@@ -136,7 +136,7 @@ _watch_system_time ()		# firmware-build-date is newer than unixtime?
 		_ntp set force
 
 		[ "$(( ${FFF_PLUS_VERSION:=347681} * 3600 ))" -gt "$( _system date unixtime )" ] && {
-			_log do set_time daemon info "could'nt set time - trying poor mens timeserver - fixme!"
+			_log it set_time daemon info "could'nt set time - trying poor mens timeserver - fixme!"
 		}
 	}
 }
@@ -173,7 +173,7 @@ _watch_hanging_command ()
 	fi
 
 	[ -z "$COMMAND_PID" ] && {
-		_log do $FUNC daemon debug "no running '$COMMAND'-process"
+		_log it $FUNC daemon debug "no running '$COMMAND'-process"
 		return 0
 	}
 
@@ -186,22 +186,22 @@ _watch_hanging_command ()
 	[ -e "$FILE1" ] && read OLD_PID <$FILE1
 	[ -e "$FILE2" ] && read OLD_CMD <$FILE2
 
-	_log do $FUNC daemon debug "found '$COMMAND'-process pid:'$COMMAND_PID' / cmdline:'$COMMAND_CMD'"
+	_log it $FUNC daemon debug "found '$COMMAND'-process pid:'$COMMAND_PID' / cmdline:'$COMMAND_CMD'"
 
 	if [ "$OLD_PID" = "$COMMAND_PID" ] && [ "$OLD_CMD" = "${COMMAND_CMD:=empty_cmd_line}" ]; then
 
 		if [ -e "/etc/init.d/$COMMAND" ]; then
-			_log do $FUNC daemon info "executing /etc/init.d/$COMMAND stop"
+			_log it $FUNC daemon info "executing /etc/init.d/$COMMAND stop"
 			/etc/init.d/$COMMAND stop
 		else
-			_log do $FUNC daemon info "killing '$COMMAND_CMD'"
+			_log it $FUNC daemon info "killing '$COMMAND_CMD'"
 			kill $COMMAND_PID
 		fi
 
 		sleep 3
 
 		if [ -e "/proc/$COMMAND_PID" ]; then
-			_log do $FUNC daemon crit "still hanging, killing hard ($COMMAND/$COMMAND_CMD)"
+			_log it $FUNC daemon crit "still hanging, killing hard ($COMMAND/$COMMAND_CMD)"
 			kill -9 $COMMAND_PID
 			sleep 3
 
@@ -215,11 +215,11 @@ _watch_hanging_command ()
 			_$FUNC $COMMAND		# recheck
 		fi
 
-		_log do $FUNC daemon info "successfully killed '$COMMAND'-process"
+		_log it $FUNC daemon info "successfully killed '$COMMAND'-process"
 		return 0
 	fi
 
-	_log do $FUNC daemon debug "remember for next check pid '$COMMAND_PID' / '$COMMAND_CMD'"
+	_log it $FUNC daemon debug "remember for next check pid '$COMMAND_PID' / '$COMMAND_CMD'"
 	echo >$FILE1 "$COMMAND_PID"
 	echo >$FILE2 "$COMMAND_CMD"
 }
@@ -253,13 +253,13 @@ _watch_flash_free_space ()
 		[ $( _system flash_free ) -ge $border ] && break
 
 		_watch counter "/tmp/$funcname" increment 1 max 100 || {
-			_log do $funcname daemon info "[ERR] rebooting, in an ultralow jffs2-situation, this is the only chance to survive"
+			_log it $funcname daemon info "[ERR] rebooting, in an ultralow jffs2-situation, this is the only chance to survive"
 			reboot
 			break
 		}
 
 		file="$( list_files_removeable | head -n1 )"
-		_log do $funcname daemon info "only $( _system flash_free ) kb free - removing '$file' with $( _file size "$file" ) bytes"
+		_log it $funcname daemon info "only $( _system flash_free ) kb free - removing '$file' with $( _file size "$file" ) bytes"
 		rm "$file"
 	} done
 }
@@ -287,11 +287,11 @@ _watch_dns_resolution()		# only with existing dnsmasq and reachable internet-gat
 
 	pidof dnsmasq >/dev/null || {
 
-		_log do $FUNC daemon error "restarting dnsmasq"
+		_log it $FUNC daemon error "restarting dnsmasq"
 
 		pidof udhcpd >/dev/null && {			# otherwise the server-port cannot bound to new daemon
 
-			_log do $FUNC daemon error "killing old DNS-server 'udhcpd'"	
+			_log it $FUNC daemon error "killing old DNS-server 'udhcpd'"	
 			killall udhcpd
 		}
 		
@@ -299,18 +299,18 @@ _watch_dns_resolution()		# only with existing dnsmasq and reachable internet-gat
 		/etc/init.d/*fake_dns_server_fff+ remove_fake_dnsserver
 		sleep 3
 
-		_log do $FUNC daemon error "restarted dnsmasq, PID now '$( pidof dnsmasq )'"
+		_log it $FUNC daemon error "restarted dnsmasq, PID now '$( pidof dnsmasq )'"
 	}
 
 	nslookup "$( _system date unixtime ).$DNS_TESTSERVER" 2>/dev/null >/dev/null || {		# can we resolv a random address?
 
-		_log do $FUNC daemon error "error in dns-resolution, sending SIGHUP to DNSmasq"
+		_log it $FUNC daemon error "error in dns-resolution, sending SIGHUP to DNSmasq"
 		kill -SIGHUP $( _system get_first_pid dnsmasq )
 		sleep 5
 	
 		nslookup "$( _system date unixtime ).$DNS_TESTSERVER" 2>/dev/null >/dev/null || {	# again: can we resolv a random address?
 
-			_log do $FUNC daemon error "error in dns-resolution, restarting DNSmasq"
+			_log it $FUNC daemon error "error in dns-resolution, restarting DNSmasq"
 			kill -SIGUSR1 $( _system get_first_pid dnsmasq )	# logging stats
 			/etc/init.d/*dnsmasq restart
 		}
@@ -341,7 +341,7 @@ _watch_webserver()
 	[ "$option" = "force" ] && action=
 
 	[ -n "$action" ] && {
-		_log do $funcname daemon info "[OK] no check during webserver forking action"
+		_log it $funcname daemon info "[OK] no check during webserver forking action"
 		return 0
 	}
 
@@ -351,27 +351,27 @@ _watch_webserver()
 		uci set uhttpd.main.network_timeout=20
 		uci set uhttpd.main.max_requests=50
 
-		_log do $funcname daemon info "[OK] trying to stop '$server' with PID '$( pidof $server )'"
+		_log it $funcname daemon info "[OK] trying to stop '$server' with PID '$( pidof $server )'"
 
 		_watch hanging_command "$server"
 		_watch hanging_command "$server"
 
 		if pidof $server >/dev/null; then
-			_log do $funcname daemon alert "[ERR] during kill of $server, rebooting"
+			_log it $funcname daemon alert "[ERR] during kill of $server, rebooting"
 			_stopwatch stop $funcname quiet
 			reboot
 		else
 			/etc/init.d/$server start
-			_log do $funcname daemon alert "[OK] server PID after restart: '$( pidof $server )'"
+			_log it $funcname daemon alert "[OK] server PID after restart: '$( pidof $server )'"
 		fi
 	}
 
 	pidof $server >/dev/null || {
 		if pidof crond >/dev/null ; then
-			_log do $funcname daemon alert "[ERR] webserver is not running - restarting $server"
+			_log it $funcname daemon alert "[ERR] webserver is not running - restarting $server"
 			restart_server
 		else
-			_log do $funcname daemon debug "[OK] no crond - no restart"	# maybe intended
+			_log it $funcname daemon debug "[OK] no crond - no restart"	# maybe intended
 		fi
 	}
 
@@ -391,7 +391,7 @@ _watch_webserver()
 		while [ ${size_gethttp:-0} -eq 0 ]; do {
 			i=$(( $i + 1 ))
 			[ $i -gt 1 ] && {
-				_log do $funcname daemon info "size_gethttp = 0, try $i"
+				_log it $funcname daemon info "size_gethttp = 0, try $i"
 				[ $i -gt 5 ] && break
 				sleep 10
 			}
@@ -419,18 +419,18 @@ _watch_webserver()
 			}
 
 			if [ $size_file -eq $size_gethttp ]; then
-				_log do $funcname daemon debug "[OK] same size for file/httpget: $size_file bytes for $checkfile"
+				_log it $funcname daemon debug "[OK] same size for file/httpget: $size_file bytes for $checkfile"
 				touch "$file_seen_good"
 			else
-				_log do $funcname daemon alert "[ERR] size_file: $size_file size_gethttp: $size_gethttp - restarting"
+				_log it $funcname daemon alert "[ERR] size_file: $size_file size_gethttp: $size_gethttp - restarting"
 				restart_server
 			fi
 		else
 			if [ -e "$file_seen_good" ]; then
-				_log do $funcname daemon alert "[ERR] gethttp not possible - restarting"
+				_log it $funcname daemon alert "[ERR] gethttp not possible - restarting"
 				restart_server
 			else
-				_log do $funcname daemon info "[ERR] gethttp not possible - needs investigation"
+				_log it $funcname daemon info "[ERR] gethttp not possible - needs investigation"
 			fi
 		fi
 
@@ -439,7 +439,7 @@ _watch_webserver()
 		local duration="$( _stopwatch stop $funcname nolog )"
 
 		if [ $duration -gt 175 ]; then		# = 1.75 sec
-			_log do $funcname daemon alert "last too long: $(( $duration / 100 )).$(( $duration % 100 )) sec"
+			_log it $funcname daemon alert "last too long: $(( $duration / 100 )).$(( $duration % 100 )) sec"
 		else
 			return 0
 		fi
@@ -477,9 +477,9 @@ _watch_sshd_or_telnet ()
 				kill $pid
 
 				if fgrep -i dropbear "/tmp/$funcname" ; then
-					_log do $funcname daemon debug "[OK] dropbear seems to run: '$( cat "/tmp/$funcname" )'"
+					_log it $funcname daemon debug "[OK] dropbear seems to run: '$( cat "/tmp/$funcname" )'"
 				else
-					_log do $funcname daemon alert "[ERR] dropbear seems to hang: '$( cat "/tmp/$funcname" )' - restarting"
+					_log it $funcname daemon alert "[ERR] dropbear seems to hang: '$( cat "/tmp/$funcname" )' - restarting"
 					restart_sshd
 				fi
 
@@ -492,17 +492,17 @@ _watch_sshd_or_telnet ()
 
 	pidof telnetd >/dev/null || {
 	
-		_log do $funcname daemon err "dropbear nor telnetd not running - restarting"
+		_log it $funcname daemon err "dropbear nor telnetd not running - restarting"
 		
 		restart_sshd
 		if pidof dropbear >/dev/null; then
 			
-			_log do $funcname daemon info "dropbear PID now: '$( pidof dropbear )'"
+			_log it $funcname daemon info "dropbear PID now: '$( pidof dropbear )'"
 		else
 			if telnetd; then
-				_log do $funcname daemon info "telnetd PID now: '$( pidof telnetd )'"
+				_log it $funcname daemon info "telnetd PID now: '$( pidof telnetd )'"
 			else
-				_log do $funcname daemon err "dropbear nor telnetd not startable?"
+				_log it $funcname daemon err "dropbear nor telnetd not startable?"
 			fi
 		fi
 	}
@@ -541,13 +541,13 @@ _watch_counter ()		# call: _watch counter "/tmp/mycounter" increment 1 max 10 ||
 	case "$OPTION" in
 		max)
 			[ $VALUE -ge $OPTION_VALUE ] && {
-				_log do $func daemon info "[$FILE] max: $VALUE >= $OPTION_VALUE"
+				_log it $func daemon info "[$FILE] max: $VALUE >= $OPTION_VALUE"
 				return 1
 			}
 		;;
 		min)
 			[ $VALUE -le $OPTION_VALUE ] && {
-				_log do $func daemon info "[$FILE] min: $VALUE =< $OPTION_VALUE"
+				_log it $func daemon info "[$FILE] min: $VALUE =< $OPTION_VALUE"
 				return 1
 			}
 		;;
@@ -583,7 +583,7 @@ _watch_topusage_task()
 	[ $cpu_int -gt $crit_percent_border ] || return 0
 
 	task="$( basename "$toptask" )"
-	_log do $funcname daemon alert "pid: $pid cpu: $cpu toptask: $toptask task: $task"
+	_log it $funcname daemon alert "pid: $pid cpu: $cpu toptask: $toptask task: $task"
 
 	_watch hanging_command $task	# must be called 2 times
 	_watch hanging_command $task
@@ -599,11 +599,11 @@ _watch_switch_linkstatus()
 	[ -z "$type" ] && {                                                                           
 		if [ -e "/tmp/SWITCH_TYPE" ]; then                                
 			read type <"/tmp/SWITCH_TYPE"                                                          
-			_log do $funcname daemon debug "[INFO] Write switch type $type to uci"
+			_log it $funcname daemon debug "[INFO] Write switch type $type to uci"
 			uci set network.@switch[0].name="$type"                                       
 			uci commit                                                                                             
 		else                                                                                  
-			_log do $funcname daemon debug "[INFO] Switch type unknown, probe switch type"
+			_log it $funcname daemon debug "[INFO] Switch type unknown, probe switch type"
 			_switch show                                                                  
 			return 0                                                   
 		fi                                                          
@@ -658,23 +658,23 @@ _watch_switch_linkstatus()
 		read stat_old <"$statfile"
 	else
 		echo $stat_new > "$statfile"
-		_log do $funcname daemon debug "[OK] first status check, no action"
+		_log it $funcname daemon debug "[OK] first status check, no action"
 		return 0
 	fi
 
 
 	[ "${#stat_new}" -gt 0 ] || {
-		_log do $funcname daemon info "[ERR] could not read switch-status"
+		_log it $funcname daemon info "[ERR] could not read switch-status"
 		return 1
 	}
 
 	if [ "$stat_new" = "$stat_old" ]; then
-		_log do $funcname daemon debug "[OK] nothing changed"
+		_log it $funcname daemon debug "[OK] nothing changed"
 		if [ "$stat_new" != "DOWN" ]; then
 			if _watch vpn; then
 				rm "/tmp/vpnproblemcounter"
 			else
-				_log do $funcname daemon debug "Error in VPN connection"
+				_log it $funcname daemon debug "Error in VPN connection"
 				_watch counter "/tmp/vpnproblemcounter" increment 1 max 5 || {
 					_vpn restart
 				}
@@ -684,16 +684,16 @@ _watch_switch_linkstatus()
 		return 0
 	else
 		echo "$stat_new" >"$statfile"
-		_log do $funcname daemon info "[OK] switch-status old: $stat_old"
-		_log do $funcname daemon info "[OK] switch-status new: $stat_new"
+		_log it $funcname daemon info "[OK] switch-status old: $stat_old"
+		_log it $funcname daemon info "[OK] switch-status new: $stat_new"
 		
 		if [ "$stat_old" = "DOWN" ]; then
-			_log do $funcname daemon info "[OK] wan - link up"
+			_log it $funcname daemon info "[OK] wan - link up"
 			_vpn start
 		elif [ "$stat_new" != "DOWN" ]; then #do nothing until new status is DOWN                                                            
-                        _log do $funcname daemon info "[OK] wan still up, perhaps duplex mode changed"
+                        _log it $funcname daemon info "[OK] wan still up, perhaps duplex mode changed"
 		else
-			_log do $funcname daemon info "[OK] wan - link down"
+			_log it $funcname daemon info "[OK] wan - link down"
 			_vpn stop
 			ifup wan
 			/etc/init.d/olsrd restart

@@ -6,22 +6,22 @@ func_cron_daemon_start ()
 	local funcname="cron_daemon_start"
 
 	[ -e /etc/init.d/cron ] && {					# fixme!
-		_log do $funcname daemon info "removing unneeded initfile"
+		_log it $funcname daemon info "removing unneeded initfile"
 		rm /etc/init.d/cron
 		killall crond
 	}
 
 	pidof crond >/dev/null && {
-		_log do $funcname daemon debug "already started"
+		_log it $funcname daemon debug "already started"
 		return 1
 	}
 
 	/usr/sbin/crond -L /dev/null || {
-		_log do $funcname daemon debug "error"
+		_log it $funcname daemon debug "error"
 		return 1
 	}
 
-	_log do $funcname daemon info "[OK] started"
+	_log it $funcname daemon info "[OK] started"
 }
 
 cron_watchdog()
@@ -41,7 +41,7 @@ cron_watchdog()
 			echo ${cronpid:=nonexistent} >"$watchdog_cronpid_file"
 
 			_cron watchdog_is_running && {
-				_log do $func daemon info "[OK] watchdog already exists, no need to start one"
+				_log it $func daemon info "[OK] watchdog already exists, no need to start one"
 				return
 			}
 
@@ -67,13 +67,13 @@ while true; do {
 	if [ -e /tmp/cron_watchdog_please_end_yourself_\$watchdog_id ]; then		# poor mens IPC
 		rm /tmp/cron_watchdog_please_end_yourself_*
 		. /tmp/loader
-		_log do cron_watchdog daemon info "[OK] ending myself with ID \$watchdog_id"
+		_log it cron_watchdog daemon info "[OK] ending myself with ID \$watchdog_id"
 		exit
 	else
 		read cronpid_to_watch <"$watchdog_cronpid_file"
 		[ -d /proc/\${cronpid_to_watch:-nonexistent} ] || {
 			. /tmp/loader
-			_log do cron_watchdog daemon alert "no crond found, starting cron + watchdog"
+			_log it cron_watchdog daemon alert "no crond found, starting cron + watchdog"
 			$0 start
 			exit
 		}
@@ -95,14 +95,14 @@ EOF
 					touch /tmp/cron_watchdog_please_end_yourself_$watchdog_id
 
 					while [ -e /tmp/cron_watchdog_please_end_yourself_$watchdog_id ]; do {
-						_log do cron_watchdog daemon debug "waiting for deletion of '/tmp/cron_watchdog_please_end_yourself_$watchdog_id'"
+						_log it cron_watchdog daemon debug "waiting for deletion of '/tmp/cron_watchdog_please_end_yourself_$watchdog_id'"
 						sleep 10
 					} done
 				}
 
-				_log do cron_watchdog daemon info "[OK] watchdog gone"
+				_log it cron_watchdog daemon info "[OK] watchdog gone"
 			else
-				_log do cron_watchdog daemon info "[OK] watchdog was not active"
+				_log it cron_watchdog daemon info "[OK] watchdog was not active"
 			fi
 
 			rm /tmp/cron_watchdog.*
@@ -115,12 +115,12 @@ func_cron_daemon_stop ()
 	local FUNC="cron_daemon_stop"
 	
 	pidof crond >/dev/null && {
-		_log do $FUNC daemon info "killing"
+		_log it $FUNC daemon info "killing"
 		killall crond
 		return
 	}
 
-	_log do $FUNC daemon debug "no daemon running"
+	_log it $FUNC daemon debug "no daemon running"
 }
 
 func_cron_start ()
@@ -142,11 +142,11 @@ func_cron_status ()
 	local FUNC="cron_status"
 	
 	pidof crond >/dev/null || {
-		_log do $FUNC daemon debug "daemon is NOT running"
+		_log it $FUNC daemon debug "daemon is NOT running"
 		return
 	}
 	
-	_log do $FUNC daemon debug "daemon is running"
+	_log it $FUNC daemon debug "daemon is running"
 	func_cron_config_write status
 }
 
@@ -160,7 +160,7 @@ func_cron_config_write ()
 	local PROFILE="$1"
 
 	[ "$PROFILE" = "status" ] && {
-		_log do $FUNC daemon debug "status: '$CRONFILE'"
+		_log it $FUNC daemon debug "status: '$CRONFILE'"
 		cat $CRONFILE
 		return
 	}
@@ -194,7 +194,7 @@ func_cron_config_write ()
 
 	local RUN_QUEUE=". /tmp/loader; _scheduler run"
 
-	_log do $FUNC daemon debug "profile = $PROFILE"
+	_log it $FUNC daemon debug "profile = $PROFILE"
 
 
 	if [ "$PROFILE" = "minimal" ]; then
@@ -240,7 +240,7 @@ func_cron_config_write ()
 		fi
 
 		[ $( _system ram_size ) -gt 16384 ] || {
-			_log do $FUNC daemon info "lowram: be even more careful, dont work if load > 0.5"
+			_log it $FUNC daemon info "lowram: be even more careful, dont work if load > 0.5"
 
 			case "$CONFIG_PROFILE" in
 				*)
@@ -260,7 +260,7 @@ func_cron_config_write ()
 	fi
 
 	while read LINE; do {
-		_log do $FUNC daemon debug "+ '$LINE'"
+		_log it $FUNC daemon debug "+ '$LINE'"
 	} done <$CRONFILE
 }
 

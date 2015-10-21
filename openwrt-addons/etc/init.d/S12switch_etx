@@ -16,7 +16,7 @@ boot()
 	[ "$year" = '2016' -a "$olsrd_metric" = 'etx_ff' ] && {
 		. /tmp/loader
 
-		_log do switch_olsr_metric daemon alert "hard switch to $olsrd_metric_wish"
+		_log it switch_olsr_metric daemon alert "hard switch to $olsrd_metric_wish"
 		uci set olsrd.@olsrd[0].LinkQualityAlgorithm="$olsrd_metric_wish"
 		uci commit olsrd
 	}
