@@ -112,8 +112,8 @@ _http_redirect()
 				;;
 				ip_clients_real_gateway)
 					local clientip="$KEYWORD"
-					local nodenumber="$( _ipsystem do "$clientip" )"
-					local client_gateway="$( _ipsystem do "$nodenumber" | grep ^"WIFIADR=" | cut -d'=' -f2 )"
+					local nodenumber="$( _ipsystem get "$clientip" )"
+					local client_gateway="$( _ipsystem get "$nodenumber" | grep ^"WIFIADR=" | cut -d'=' -f2 )"
 
 					DESTINATION="$client_gateway"
 				;;
