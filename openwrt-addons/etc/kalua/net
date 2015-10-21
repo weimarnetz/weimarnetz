@@ -76,7 +76,7 @@ _net_mac2vendor()
 		[ ${#oui} -eq 12 ] || return 1
 	else
 		[ ${#oui} -eq 0 ] && return 1
-		oui="$( _sanitizer do "$oui" mac hex lowercase length:6 )"
+		oui="$( _sanitizer run "$oui" mac hex lowercase length:6 )"
 		[ ${#oui} -eq 6 ] || return 1
 	fi
 
@@ -140,7 +140,7 @@ _net_ip2mac()		# ofcourse this works only for local IP's, but: maybe we want to 
 		mac="$4"
 
 		[ "$ip" = "$get_ip" ] && {
-			_sanitizer do "$mac" lowercase >"/tmp/IP2MAC_${get_ip}"
+			_sanitizer run "$mac" lowercase >"/tmp/IP2MAC_${get_ip}"
 			cat "/tmp/IP2MAC_${get_ip}"
 			return 0
 		}
@@ -474,7 +474,7 @@ _net_mac2ip ()		# SENS: get client-IP from different sources
 
 	_sanitizer include
 
-	local MAC="$( _sanitizer do "${mac:-unset_mac}" lowercase )"
+	local MAC="$( _sanitizer run "${mac:-unset_mac}" lowercase )"
 	local IP=
 	local HOSTNAME=
 	local COUNT=
@@ -497,7 +497,7 @@ _net_mac2ip ()		# SENS: get client-IP from different sources
 		while read line; do {
 			set $line
 			ip="$1"
-			mac="$( _sanitizer do "$4" lowercase )"
+			mac="$( _sanitizer run "$4" lowercase )"
 
 			[ "$MAC" = "$mac" ] && {
 				IP="$ip"
@@ -546,7 +546,7 @@ _net_mac2dev ()
 	_sanitizer include
 
 	while read dummy dummy dummy mac dummy dev; do {
-		mac="$( _sanitizer do "$mac" lowercase )"
+		mac="$( _sanitizer run "$mac" lowercase )"
 
 		[ "$get_mac" = "$mac" ] && {
 			echo $dev
@@ -567,7 +567,7 @@ _net_mac2media()
 	  	OUT=wifi
 	elif uci -q get system.@ethers[0].wifi | grep -qi $MAC ; then
 		OUT=wifi
-	elif grep -sq ^"$( _sanitizer do "$( _net mac2ip $MAC )" escape_dots );" /tmp/CLIENTS_WIFI ; then
+	elif grep -sq ^"$( _sanitizer run "$( _net mac2ip $MAC )" escape_dots );" /tmp/CLIENTS_WIFI ; then
 		OUT=wifi
 	else
 		OUT=wire		# fixme! this can also be guessed!

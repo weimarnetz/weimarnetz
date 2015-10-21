@@ -38,8 +38,8 @@ _wifi_show_station_traffic()
 				set $line
 				tx="$3"
 
-				rx_human="$( _sanitizer do "$rx" number_humanreadable )"
-				tx_human="$( _sanitizer do "$tx" number_humanreadable )"
+				rx_human="$( _sanitizer run "$rx" number_humanreadable )"
+				tx_human="$( _sanitizer run "$tx" number_humanreadable )"
 
 				if [ -n "$rx_old" ]; then
 					rx_diff=$(( $rx - $rx_old ))

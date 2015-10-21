@@ -431,7 +431,7 @@ _netfilter_traffic_control_user_change_speed()		# <mac> <ip>
 
 	if [ -n "$speed_change" ]; then		# e.g. -21% or +4% or 50%
 		method="$speed_change"
-		speed_change="$( _sanitizer do "$method" numeric )"
+		speed_change="$( _sanitizer run "$method" numeric )"
 
 		case "$method" in
 			"+"*)
@@ -549,7 +549,7 @@ _netfilter_stats()
 			line="$( $IPT -nxvL FORWARD | fgrep "$WIFIDEV  $WIFIDEV" )"
 		;;
 		*)
-			if _sanitizer do "$context" mac check; then
+			if _sanitizer run "$context" mac check; then
 				line="$( $IPT -t mangle -nxvL FORWARD | fgrep "incoming_$context" )"
 
 				set -- $line
@@ -1180,8 +1180,8 @@ _netfilter_user_reachable()	# output: string/devname e.g. 'wlan0-1'
 	# 00:00:00 = vendor 'xerox', but ofcourse this is invalid and comes from loopback/dhcp
 	[ "$mac" = '00:00:00:00:00:00' ] && return 1
 
-	_sanitizer do "$mac" mac check || return 1
-	_sanitizer do "$ip"  ip4 check || return 1
+	_sanitizer run "$mac" mac check || return 1
+	_sanitizer run "$ip"  ip4 check || return 1
 
 	fgrep -sq "$ip " /www/cgi-bin/check_hosts.txt && return 1	# special list of other alien-nodes
 	ip neigh show to "$ip" | fgrep -q " dev $WANDEV " && return 1	# no direct logins from WAN
