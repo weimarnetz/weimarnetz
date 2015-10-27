@@ -1191,54 +1191,6 @@ _config_dhcp ()			# domain = .olsr
 	uci commit dhcp
 }
 
-_config_aliases ()
-{
-	local FILE="/etc/profile"
-	touch $FILE
-
-	grep -q ^"alias ll=" $FILE || {
-		log "writing ll"
-		echo >>$FILE "alias ll='ls -la'"
-	}
-
-	grep -q ^"alias flush=" $FILE || {
-		log "writing flush"
-		echo >>$FILE "alias flush='echo flushing_caches; echo 3 > /proc/sys/vm/drop_caches'"
-	}
-
-	grep -q ^"alias lr=" $FILE || {
-		log "writing logread-abbreviation: lf"
-		echo >>$FILE "alias lr='logread'"	
-	}
-
-	grep -q ^"alias regen=" $FILE || {
-		log "writing kalua-loader regen()"
-		echo >>$FILE "alias regen='/etc/kalua_init ;. /tmp/loader'"
-	}
-
-	fgrep -q "[ -e /tmp/loader" $FILE || {
-		log "writing kalua-loader -> autoloader"
-		echo >>$FILE "[ -e /tmp/loader ] && . /tmp/loader"
-	}
-
-	grep -q ^"alias n=" $FILE || {
-		log "writing alias 'neigh': use just keyword 'n' to see neighbours"
-		echo >>$FILE "alias n='wget -qO - http://127.0.0.1:2006/neighbours'"
-	}
-
-	grep -q "033" $FILE || {
-		log "writing better prompt"
-		echo >>$FILE 'export PS1="\[\033[36m\]\u\[\033[m\]@\[\033[32m\]\h:\[\033[33;1m\]\w\[\033[m\] "'
-	}
-
-	grep -q ^"alias myssh=" $FILE || {
-		log "alias myssh"
-		local KEY="/etc/dropbear/dropbear_dss_host_key"
-		local COMMAND="ssh -i $KEY"
-		echo >>$FILE "alias myssh='echo \"executing: $COMMAND\"; $COMMAND'"
-	}
-}
-
 _config_olsrd ()	# example here: http://olsr.org/git/?p=olsrd.git;a=blob;f=files/olsrd.conf.default.full
 {
 
@@ -1549,7 +1501,7 @@ EOF
 }
 
 # rewrite new settings
-for SECTION in softwareinstall wireless network system freifunk olsrd dhcp aliases; do {
+for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 	log "....working on section '$SECTION'"
 	_config_$SECTION "$NODENUMBER"
 	log "[ok] ready with section '$SECTION'"
