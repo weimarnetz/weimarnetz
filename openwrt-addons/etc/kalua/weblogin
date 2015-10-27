@@ -135,7 +135,7 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 			ANSWER="$( _curl it "${URL}?${PARAMETERS}" 5 )"
 		fi
 
-		[ ${#ANSWER} -gt 10 ] && ANSWER="shortened: $( _sanitizer do "$ANSWER" firstline length:30 )"
+		[ ${#ANSWER} -gt 10 ] && ANSWER="shortened: $( _sanitizer run "$ANSWER" firstline length:30 )"
 
 		_log it $FUNC daemon info "ANSWER: '$ANSWER' (1=ok) FREE: '$FREE' URL: '${URL:-locally_asked:}?${PARAMETERS}'"
 	}

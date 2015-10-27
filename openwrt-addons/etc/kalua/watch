@@ -163,7 +163,7 @@ _watch_hanging_command ()
 
 	pid2taskname()
 	{
-		_sanitizer do "$( cut -d: -f2 /proc/${1:-unset}/status )" firstword
+		_sanitizer run "$( cut -d: -f2 /proc/${1:-unset}/status )" firstword
 	}
 
 	if [ -z "$COMMAND_PID" ]; then
@@ -277,8 +277,8 @@ _watch_dns_resolution()		# only with existing dnsmasq and reachable internet-gat
 
 	fgrep -q "nameserver 127.0.0.1" /etc/resolv.conf || {
 		read ip <"/etc/resolv.conf"
-		ip="$( _sanitizer do "$ip" ip4 )"
-		_sanitizer do "$ip" ip4 check && {
+		ip="$( _sanitizer run "$ip" ip4 )"
+		_sanitizer run "$ip" ip4 check && {
 			return 0			# real server configured, working without local daemon
 		}
 	}

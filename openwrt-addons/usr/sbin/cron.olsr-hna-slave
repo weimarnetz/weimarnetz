@@ -3,7 +3,7 @@
 
 nexthop()
 {
-	_sanitizer do "$( ip route list exact 0.0.0.0/0 table main | head -n1 )" ip4
+	_sanitizer run "$( ip route list exact 0.0.0.0/0 table main | head -n1 )" ip4
 }
 
 nexthop_dev()
