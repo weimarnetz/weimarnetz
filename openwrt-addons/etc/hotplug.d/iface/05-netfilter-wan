@@ -2,6 +2,6 @@
 
 [ "$ACTION" = 'ifup' -a "$INTERFACE" = 'wan' ] && {
 	. /tmp/loader
-	_log do hotplug_wan daemon info 'iface wan is up - starting masquerading'
+	_log it hotplug_wan daemon info 'iface wan is up - starting masquerading'
         _netfilter start
 }

@@ -48,12 +48,12 @@ _olsr_build_tables ()				# building of /tmp/OLSR_TMP/ALL 		// is called every mi
 	mkdir -p /tmp/OLSR /tmp/OLSR_TMP
 
 	[ -e "$configfile" ] || {
-		_log do $func daemon info "config file not found, daemon was never started"
+		_log it $func daemon info "config file not found, daemon was never started"
 		return 0
 	}
 
 	while _olsr uptime is_short ; do {
-		_log do $func daemon info "waiting till olsr-uptime is long enough"
+		_log it $func daemon info "waiting till olsr-uptime is long enough"
 		uptime_was_short="true"
 		sleep 10
 	} done
@@ -68,7 +68,7 @@ _olsr_build_tables ()				# building of /tmp/OLSR_TMP/ALL 		// is called every mi
 
 			[ $max_errors -eq 0 ] && return 1
 
-			_log do $func daemon info "zero txtinfo.plugin-output, trying again"
+			_log it $func daemon info "zero txtinfo.plugin-output, trying again"
 		else
 			if [ $max_errors -eq 0 ]; then
 				if pidof olsrd >/dev/null ; then
@@ -79,7 +79,7 @@ _olsr_build_tables ()				# building of /tmp/OLSR_TMP/ALL 		// is called every mi
 
 				return 1
 			else
-				_log do $func daemon info "wget-error trying again"
+				_log it $func daemon info "wget-error trying again"
 			fi
 		fi
 
@@ -112,7 +112,7 @@ _olsr_build_tables ()				# building of /tmp/OLSR_TMP/ALL 		// is called every mi
 
 	did_we_ever_had_neighbours && {
 		[ $( _file size "/tmp/OLSR/LINKS.sh" ) -eq 0 ] && {
-			_log do $func daemon alert "detected 0 neighbours"
+			_log it $func daemon alert "detected 0 neighbours"
 			return 1
 		}
 	}
@@ -179,7 +179,7 @@ _olsr_daemon()
 			fi
 
 			for ACTION in $LIST; do {
-				_log do $funcname daemon $LOGPRIO "$ACTION: $REASON"
+				_log it $funcname daemon $LOGPRIO "$ACTION: $REASON"
 				
 				if [ -e /etc/init.d/*olsrd ]; then
 					/etc/init.d/*olsrd $ACTION | logger -s
@@ -256,7 +256,7 @@ _olsr_uptime ()		# in seconds
 			read I 2>/dev/null <$FILE_RESTARTS
 
 			[ ${I:-0} -gt 300 ] && {
-				_log do $FUNC daemon alert "busybox bug: restarts_get: $I"
+				_log it $FUNC daemon alert "busybox bug: restarts_get: $I"
 				I=0
 			}
 
@@ -285,10 +285,10 @@ _olsr_restarts_are_suspicious_often ()
 	percent="$(( $daemon_restarts * 100 ))"
 	percent="$(( $percent / $border ))"
 
-	_log do $func daemon debug "percent from border: ${percent}% restarts: $daemon_restarts border: $border"	
+	_log it $func daemon debug "percent from border: ${percent}% restarts: $daemon_restarts border: $border"	
 
 	if [ $percent -gt 100 ]; then
-		_log do $func daemon alert "[ERR] olsr restarts > normality (${percent}%: $daemon_restarts > $border)"
+		_log it $func daemon alert "[ERR] olsr restarts > normality (${percent}%: $daemon_restarts > $border)"
 
 		if [ $percent -gt 300 ]; then	# seems to be a busybox-bug of v1.19.4
 			return 0		# sometimes we see values of 35148643% (large restart count)

@@ -24,10 +24,10 @@ boot()
 	[ -e "/tmp/loader" ] && {			# router is not virgin (so: re-apply config)
 		. /tmp/loader
 		[ $( _system ram_size ) -gt 16384 ] || {
-			_log do $thisfile daemon alert "[OK] ending most daemons"
+			_log it $thisfile daemon alert "[OK] ending most daemons"
 
 			for daemon in crond uhttpd olsrd dnsmasq; do {
-				_log do $thisfile daemon info "ending daemon '$daemon'"
+				_log it $thisfile daemon info "ending daemon '$daemon'"
 				/etc/init.d/$daemon stop
 				/etc/init.d/*${daemon}* stop
 			} done
@@ -49,7 +49,7 @@ boot()
 						break
 					;;
 					*)
-						_log do $thisfile daemon info "wait for load <0.4, now: '$load'"
+						_log it $thisfile daemon info "wait for load <0.4, now: '$load'"
 						sleep 30
 					;;
 				esac

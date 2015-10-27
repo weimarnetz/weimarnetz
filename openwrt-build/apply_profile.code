@@ -948,7 +948,7 @@ _config_network ()
 	for section in $( uci show network | grep "=interface"$ | grep -v "6=interface"$ | grep -v "loopback=interface"$ | cut -d'=' -f1 ); do {
 		uci delete $section
 	} done
-	_log do uci_commit daemon alert 'network: remove old sections'
+	_log it uci_commit daemon alert 'network: remove old sections'
 	uci commit network
 
 	[ -n "$LANDEV" ] && {

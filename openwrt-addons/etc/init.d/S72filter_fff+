@@ -10,13 +10,13 @@ case $1 in
 	;;
 	call)
 		which hdparm >/dev/null && {
-			_log do tune_ide_disc daemon info "setting spindown-time to 5 minutes and spinning down now"
+			_log it tune_ide_disc daemon info "setting spindown-time to 5 minutes and spinning down now"
 			hdparm -y -S 60 /dev/discs/disc0/disc
 			# fixme! is here the place to mount partitions, but needs some abstraction / look into freifunk-usbstick
 		}
 
 	;;
 	*)
-		_log do print_usage daemon debug "Usage: $0 (start|call)"
+		_log it print_usage daemon debug "Usage: $0 (start|call)"
 	;;
 esac

@@ -29,7 +29,7 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 			:
 		;;
 		*)
-			_log do "$FUNC" daemon debug "abort, updatemode: $MODE"
+			_log it "$FUNC" daemon debug "abort, updatemode: $MODE"
 			return
 		;;
 	esac
@@ -49,7 +49,7 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 	{
 		local option="$1"
 
-		_log do "$FUNC" daemon debug "cleaning up - applied $COUNT files ($COUNT_ERROR errors)"
+		_log it "$FUNC" daemon debug "cleaning up - applied $COUNT files ($COUNT_ERROR errors)"
 		cd /tmp
 		rm -fR "$WORKINGDIR"
 		rm -f  "$TGZ"
@@ -62,20 +62,20 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 	read hash_last_applied <"$FILE_HASH_APPLIED"
 
 	[ "$hash_tarball" = "${hash_last_applied:-empty}" ] && {
-		_log do "$FUNC" daemon info "[OK] applied nothing - all seems up to date (tarball-hash known: $FILE_HASH_APPLIED)"
+		_log it "$FUNC" daemon info "[OK] applied nothing - all seems up to date (tarball-hash known: $FILE_HASH_APPLIED)"
 		return 0
 	}
 
-	_log do "$FUNC" daemon debug "fetching tarball in '$MODE'-mode: '$URL'"
+	_log it "$FUNC" daemon debug "fetching tarball in '$MODE'-mode: '$URL'"
 	_firmware wget "$TGZ" "$URL" "$hash_tarball" 100 || {
-		_log do "$FUNC" daemon info "failed to download '$URL' - abort"
+		_log it "$FUNC" daemon info "failed to download '$URL' - abort"
 
 		_cleanup reschedule
 		return 1
 	}
 
 	tar tzf "$TGZ" >/dev/null || {
-		_log do "$FUNC" daemon info "fail during extract-test '$TGZ' - abort"
+		_log it "$FUNC" daemon info "fail during extract-test '$TGZ' - abort"
 
 		_cleanup reschedule
 		return 1
@@ -86,7 +86,7 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 	cd "$WORKINGDIR"
 
 	tar xzf "$FILE" || {
-		 _log do "$FUNC" daemon alert "failed to extract '$TGZ' to '$WORKINGDIR' - abort"
+		 _log it "$FUNC" daemon alert "failed to extract '$TGZ' to '$WORKINGDIR' - abort"
 
 		_cleanup reschedule
 		return 1	 
@@ -94,7 +94,7 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 	rm "$FILE"
 	rm /www/cgi-bin/user-*		# from vds
 
-	_log do "$FUNC" daemon debug "tarball extracted - applying only files which differ"
+	_log it "$FUNC" daemon debug "tarball extracted - applying only files which differ"
 
 	for TEMPFILE in $( find -type f ); do {
 
@@ -102,18 +102,18 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 			rm "$TEMPFILE"
 		else
 
-			_log do "$FUNC" daemon info "moving file '$WORKINGDIR/$TEMPFILE' to '/$TEMPFILE'"
+			_log it "$FUNC" daemon info "moving file '$WORKINGDIR/$TEMPFILE' to '/$TEMPFILE'"
 			_software make_free_space "$(( 120 + $( _file size "$TEMPFILE" kb ) ))"
 
 			case "$( basename "$TEMPFILE" )" in
 				cron|S51crond*)
-					_log do "$FUNC" daemon info "detected changed cron settings"
+					_log it "$FUNC" daemon info "detected changed cron settings"
 					CRON_RESTART=1
 				;;
 			esac
 
 			mv "$TEMPFILE" "/$TEMPFILE" || {
-				_log do "$FUNC" daemon alert "error during moving file '$WORKINGDIR/$TEMPFILE' to '/$TEMPFILE'"
+				_log it "$FUNC" daemon alert "error during moving file '$WORKINGDIR/$TEMPFILE' to '/$TEMPFILE'"
 				COUNT_ERROR=$(( $COUNT_ERROR + 1 ))
 			}
 			sync
@@ -130,7 +130,7 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 		/etc/kalua_init
 
 		[ "$CRON_RESTART" = "1" ] && {
-			_log do "$FUNC" daemon info "restart cron manually"
+			_log it "$FUNC" daemon info "restart cron manually"
 		}
 
 		[ "$REPATCH_ALL"  = "1" ] && /etc/init.d/*patch-o-matic* repatch all
@@ -144,11 +144,11 @@ _firmware_update_pmu ()		# poor mens update - simply overwrites all (shell-)file
 		echo >>/etc/banner "#"
 		echo >>/etc/banner
 		
-		_log do "$FUNC" daemon alert "[OK] applied tarball in '$MODE'-mode ($COUNT files), wrote new banner"
+		_log it "$FUNC" daemon alert "[OK] applied tarball in '$MODE'-mode ($COUNT files), wrote new banner"
 
 		echo "0" >/www/REBOOT_COUNTER		# fixme!
 	else
-		_log do "$FUNC" daemon info "[OK] applied nothing - all seems up to date"
+		_log it "$FUNC" daemon info "[OK] applied nothing - all seems up to date"
 	fi
 }
 
@@ -191,11 +191,11 @@ _firmware_wget_prepare_for_lowmem_devices()
 	local url="$( _links firmware_url_get )"
 	local server_dnsname="$( _http url_get_serverstring "$url" )"
 	local ip="$( _net dns2ip "$server_dnsname" )"
-	_log do $funcname daemon info "[OK] serverstring2ip: $server_dnsname -> $ip"
+	_log it $funcname daemon info "[OK] serverstring2ip: $server_dnsname -> $ip"
 
 	_firmware remove_cron_stuff
 
-	_log do $funcname daemon info "[OK] removing some things in RAM-Disk"
+	_log it $funcname daemon info "[OK] removing some things in RAM-Disk"
 	rm /tmp/weblogin*
 	rm /tmp/ARCHIV_*
 	rm /tmp/iptables_*
@@ -220,7 +220,7 @@ _firmware_wget_prepare_for_lowmem_devices()
 
 	echo "$ip $server_dnsname" >/etc/hosts		# see beginning of function
 
-	_log do $funcname daemon info "[OK] flushing caches: $( _system ram_free flush ) bytes free"
+	_log it $funcname daemon info "[OK] flushing caches: $( _system ram_free flush ) bytes free"
 
 	# fixme! we cannot "remove_kmodules misc" because of ppp
 }
@@ -239,24 +239,24 @@ _firmware_remove_kmodules()		# fixme! loop as long as we can kick at least one m
 
 	case "$filter_option" in
 		all)
-			_log do $funcname daemon info "ifdown wan"
+			_log it $funcname daemon info "ifdown wan"
 			ifdown wan	# for unloading ppp-stuff
 
 			while read line; do {
 				set $line	# $device $mountpoint $type $options $rest
 				case "$1" in
 					"/dev/sd"*)
-						_log do $funcname daemon info "unmounting '$2'"
+						_log it $funcname daemon info "unmounting '$2'"
 						umount "$2"
 						umount "/proc/bus/usb"
 					;;
 					"debugfs")
-						_log do $funcname daemon info "unmounting '$2'"
+						_log it $funcname daemon info "unmounting '$2'"
 						umount "$2"
 					;;
 					"none")
 						[ "$2" = "/proc/bus/usb" ] && {
-							_log do $funcname daemon info "unmounting '$2'"
+							_log it $funcname daemon info "unmounting '$2'"
 							umount "$2"
 						}
 					;;
@@ -271,7 +271,7 @@ _firmware_remove_kmodules()		# fixme! loop as long as we can kick at least one m
 
 		_watch counter "/tmp/$funcname" increment 1 max 25 || break
 		read i <"/tmp/$funcname"
-		_log do $funcname daemon info "mode: '$filter_option', iteration: $i/100"
+		_log it $funcname daemon info "mode: '$filter_option', iteration: $i/100"
 
 		if [ $i -lt 4 ]; then
 			list_modules="$( list_modules_get )"
@@ -320,26 +320,26 @@ _firmware_remove_kmodules()		# fixme! loop as long as we can kick at least one m
 			esac
 
 			[ -n "$remove" ] && {
-				_log do $funcname daemon info "removing kmodule: $module"
+				_log it $funcname daemon info "removing kmodule: $module"
 
 				rmmod $module || {
-					_log do $funcname daemon info "removing kmodule: $module [FAILED1]"
+					_log it $funcname daemon info "removing kmodule: $module [FAILED1]"
 				}
 
 				grep -q ^"$module " "/proc/modules" && {
 					errorcount=$(( $errorcount + 1 ))
-					_log do $funcname daemon debug "rmmod/lsmod: $( lsmod | fgrep "$module" )"
-					_log do $funcname daemon info "removing kmodule: $module [FAILED2] errorcount: $errorcount"
+					_log it $funcname daemon debug "rmmod/lsmod: $( lsmod | fgrep "$module" )"
+					_log it $funcname daemon info "removing kmodule: $module [FAILED2] errorcount: $errorcount"
 				}
 			}
 		} done
 
 		[ "$filter_option" = "all" ] && {
 			if [ -n "$( list_modules_get )" ]; then
-				_log do $funcname daemon info "[ERR] still loaded modules:"
-				lsmod | _log do firmware_lsmod daemon info
+				_log it $funcname daemon info "[ERR] still loaded modules:"
+				lsmod | _log it firmware_lsmod daemon info
 			else
-				_log do $funcname daemon info "[OK] all modules are now unloaded"
+				_log it $funcname daemon info "[OK] all modules are now unloaded"
 			fi
 		}
 
@@ -372,7 +372,7 @@ _firmware_kill_tasks()
 			;;
 			wifi_down)
 				[ "$( uci set wireless.radio0.disabled )" = 1 ] || {
-					_log do $funcname daemon info "[OK] bringing wifi down"
+					_log it $funcname daemon info "[OK] bringing wifi down"
 					uci set wireless.radio0.disabled=1
 					wifi
 				}
@@ -381,21 +381,21 @@ _firmware_kill_tasks()
 				/etc/init.d/uhttpd stop
 			;;
 			*)
-				_log do $funcname daemon info "killall $task"
+				_log it $funcname daemon info "killall $task"
 				killall "$task"
 			;;
 		esac
 	} done
 
-	_log do $funcname daemon info "[OK] still running tasks:"
-	ps | _log do firmware_process_snapshot daemon info
+	_log it $funcname daemon info "[OK] still running tasks:"
+	ps | _log it firmware_process_snapshot daemon info
 }
 
 _firmware_flush_iptables()
 {
 	local funcname="firmware_flush_iptables"
 
-	_log do $funcname daemon info "[OK] flushing iptables"
+	_log it $funcname daemon info "[OK] flushing iptables"
 
 	iptables -t mangle -F
 	iptables -t mangle -X
@@ -404,7 +404,7 @@ _firmware_flush_iptables()
 	iptables -t nat -F
 	iptables -t nat -X
 
-	_log do $funcname daemon info "[READY] flushing iptables"
+	_log it $funcname daemon info "[READY] flushing iptables"
 }
 
 _firmware_check_image()
@@ -412,10 +412,10 @@ _firmware_check_image()
 	local funcname="firmware_check_image"
 	local file="${1:-/tmp/fw}"
 
-	_log do $funcname daemon info "[START] checking image '$file'"
+	_log it $funcname daemon info "[START] checking image '$file'"
 
 	[ -e "$file" ] || {
-		_log do $funcname daemon info "file '$file' is missing, abort"
+		_log it $funcname daemon info "file '$file' is missing, abort"
 		return 1
 	}
 
@@ -425,9 +425,9 @@ _firmware_check_image()
 	. /lib/upgrade/common.sh
 
 	if platform_check_image "$file" ; then
-		_log do $funcname daemon info "[READY] image OK checked"
+		_log it $funcname daemon info "[READY] image OK checked"
 	else
-		_log do $funcname daemon info "[ERR] bad checksum, abort"
+		_log it $funcname daemon info "[ERR] bad checksum, abort"
 		return 1
 	fi
 }
@@ -444,15 +444,15 @@ _firmware_remove_cron_stuff()
 
 	[ -e "/etc/init.d/S51crond_fff+" ] && {
 		if mv "/etc/init.d/S51crond_fff+" "/etc/init.d/deactivated_cron_daemon" ; then
-			_log do $funcname daemon info "[OK] /etc/init.d/S51crond_fff+ moved to /etc/init.d/deactivated_cron_daemon"
+			_log it $funcname daemon info "[OK] /etc/init.d/S51crond_fff+ moved to /etc/init.d/deactivated_cron_daemon"
 		else
-			_log do $funcname daemon info "[ERR] during hiding /etc/init.d/S51crond_fff+ - removing some packages"
+			_log it $funcname daemon info "[ERR] during hiding /etc/init.d/S51crond_fff+ - removing some packages"
 			$OPKG remove sshpubkeys mysettings mydesign fff-adblock-list
 
 			if mv "/etc/init.d/S51crond_fff+" "/etc/init.d/deactivated_cron_daemon" ; then
-				_log do $funcname daemon info "[OK] /etc/init.d/S51crond_fff+ moved to /etc/init.d/deactivated_cron_daemon"
+				_log it $funcname daemon info "[OK] /etc/init.d/S51crond_fff+ moved to /etc/init.d/deactivated_cron_daemon"
 			else
-				_log do $funcname daemon info "[ERR] during moving /etc/init.d/S51crond_fff+ to /etc/init.d/deactivated_cron_daemon - abort"
+				_log it $funcname daemon info "[ERR] during moving /etc/init.d/S51crond_fff+ to /etc/init.d/deactivated_cron_daemon - abort"
 				return 1
 			fi
 		fi
@@ -460,15 +460,15 @@ _firmware_remove_cron_stuff()
 
 	[ -n "$crondog_found" ] && {
 		while [ ! -e /tmp/cron_watchdog.id ]; do {
-			_log do $funcname daemon info "waiting till cron_watchdog starts (file '/tmp/cron_watchdog.id' must come up)"
+			_log it $funcname daemon info "waiting till cron_watchdog starts (file '/tmp/cron_watchdog.id' must come up)"
 			sleep 5
 		} done
 	}
 
-	_log do $funcname daemon info "[OK] watchdog found, enforcing watchdog-ending"
+	_log it $funcname daemon info "[OK] watchdog found, enforcing watchdog-ending"
 	touch /tmp/cron_watchdog_please_end_yourself_$( cat /tmp/cron_watchdog.id )
 
-	_log do $funcname daemon info "[OK] waiting $sleeptime seconds"
+	_log it $funcname daemon info "[OK] waiting $sleeptime seconds"
 	_log sleep $funcname $sleeptime step 10
 
 	_firmware kill_tasks "crond cron_watchdog.sh"
@@ -492,9 +492,9 @@ _firmware_burn ()
 		screen -ls | fgrep -qi "Attached" || {
 
 			if [ -e "/usr/sbin/screen" ]; then
-				_log do $FUNC daemon info "better start a screen-session: /usr/sbin/screen - then do: '. /tmp/loader; _firmware burn /tmp/fw'"
+				_log it $FUNC daemon info "better start a screen-session: /usr/sbin/screen - then do: '. /tmp/loader; _firmware burn /tmp/fw'"
 			else
-				_log do $FUNC daemon info "better start a screen-session: $OPKG update; $OPKG install screen; screen - then do: '. /tmp/loader; _firmware burn /tmp/fw'"
+				_log it $FUNC daemon info "better start a screen-session: $OPKG update; $OPKG install screen; screen - then do: '. /tmp/loader; _firmware burn /tmp/fw'"
 			fi
 
 			_log sleep $funcname 10 step 1
@@ -524,10 +524,10 @@ _firmware_burn ()
 	_firmware flush_iptables
 
 	_firmware remove_kmodules most
-	_log do $funcname daemon info "[OK] after 'remove_kmodules most' - flushing caches: $( _system ram_free flush ) bytes free"
+	_log it $funcname daemon info "[OK] after 'remove_kmodules most' - flushing caches: $( _system ram_free flush ) bytes free"
 
 	_firmware remove_kmodules all
-	_log do $funcname daemon info "[OK] after 'remove_kmodules all' - flushing caches: $( _system ram_free flush ) bytes free"
+	_log it $funcname daemon info "[OK] after 'remove_kmodules all' - flushing caches: $( _system ram_free flush ) bytes free"
 
 	_firmware check_image "$FILE" || return 1
 
@@ -549,7 +549,7 @@ _firmware_burn ()
 				fgrep -q '"Upgrade completed";' "$patchfile" || {
 					partition="/dev/$( fgrep "linux" /proc/mtd | cut -d':' -f1 )"
 					fix="mtd fixtrx $partition"
-					_log do $funcname daemon info "[OK] patching '$patchfile', adding: '$fix'"
+					_log it $funcname daemon info "[OK] patching '$patchfile', adding: '$fix'"
 					sed -i "s|\"Upgrade completed\"|\"Upgrade completed\"; $fix|" "$patchfile"
 					fgrep -q "$fix" "$patchfile" || reboot -f
 				}
@@ -560,7 +560,7 @@ _firmware_burn ()
 	local patchfile="/lib/upgrade/common.sh"
 	local loop_begin="I=0; while true; do"
 	local loop_end="\&\& break; v retry_upgrade; I=\$(( \$I + 1 )); test \$I -gt 100 \&\& break; done"
-	_log do $funcname daemon info "[OK] patching '$patchfile', adding loop to default_do_upgrade() till it does not fail"
+	_log it $funcname daemon info "[OK] patching '$patchfile', adding loop to default_do_upgrade() till it does not fail"
 	sed -i "s|default_do_upgrade \"\$ARGV\"|${loop_begin} & ${loop_end}|" "$patchfile"
 	fgrep -q "v retry_upgrade;" "$patchfile" || reboot -f
 
@@ -713,7 +713,7 @@ _firmware_wget()
 	[ -e "$file" ] && return 0		# for manually fetching the file and test the hole procedure
 
 	[ ${#hash} = "32" ] || {
-		_log do $funcname daemon info "abort - hash invalid: '$hash'"
+		_log it $funcname daemon info "abort - hash invalid: '$hash'"
 		return 1
 	}
 
@@ -724,17 +724,17 @@ _firmware_wget()
 
 	while ! filehash_is_ok ; do {
 		touch "$file"
-		_log do $funcname daemon info "http_get $source: now $( _file size "$file" ) bytes targethash: $hash"
+		_log it $funcname daemon info "http_get $source: now $( _file size "$file" ) bytes targethash: $hash"
 		_wget do "$source" 10 "continue $file"
 		_log sleep $funcname 15 step 5
 		 _watch counter "/tmp/fetch_firmware" increment 1 max $maxtry || break
 	} done
 
 	if _watch counter "/tmp/fetch_firmware" increment 1 max $maxtry; then
-		_log do $funcname daemon info "[READY] downloading '$file' with $( _file size "$file" ) bytes"
+		_log it $funcname daemon info "[READY] downloading '$file' with $( _file size "$file" ) bytes"
 		return 0
 	else
-		_log do $funcname daemon info "[ERR] downloading '$file', maximum tries = $maxtry reached, deleting and aborting"
+		_log it $funcname daemon info "[ERR] downloading '$file', maximum tries = $maxtry reached, deleting and aborting"
 		rm "$file" /tmp/fetch_firmware
 		return 1
 	fi
