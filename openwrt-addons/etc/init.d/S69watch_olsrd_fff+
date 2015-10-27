@@ -17,7 +17,7 @@ case "$HARDWARE" in
 		for FILE in /lib/preinit/*; do {
 			fgrep -q "ifconfig" "$FILE" && {
 				fgrep -q "#ifconfig" "$FILE" || {
-					_log do ifconfig_patch_away daemon info "often produces 'page allocation failure'"
+					_log it ifconfig_patch_away daemon info "often produces 'page allocation failure'"
 					sed -i 's/ifconfig/:;#ifconfig/g' "$FILE"
 				}
 			}

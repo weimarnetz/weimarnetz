@@ -2,7 +2,7 @@
 . /tmp/loader
 
 [ -e "/tmp/LOCKFILE_APPLY" ] && {
-	_log do apply_profile daemon info "[OK] no scheduler action"
+	_log it apply_profile daemon info "[OK] no scheduler action"
 	exit 0
 }
 
@@ -42,7 +42,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 						if [ $( _file size "$FILE" kb ) -lt $( _system flash_free ) ]; then
 							mv "$FILE" "/www/fw"
 						else
-							_log do prepare_fwupdate daemon info "image-on-flash failed, fallback to ram-mode"
+							_log it prepare_fwupdate daemon info "image-on-flash failed, fallback to ram-mode"
 						fi
 					}
 				}
@@ -81,13 +81,13 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 					_firmware burn $FILE
 				else
 					[ "$LOWMEM" = "true" ] && {
-						_log do wget_firmware daemon alert "download failed on lowmem-device, rebooting"
+						_log it wget_firmware daemon alert "download failed on lowmem-device, rebooting"
 						reboot -f
 					}
 				fi
 
 				pidof crond >/dev/null || {
-					_log do cron_died daemon alert "empty pid"
+					_log it cron_died daemon alert "empty pid"
 					reboot -f
 				}
 
@@ -152,9 +152,9 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 											# script must first delete himself with 'rm $0'
 
 					while [ $( _system disc_free /tmp percent ) -lt 40 ]; do {
-						df -h | grep /tmp$ | _log do high_discusage_before daemon alert
+						df -h | grep /tmp$ | _log it high_discusage_before daemon alert
 						rm "$( ls -S1 /tmp/user-* | head -n1 )"
-						df -h | grep /tmp$ | _log do high_discusage_after daemon alert
+						df -h | grep /tmp$ | _log it high_discusage_after daemon alert
 					} done
 
 					pidof uhttpd >/dev/null || _watch webserver
@@ -174,7 +174,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 					}
 
 					fgrep -sq "nf_conntrack: table full, dropping packet." "/tmp/dmesg.recent" && {
-						_log do conntrack_full daemon info "dropping packet"
+						_log it conntrack_full daemon info "dropping packet"
 
 						[ "$( fgrep "nf_conntrack: table full, dropping packet." "/tmp/dmesg.recent" | wc -l )" -gt 10 ] && {
 							_system reboot_safe "nf_conntrack: table full"
@@ -286,7 +286,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 				uptime_diff="$(( $uptime_new - ${uptime_old:-0} ))"
 
 				[ $uptime_diff -gt 65 ] && \
-					_log do $funcname daemon info "[ERR] timediff > 60 sec = $uptime_diff"
+					_log it $funcname daemon info "[ERR] timediff > 60 sec = $uptime_diff"
 
 				if [ -e "$file_framecount" ]; then
 					read framecount_old <"$file_framecount"
@@ -309,7 +309,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 						;;
 					esac
 
-					_log do $funcname daemon $logprio "[ERR] framecounter for $check_dev old/new: $framecount_old = $framecount_new timediff: $uptime_diff sec"
+					_log it $funcname daemon $logprio "[ERR] framecounter for $check_dev old/new: $framecount_old = $framecount_new timediff: $uptime_diff sec"
 					echo "0" >"$file_framecount"
 					[ -d "/sys/kernel/debug/ieee80211/phy0/ath9k" ] && {
 						cat >"${file_framecount}.error_debug.${uptime_new}" \
@@ -332,12 +332,12 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 				else
 					[ -e "$file_activity_seen" ] || {
 						[ "$framecount_old" = "-1" ] || {
-							_log do $funcname daemon info "[OK] first activity seen on dev $check_dev ($framecount_old packets) - marking"
+							_log it $funcname daemon info "[OK] first activity seen on dev $check_dev ($framecount_old packets) - marking"
 							touch "$file_activity_seen"
 						}
 					}
 
-					_log do $funcname daemon debug "[OK] framecounter for dev $check_dev: old + diff = new : $( _sanitizer run "$framecount_old + $(( $framecount_new - $framecount_old )) = $framecount_new" number_humanreadable ) (during $uptime_diff sec)"
+					_log it $funcname daemon debug "[OK] framecounter for dev $check_dev: old + diff = new : $( _sanitizer do "$framecount_old + $(( $framecount_new - $framecount_old )) = $framecount_new" number_humanreadable ) (during $uptime_diff sec)"
 					return 0
 				fi
 			}
@@ -361,7 +361,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 							}
 						else
 							# _wifi phy_restart $WIFIDEV "no clients, no incoming_wifi_activity, mode $WIFIMODE" info
-							_log do incoming_wifi_activity daemon info "no clients, no incoming_wifi_activity, mode $WIFIMODE"
+							_log it incoming_wifi_activity daemon info "no clients, no incoming_wifi_activity, mode $WIFIMODE"
 						fi
 					;;
 				esac
@@ -373,7 +373,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 				;;
 				*)
 					_wifi check_each_client || {
-						_log do check_each_client daemon info "tx/arping to all clients failed"
+						_log it check_each_client daemon info "tx/arping to all clients failed"
 					}
 
 					case "$WIFIMODE" in
@@ -412,11 +412,11 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 			_scheduler queue_list
 		;;
 		A)									# fixme! doubled entrys with -A ?
-			_log do user_defined_now daemon debug "start '$OPTARG'"
+			_log it user_defined_now daemon debug "start '$OPTARG'"
 			COMMAND="$( _scheduler task2command "$OPTARG" )"
-			_log do user_defined_now daemon debug "start '$OPTARG' ('$COMMAND')"
+			_log it user_defined_now daemon debug "start '$OPTARG' ('$COMMAND')"
 			/bin/sh -c "${COMMAND:-true}"
-			_log do user_defined_now daemon debug "ready '$OPTARG' ('$COMMAND')"
+			_log it user_defined_now daemon debug "ready '$OPTARG' ('$COMMAND')"
 		;;
 		P)
 			case "$( uci -q get network.@gatewaycheck[0].mode )" in

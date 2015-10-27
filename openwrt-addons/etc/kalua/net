@@ -89,7 +89,7 @@ _net_mac2vendor()
 			[ -e "$cache" ] || {
 				mkdir -p "/tmp/oui"
 				url="$url/${oui:0:2}/${oui:2:2}/${oui:4:2}"
-				_wget do "$url" 5 >"$cache" 2>/dev/null
+				_curl it "$url" 5 >"$cache" 2>/dev/null
 			}
 
 			if [ "$option" = "short" ]; then
@@ -307,7 +307,7 @@ _net_local_inet_offer ()		# SENS: check if default-route is local
 	local wan_proto="$( uci -q get network.wan.proto )"
 
 	[ "$wan_proto" = "pppoe" ] && {
-		_log do $FUNC daemon info "early_boot_estimation: pppoe"
+		_log it $FUNC daemon info "early_boot_estimation: pppoe"
 		echo "pppoe"
 		return 0
 	}
@@ -320,32 +320,32 @@ _net_local_inet_offer ()		# SENS: check if default-route is local
 				_nvram set commit "config-mistake, unsetting wan-gateway which was '$WAN_GATEWAY'"
 			else
 				[ "$wan_proto" = "pppoe" ] && {
-					_log do $FUNC daemon info "early_boot_estimation: pppoe"
+					_log it $FUNC daemon info "early_boot_estimation: pppoe"
 					echo "pppoe"
 					return 0			# fixme!
 				}
 			
-				_log do $FUNC daemon info "early_boot_estimation: wan"
+				_log it $FUNC daemon info "early_boot_estimation: wan"
 				echo "wan"
 				return 0
 			fi
 		}
 
 		[ -n "$( uci -q get network.lan.gateway )" ] && {
-			_log do $FUNC daemon info "early_boot_estimation: lan"
+			_log it $FUNC daemon info "early_boot_estimation: lan"
 			echo "lan"
 			return 0
 		}
 
 		/etc/init.d/S52vpnc_fff+ check && {
-			_log do $FUNC daemon info "early_boot_estimation: tun"
+			_log it $FUNC daemon info "early_boot_estimation: tun"
 			echo "tun"
 			return 0
 		}
 
 		# fixme! wan-dhcp?
 
-		_log do $FUNC daemon info "early_boot_estimation: false"
+		_log it $FUNC daemon info "early_boot_estimation: false"
 		echo "false"
 		return 1
 	}
@@ -354,7 +354,7 @@ _net_local_inet_offer ()		# SENS: check if default-route is local
 	[ -n "$LAN_GATEWAY" ] && {
 		[ -z "$( ip route list exact 0.0.0.0/0 via $LAN_GATEWAY )" ] && {
 			[ "$LAN_GATEWAY" != "0.0.0.0" ] && {
-				_log do $FUNC daemon info "alien_gateway '$LAN_GATEWAY': lan"
+				_log it $FUNC daemon info "alien_gateway '$LAN_GATEWAY': lan"
 				echo "lan"
 				return 0
 			}
@@ -387,7 +387,7 @@ _net_local_inet_offer ()		# SENS: check if default-route is local
 
 	if [ -z "$METRIC" ]; then				# found no metric = local inet-offer
 
-		_log do $FUNC daemon debug "PHYDEV: '$PHYDEV' METRIC: '$METRIC' N: '$N' D: '$D'"
+		_log it $FUNC daemon debug "PHYDEV: '$PHYDEV' METRIC: '$METRIC' N: '$N' D: '$D'"
 
 		if [ -z "${PHYDEV}${METRIC}${N}" ]; then	# ip route list exact 0.0.0.0/0 -> "default via eth0" or similar
 
@@ -419,13 +419,13 @@ _net_local_inet_offer ()		# SENS: check if default-route is local
 				fi
 			}
 			
-			_log do $FUNC daemon info "found local default-gateway over device '$PHYDEV' = '$MODE'"
+			_log it $FUNC daemon info "found local default-gateway over device '$PHYDEV' = '$MODE'"
 		fi
 	else
 		if [ $N -eq 0 ]; then
-			_log do $FUNC daemon info "no local default-gateway, no default-gateway, no internet 8-("
+			_log it $FUNC daemon info "no local default-gateway, no default-gateway, no internet 8-("
 		else
-			_log do $FUNC daemon info "no local default-gateway found, only $N hops away 8-)"
+			_log it $FUNC daemon info "no local default-gateway found, only $N hops away 8-)"
 		fi
 	fi
 
@@ -443,7 +443,7 @@ _net_inet_seems_stable ()					# fixme! also check path to gateway (add wireless 
 
 	_olsr uptime is_short || {
 		[ -z "$( ip route list exact 0.0.0.0/0 table main )" ] && {
-			_log do $FUNC daemon alert "unstable inet, no default route in main-table"
+			_log it $FUNC daemon alert "unstable inet, no default route in main-table"
 			return 1
 		}
 	}
@@ -452,12 +452,12 @@ _net_inet_seems_stable ()					# fixme! also check path to gateway (add wireless 
 		read COST_INT <$FILE
 
 		[ "$COST_INT" 2>/dev/null -gt $max_cost ] && {
-			_log do $FUNC daemon alert "unstable inet1, cost_int: '$COST_INT' > $max_cost"
+			_log it $FUNC daemon alert "unstable inet1, cost_int: '$COST_INT' > $max_cost"
 			return 1
 		}
 		
 		[ "$COST_INT" = "0" -a "$COST" != "1.00" ] && {
-			_log do $FUNC daemon alert "unstable inet2, cost_int: '$COST_INT'"
+			_log it $FUNC daemon alert "unstable inet2, cost_int: '$COST_INT'"
 			return 1
 		}
 	}
@@ -533,7 +533,7 @@ _net_mac2ip ()		# SENS: get client-IP from different sources
 		}
 	} done
 
-	_log do $funcname daemon info "could not get ip for mac $MAC"
+	_log it $funcname daemon info "could not get ip for mac $MAC"
 	return 1
 }
 

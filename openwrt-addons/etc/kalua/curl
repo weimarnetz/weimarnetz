@@ -1,31 +1,46 @@
 #!/bin/sh
 
-# this is a wrapper for 'wget', which works around a bug/behaviour
+# this is a wrapper for 'wget/curl', which works around a bug/behaviour
 # which can lead to a hanging-daemon which will 'never' exit.
 # ask the net for all sorts of strange corner cases.
 #
-# here we simply start 'wget' in background, wait some
-# seconds (default: 15) and kill it (hard) if it's still there.
+# here we simply start 'wget' in background, wait some seconds (default: 15)
+# and kill it (hard) if it's still there with the same PID
 
-_wget_do()
+_curl_it()
 {
-	local funcname='wget_do'
+	local funcname='wget_go'
 	local url="$1"
-	local max="${2:-15}"	# maximal running time in seconds, defaults to 15sec
-	local option="$3"	# e.g. "noproxy" or "continue $filename" or combined: "noproxy,continue $filename"
+	local max="${2:-15}"	# maximal running time [sec]
+	local option="$3"	# e.g. 'noproxy' or "continue $filename" or combined: "noproxy,continue $filename"
 	local mask1="$3"
 	local mask2="$4"	# strings (e.g. passwords) from URL, which should be masked during logging, when prio is > debug
 	local mypid=$$
+	local errorfile="$TMPDIR/${funcname}_$mypid.error"
+	local rc_file="$TMPDIR/${funcname}_$mypid.rc"
 	local http_proxy remaining_wgets pid_wget pid_line pid_line_now c=-1 rc=0
-	local proxy_command file_option filename pid_background myerror
+	local proxy_command file_option filename pid_background myerror destination
 	local list_wget_pids_initial list_wget_pids_after_launch list_wget_pids_myself element
 
 	case "$url" in
-		*'localhost'*|*'127.0.0.1'*|*:[0-9]*)	# no PROXY for local URLs or URLs with special ports
-		;;					# FIXME! be more correct: 127.0.0.0/8 + ipv6 or set env $no_proxy
+		'http://'*|'https://'*|'ftp://'*)
+			# http://user:pass@bla.com:1234/my/file -> bla.com:1234
+			destination="$( echo "$url" | cut -d'/' -f3 | cut -d'@' -f2 )"
+		;;
+		*)
+			_log it $funcname daemon info "invalid url: '$url'"
+			return 1
+		;;
+	esac
+
+	case "$destination" in
+		'localhost'|'127.'*|*:[0-9]*|'fe80::'*|$LANADR|$WANADR|$WIFIADR)
+			# no PROXY for local URLs or URLs with special ports
+			# FIXME! set env $no_proxy?
+		;;
 		*)
 			[ -n "$http_proxy" -a -z "$option" ] && {
-				_log do $funcname daemon debug "using proxy from env $http_proxy"
+				_log it $funcname daemon debug "using proxy from env '$http_proxy'"
 				proxy_command='-Y on'
 			}
 		;;
@@ -42,21 +57,21 @@ _wget_do()
 		;;
 	esac
 
-	_log do $funcname daemon debug "max ${max}s, ${#url} bytes, wget $proxy_command -qO $filename $file_option '$url'"
+	_log it $funcname daemon debug "max ${max}s, ${#url} bytes, wget $proxy_command -qO $filename $file_option '$url'"
 
 	# get pids and fire the real 'wget':
 	list_wget_pids_initial="$( pidof wget )"
 
 	# autocleanup tempfiles. trapping 'RETURN' is not possible in POSIX
-	trap 'rm /tmp/${funcname}_$mypid /tmp/${funcname}_$mypid.error 2>/dev/null' EXIT
+	trap 'rm $rc_file $errorfile 2>/dev/null' EXIT
 
-	( wget $proxy_command -qO $filename $file_option "$url" 2>"/tmp/${funcname}_$mypid.error" || echo "$?" >"/tmp/${funcname}_$mypid" ) &
+	( wget $proxy_command -qO $filename $file_option "$url" 2>"$errorfile" || echo "$?" >"$rc_file" ) &
 	pid_background=$!
 	list_wget_pids_after_launch="$( pidof wget )" || list_wget_pids_after_launch=$(( pid_background + 2 ))
 	# FIXME! sometimes pidof fails, but in fact _thereis_ a wget - fix the >65536 case!
 
 	# remove, when the 'too early exit' bug is found
-#	_log do $funcname daemon debug "pids: initial: '$list_wget_pids_initial' background: '$pid_background' after: '$list_wget_pids_after_launch'"
+#	_log it $funcname daemon debug "pids: initial: '$list_wget_pids_initial' background: '$pid_background' after: '$list_wget_pids_after_launch'"
 
 	# join PIDs initial + after_launch
 	for element in $list_wget_pids_after_launch; do {
@@ -71,29 +86,33 @@ _wget_do()
 		break
 	} done
 
-	read -r myerror 2>/dev/null <"/tmp/${funcname}_$mypid.error" && {
+	if read -r myerror 2>/dev/null <"$errorfile"; then
+		rm "$errorfile"
+
 		if [ ${#myerror} -eq 0 ]; then
-			_log do $funcname daemon debug '[OK] no error message'
+			_log it $funcname daemon debug '[OK] no error message'
 		else
 			case "$myerror" in
 				*'HTTP/1.1 404'*)
-					_log do $funcname daemon info "[OK] $myerror"
+					_log it $funcname daemon info "[OK] $myerror"
 					return 0
 				;;
 				*)
-					# test with unresolveable: _wget do http://a.b.c.d/foo
-					_log do $funcname daemon info "error: '$myerror'"
+					# test with unresolveable: _curl it http://a.b.c.d/foo
+					_log it $funcname daemon info "error: '$myerror'"
 				;;
 			esac
 		fi
-	}
+	else
+		rm "$errorfile" 2>/dev/null
+	fi
 
 	case "${pid_wget:-unset}" in
 		'unset')
 			if [ ${#myerror} -eq 0 ]; then
-				_log do $funcname daemon debug '[OK] empty PID - this was lightning fast...'
+				_log it $funcname daemon debug '[OK] empty PID - this was lightning fast...'
 			else
-				_log do $funcname daemon debug '[ERR] empty PID - failed'
+				_log it $funcname daemon debug '[ERR] empty PID - failed'
 			fi
 
 			return ${#myerror}
@@ -124,7 +143,7 @@ _wget_do()
 				}
 
 				for element in $list_wget_pids_myself; do {
-					_log do $funcname daemon info "error during fetching '$url' - killing PID '$element' after $c seconds"
+					_log it $funcname daemon info "error during fetching '$url' - killing PID '$element' after $c seconds"
 					_watch hanging_command wget_selfkill $element
 					_watch hanging_command wget_selfkill $element
 				} done
@@ -132,7 +151,7 @@ _wget_do()
 				# FIXME! this is unneeded? and racy: we can kill other wgets which have just started
 				[ -z "$list_wget_pids_initial" ] && {
 					remaining_wgets="$( pidof wget )" && {
-						_log do $funcname daemon info "leaving wgets: $remaining_wgets , do killall"
+						_log it $funcname daemon info "leaving wgets: $remaining_wgets , do killall"
 						killall wget
 					}
 				}
@@ -147,26 +166,31 @@ _wget_do()
 	} done
 
 	# FIXME! code duplication, see above
-	read -r myerror 2>/dev/null <"/tmp/${funcname}_$mypid.error" && {
+	if read -r myerror 2>/dev/null <"$errorfile"; then
+		rm "$errorfile"
+
 		if [ ${#myerror} -eq 0 ]; then
-			_log do $funcname daemon debug '[OK] no error message'
+			_log it $funcname daemon debug '[OK] no error message'
 		else
 			case "$myerror" in
 				*'HTTP/1.1 404'*)
-					_log do $funcname daemon info "[OK] $myerror"
+					_log it $funcname daemon info "[OK] $myerror"
 					return 0
 				;;
 				*)
-					# test with unresolveable: _wget do http://a.b.c.d/foo
-					_log do $funcname daemon info "error: '$myerror'"
+					# test with unresolveable: _curl it http://a.b.c.d/foo
+					_log it $funcname daemon info "error: '$myerror'"
 				;;
 			esac
 		fi
-	}
+	else
+		rm "$errorfile" 2>/dev/null
+	fi
 
-	read -r rc 2>/dev/null <"/tmp/${funcname}_$mypid" && {
-		_log do $funcname daemon info "[ERR] returning $rc after fetching '$url'"
+	read -r rc 2>/dev/null <"$rc_file" && {
+		_log it $funcname daemon info "[ERR] returning $rc after fetching '$url'"
 	}
+	rm "$rc_file" 2>/dev/null
 
 	return $rc
 }

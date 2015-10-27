@@ -42,7 +42,7 @@ _log_sleep()		# _log sleep firmware_burn 180 step 10
 		# during high load/lowmem this can help:
 		[ $(( $( _system uptime sec ) - $uptime_start )) -gt $duration ] && return
 
-		_log do "$subroutine_name" daemon $prio "[OK] sleeping $n/$duration sec"
+		_log it "$subroutine_name" daemon $prio "[OK] sleeping $n/$duration sec"
 		prio="debug"
 
 		[ -n "$do_sleep" ] && /bin/sleep $step
@@ -99,7 +99,7 @@ _log_debug()
 	fi
 }
 
-_log_do ()				# CALL: _log do my_function_name daemon info "mytext"
+_log_it()				# CALL: _log it my_function_name daemon info "mytext"
 {
 	local FATHER_PROCESS="$0"
 	local FUNCTION="$1"		# ARG1, string (name of function, from where call was invoked)
@@ -114,7 +114,7 @@ _log_do ()				# CALL: _log do my_function_name daemon info "mytext"
 
 	[ -z "$MESSAGE" ] && {		# from stdin (pipe into function)
 		while read -t 3 MESSAGE; do {
-			_log do "$FUNCTION" "$FACILITY" "$PRIO" "STDIN${i}: ${MESSAGE:-stdin_was_empty}"
+			_log it "$FUNCTION" "$FACILITY" "$PRIO" "STDIN${i}: ${MESSAGE:-stdin_was_empty}"
 			i=$(( ${i:-1} + 1 ))
 		} done
 

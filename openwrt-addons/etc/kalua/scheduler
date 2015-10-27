@@ -11,7 +11,7 @@ _scheduler_vars ()
 
 _scheduler_queue_purge ()		# fixme! wait till running jobs have ended?
 {
-	_log do purge_queues daemon info "removing"
+	_log it purge_queues daemon info "removing"
 	_scheduler vars
 	rm $FILE_SCHEDULER_TMP* $FILE_SCHEDULER $FILE_SCHEDULER_COPY 2>/dev/null
 }
@@ -24,7 +24,7 @@ _scheduler_queue_list ()
 
 	_scheduler vars
 
-	_log do $funcname daemon debug "working with option: '$option'"
+	_log it $funcname daemon debug "working with option: '$option'"
 
 	echo "# actual,running queue:"
 	cat $FILE_SCHEDULER_COPY 2>/dev/null || {
@@ -51,7 +51,7 @@ _scheduler_print_usage ()
 {
 	local FUNC="scheduler_print_usage"
 	
-	_log do $FUNC daemon info "working"
+	_log it $FUNC daemon info "working"
 
 	cat <<EOF
  
@@ -136,7 +136,7 @@ _scheduler_task2command ()
 						;;
 					esac	
 
-				        _log do $FUNC daemon debug "user defined: '$COMMAND'"
+				        _log it $FUNC daemon debug "user defined: '$COMMAND'"
 				;;
 	esac
 	
@@ -159,7 +159,7 @@ _scheduler_add ()
 		move2top)				# insert on top, if not already in waiting_queue
 
 			cat ${FILE_SCHEDULER_TMP}1000* 2>/dev/null | head -n1 | grep -q ^"$COMMAND" && {
-				_log do $FUNC daemon $logprio "$KEYWORD - PID: '$$' - '$TASK' - already in queue, ignoring"
+				_log it $FUNC daemon $logprio "$KEYWORD - PID: '$$' - '$TASK' - already in queue, ignoring"
 				return
 			}
 
@@ -167,7 +167,7 @@ _scheduler_add ()
 		;;
 		force)
 			[ "$( fgrep -s "$COMMAND" ${FILE_SCHEDULER_TMP}* $FILE_SCHEDULER_COPY | wc -l )" -ge 2 ] && {
-				_log do $FUNC daemon info "not adding '$COMMAND', already more then 2 times in queue"
+				_log it $FUNC daemon info "not adding '$COMMAND', already more then 2 times in queue"
 				return
 			}
 		;;
@@ -176,7 +176,7 @@ _scheduler_add ()
 			# but if we use regex, we have to escape special chars like * and .
 
 			fgrep -sq "$COMMAND" ${FILE_SCHEDULER_TMP}* $FILE_SCHEDULER_COPY && {
-				_log do $FUNC daemon $logprio "PID:'$$' - '$TASK' - already in queue, ignoring"
+				_log it $FUNC daemon $logprio "PID:'$$' - '$TASK' - already in queue, ignoring"
 				return
 			}
 		;;
@@ -186,7 +186,7 @@ _scheduler_add ()
 		COUNTER="$( _system date unixtime )"	# we need a monotonic + always_same_length-counter here, so better not use $$ (process-id)
 	}						# this is only true from 2001-Sep-10 ... 2038-Jan-19
 
-	_log do $FUNC daemon $logprio "PID:'$$' +'$TASK'"
+	_log it $FUNC daemon $logprio "PID:'$$' +'$TASK'"
 	echo "$COMMAND   # $TASK" >>${FILE_SCHEDULER_TMP}${COUNTER}
 }
 
@@ -201,7 +201,7 @@ _scheduler_check_if_every_Nth_minute ()
 	local CARRYOVER="$(( $UPTIME % $1 ))"	# e.g. every = 55 min : 60 % 55 = 5 
 	
 	[ "$CARRYOVER" -eq 0 ] && {
-		_log do scheduler_check_if_every_Nth_minute daemon debug "call '$2' for ${1}th minute, uptime: $UPTIME"
+		_log it scheduler_check_if_every_Nth_minute daemon debug "call '$2' for ${1}th minute, uptime: $UPTIME"
 		return 0
 	}
 
@@ -224,7 +224,7 @@ _scheduler_wait_till_cpuload_is_low ()
 		WAIT=$(( 5 + ($CPU_LOAD - $TARGET) / 2 ))
 		[ ${WAIT:=100} -gt 300 ] && WAIT=300
 		
-		_log do $FUNC daemon debug "PID:'$$' - load >=0.$TARGET ($CPU_LOAD) - waiting $WAIT sec (for '$WAITING_TASK')"
+		_log it $FUNC daemon debug "PID:'$$' - load >=0.$TARGET ($CPU_LOAD) - waiting $WAIT sec (for '$WAITING_TASK')"
 		
 		TARGET=$(( $TARGET + 1 ))
 		sleep $WAIT
@@ -249,17 +249,17 @@ _scheduler_allow_run()
 	if [ -e "$lockfile" ]; then
 
 		_watch counter "/tmp/scheduler_lockfile_counter" increment 1 max 60 || {
-			_log do $funcname daemon alert "removing lockfile, which seems to be left by accident"
+			_log it $funcname daemon alert "removing lockfile, which seems to be left by accident"
 			rm "$lockfile"
 		}
 
 		return 1
 
 #		if [ "$( _system load 1min )" -lt $load_border ]; then
-#			_log do $funcname daemon info "lockfile exists, but allowing due to low system load < 0.${load_border}"
+#			_log it $funcname daemon info "lockfile exists, but allowing due to low system load < 0.${load_border}"
 #			return 0
 #		else
-#			_log do $funcname daemon info "already running, ignoring call (task: $( cat $lockfile ))"
+#			_log it $funcname daemon info "already running, ignoring call (task: $( cat $lockfile ))"
 #			return 1
 #		fi
 	else
@@ -281,7 +281,7 @@ _scheduler_run ()
 	scheduler_cleanup ()	# fixme! respect DRY
 	{
 		rm "/tmp/lockfile_scheduler_is_running"
-		_log do scheduler_run daemon info "cleanup called during '$LINE'"
+		_log it scheduler_run daemon info "cleanup called during '$LINE'"
 
 		exit 1		# fixme! use return?
 	}
@@ -302,7 +302,7 @@ _scheduler_run ()
 
 		for FILE in $list_scheduler_file_parts; do {	# this builds the running queue from temp_queue
 			while read LINE; do {
-				_log do $FUNC daemon debug "fetching '$LINE' from file '$FILE'"
+				_log it $FUNC daemon debug "fetching '$LINE' from file '$FILE'"
 				echo "$LINE" >>$FILE_SCHEDULER
 			} done <$FILE
 			rm $FILE
@@ -313,14 +313,14 @@ _scheduler_run ()
 
 			_scheduler wait_till_cpuload_is_low "$LINE"
 
-			_log do $FUNC daemon debug "running '$LINE'"
+			_log it $FUNC daemon debug "running '$LINE'"
 			echo "$LINE" >$LOCKFILE
 			/bin/sh -c "$LINE"
-			_log do $FUNC daemon debug "ready '$LINE'"
+			_log it $FUNC daemon debug "ready '$LINE'"
 
 		} done <$FILE_SCHEDULER
 	else
-		_log do $FUNC daemon debug "empty queue - no action"
+		_log it $FUNC daemon debug "empty queue - no action"
 	fi
 
 	rm $FILE_SCHEDULER $FILE_SCHEDULER_COPY $LOCKFILE 2>/dev/null

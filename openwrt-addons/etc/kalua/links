@@ -73,7 +73,7 @@ _links_firmware_url_get()		# ARG1:	stable|beta|testing|empty
 			[ "$UPDATEMODE" = "0" ] && i=100
 
 			while [ -z "$CRC" -a $i -lt 100 ]; do {
-				CRC="$( _wget do "$BASE/$ARCHITECTURE/images/$UPDATEMODE/info.txt" | fgrep "FILE: 'tarball.tgz'" | cut -d' ' -f2 )"
+				CRC="$( _curl it "$BASE/$ARCHITECTURE/images/$UPDATEMODE/info.txt" | fgrep "FILE: 'tarball.tgz'" | cut -d' ' -f2 )"
 				sleep 5
 				i=$(( $i + 1 ))
 			} done
@@ -83,7 +83,7 @@ _links_firmware_url_get()		# ARG1:	stable|beta|testing|empty
 		version_current*)
 			local OUTPUT
 
-			OUTPUT="$( _wget do "$BASE/$ARCHITECTURE/images/$UPDATEMODE/info.txt" | head -n1 )"
+			OUTPUT="$( _curl it "$BASE/$ARCHITECTURE/images/$UPDATEMODE/info.txt" | head -n1 )"
 			[ -n "$OUTPUT" ] && {
 				local GENERATED VERSION KERNEL MAINTAINER VERSION_MAIN
 				eval $OUTPUT
@@ -119,7 +119,7 @@ _links_firmware_url_get()		# ARG1:	stable|beta|testing|empty
 
 					get_crc()
 					{
-						_wget do "$BASE/$ARCHITECTURE/images/$UPDATEMODE/info.txt" |
+						_curl it "$BASE/$ARCHITECTURE/images/$UPDATEMODE/info.txt" |
 						 while read LINE; do {
 							case "$LINE" in
 								*"'$FILEWISH'"*)

@@ -948,7 +948,7 @@ _config_network ()
 	for section in $( uci show network | grep "=interface"$ | grep -v "6=interface"$ | grep -v "loopback=interface"$ | cut -d'=' -f1 ); do {
 		uci delete $section
 	} done
-	_log do uci_commit daemon alert 'network: remove old sections'
+	_log it uci_commit daemon alert 'network: remove old sections'
 	uci commit network
 
 	[ -n "$LANDEV" ] && {
@@ -958,8 +958,8 @@ config 'interface' 'lan'
 	option 'ifname'   '$LANDEV'
 $( test -n "$LANMAC" && echo "	option 'macaddr' '$LANMAC'" )
 	option 'proto'    'static'
-	option 'ipaddr'   '$( _ipsystem do $NODE | grep LANADR= | cut -d'=' -f2 )'
-	option 'netmask'  '$( _ipsystem do $NODE | grep LANMSK= | cut -d'=' -f2 )'
+	option 'ipaddr'   '$( _ipsystem get $NODE | grep LANADR= | cut -d'=' -f2 )'
+	option 'netmask'  '$( _ipsystem get $NODE | grep LANMSK= | cut -d'=' -f2 )'
 
 EOF
 	}
@@ -968,8 +968,8 @@ EOF
 			:		# no wandev/singleport
 	else
 		local hide_gateway="#"
-		local wan_ipaddr="$(  _ipsystem do $NODE | grep WANADR= | cut -d'=' -f2 )"
-		local wan_netmask="$( _ipsystem do $NODE | grep WANMSK= | cut -d'=' -f2 )"
+		local wan_ipaddr="$(  _ipsystem get $NODE | grep WANADR= | cut -d'=' -f2 )"
+		local wan_netmask="$( _ipsystem get $NODE | grep WANMSK= | cut -d'=' -f2 )"
 		local wan_gateway=
 		local username password hideip wan_dns
 
@@ -1039,7 +1039,7 @@ for radiocard in 0 1 2 3; do {
 		;;
 	esac
 
-	wlan_ipaddr="$( _ipsystem do $NODE | grep WIFIADR= | cut -d'=' -f2 )"
+	wlan_ipaddr="$( _ipsystem get $NODE | grep WIFIADR= | cut -d'=' -f2 )"
 
 	### radiocard-0
 	# adhoc = .1	adhoc or ap = .1
@@ -1054,10 +1054,10 @@ for radiocard in 0 1 2 3; do {
 	if grep "option network" "/etc/config/wireless" | grep -q "wlanadhoc${network_append}"; then
 		local ip_1stIF_addvalue=$(( (($radiocard + 1) * 2 )     - 1 ))
 		local ip_2ndIF_addvalue=$(( (($radiocard + 1) * 2 ) - 1 - 1 ))
-		wlan_netmsk="$( _ipsystem do $NODE | grep ^"WIFI_DHCP_PRE=" | cut -d'=' -f2 )"
+		wlan_netmsk="$( _ipsystem get $NODE | grep ^"WIFI_DHCP_PRE=" | cut -d'=' -f2 )"
 	else
 		local ip_1stIF_addvalue=$(( (($radiocard + 1) * 2 ) - 1 - 1 ))
-		wlan_netmsk="$( _ipsystem do $NODE | grep ^"WIFI_PRE=" | cut -d'=' -f2 )"
+		wlan_netmsk="$( _ipsystem get $NODE | grep ^"WIFI_PRE=" | cut -d'=' -f2 )"
 	fi
 
 	cat >>/etc/config/network <<EOF
@@ -1072,7 +1072,7 @@ EOF
 
 	grep "option network" "/etc/config/wireless" | grep -q "wlanadhoc${network_append}" || continue
 
-	wlan_netmsk="$( _ipsystem do $NODE | grep ^"WIFI_PRE=" | cut -d'=' -f2 )"
+	wlan_netmsk="$( _ipsystem get $NODE | grep ^"WIFI_PRE=" | cut -d'=' -f2 )"
 
 	cat >>/etc/config/network <<EOF
 
@@ -1161,8 +1161,8 @@ _config_dhcp ()			# domain = .olsr
 	uci -q set dhcp.lan="dhcp"
 	
 	uci -q set dhcp.lan.interface="lan"
-	uci -q set dhcp.lan.start=$( _ipsystem do "$NODE" | grep ^"LANDHCPSTART=" | cut -d'=' -f2 )
-	uci -q set dhcp.lan.limit=$( _ipsystem do "$NODE" | grep ^"LANDHCPNUM="   | cut -d'=' -f2 )
+	uci -q set dhcp.lan.start=$( _ipsystem get "$NODE" | grep ^"LANDHCPSTART=" | cut -d'=' -f2 )
+	uci -q set dhcp.lan.limit=$( _ipsystem get "$NODE" | grep ^"LANDHCPNUM="   | cut -d'=' -f2 )
 	uci -q set dhcp.lan.leasetime="2h"
 	uci -q set dhcp.lan.force="1"
 	uci -q set dhcp.lan.ignore=${DHCP_IGNORE_LAN:-0}
@@ -1171,9 +1171,9 @@ _config_dhcp ()			# domain = .olsr
 	uci -q delete dhcp.wlan
 	uci -q set dhcp.wlan="dhcp"
 	uci -q set dhcp.wlan.interface="wlan"
-	uci -q set dhcp.wlan.start=$( _ipsystem do "$NODE" | grep ^"WIFIDHCPSTART=" | cut -d'=' -f2 | cut -d'.' -f4 )
-	uci -q set dhcp.wlan.netmask=$( _net cidr2mask "$( _ipsystem do "$NODE" | grep ^"WIFI_DHCP_PRE=" | cut -d'=' -f2 )" ) # 255.255.255.240?
-	uci -q set dhcp.wlan.limit=$( _ipsystem do "$NODE" | grep ^"WIFIDHCPNUM=" | cut -d'=' -f2 )			 # fixme! better: 21
+	uci -q set dhcp.wlan.start=$( _ipsystem get "$NODE" | grep ^"WIFIDHCPSTART=" | cut -d'=' -f2 | cut -d'.' -f4 )
+	uci -q set dhcp.wlan.netmask=$( _net cidr2mask "$( _ipsystem get "$NODE" | grep ^"WIFI_DHCP_PRE=" | cut -d'=' -f2 )" ) # 255.255.255.240?
+	uci -q set dhcp.wlan.limit=$( _ipsystem get "$NODE" | grep ^"WIFIDHCPNUM=" | cut -d'=' -f2 )			 # fixme! better: 21
 	uci -q set dhcp.wlan.leasetime="1h"
 	uci -q set dhcp.wlan.force="1"
 	uci -q set dhcp.wlan.ignore=${DHCP_IGNORE_WLAN:-0}
@@ -1267,10 +1267,10 @@ _config_olsrd ()	# example here: http://olsr.org/git/?p=olsrd.git;a=blob;f=files
 	local INTERFACES3   # tap interface for vpn
 	local hna_net hna_mask main_ip
 
-	hna_net="$(  _ipsystem do $NODE | grep OLSR_HNA= | cut -d'=' -f2 | cut -d'/' -f1 )"
-	hna_mask="$( _ipsystem do $NODE | grep OLSR_HNA= | cut -d'/' -f2 )"
+	hna_net="$(  _ipsystem get $NODE | grep OLSR_HNA= | cut -d'=' -f2 | cut -d'/' -f1 )"
+	hna_mask="$( _ipsystem get $NODE | grep OLSR_HNA= | cut -d'/' -f2 )"
 	hna_mask="$( _net cidr2mask $hna_mask )"
-	tap_broadcast="$( _ipsystem do $NODE | grep WIFIVPNSERVERADR= | cut -d'=' -f2 )"
+	tap_broadcast="$( _ipsystem get $NODE | grep WIFIVPNSERVERADR= | cut -d'=' -f2 )"
 
 	local landev="lan"
 	local wandev="wan"

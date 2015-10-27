@@ -37,7 +37,7 @@ _sanitizer_run()	# example_call: _sanitizer run "$MYSTRING" mac hex lowercase ch
 			;;
 			*)							# hex|lowercase|uppercase|email|urlvalue|mac|alphanum
 				WORK="$( _sanitizer_$KEYWORD "$WORK" "$OPTION" )" || {
-					_log do sanitizer daemon alert "'_sanitizer_$KEYWORD ${OPTION} $1' - invalid call"
+					_log it sanitizer daemon alert "'_sanitizer_$KEYWORD ${OPTION} $1' - invalid call"
 					return 1
 				}
 			;;
@@ -280,7 +280,7 @@ _sanitizer_urlvalue()				# fixme! on cmdline this produces error on each "!"-sig
 	# so we have to check char by char, which is slow...
 	# maybe we should auto-generate a table when using this functions for the first time?
 
-	_log do $funcname daemon info "[OK] activating slow parser"
+	_log it $funcname daemon info "[OK] activating slow parser"
 
 	while [ $pos -lt ${#text} ]; do {					# 0...length_of_text
 		char="${text:$pos:1}"						# char at $pos

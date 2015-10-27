@@ -210,7 +210,7 @@ _wifi_phy_restart()
 	local vals_tx="tx_bytes/packets/errors: $WIFI_TX_BYTES/$WIFI_TX_PACKETS/$WIFI_TX_ERRORS"
 
 	echo "$reason: $uptime $vals_rx $vals_tx" >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.reason"
-	_log do $funcname daemon $prio "working on '$wifi_dev' ($reason) $uptime $vals_rx $vals_tx"
+	_log it $funcname daemon $prio "working on '$wifi_dev' ($reason) $uptime $vals_rx $vals_tx"
 
 	local line mac adduser
 	local userlist="$( _netfilter user_list )"
@@ -234,7 +234,7 @@ _wifi_phy_restart()
 	_log sleep $funcname 10 step 1
 	_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
 	/sbin/wifi up | grep -q "PHY for wifi device radio. not found" && {
-		_log do $funcname daemon alert "message: PHY for wifi device radioX not found"
+		_log it $funcname daemon alert "message: PHY for wifi device radioX not found"
 		return 1
 	}
 
@@ -422,7 +422,7 @@ _wifi_probe_mode_ap ()				# fixme! respect WIFI_DEV
 				return 1
 			;;
 			*)
-				_log do $funcname daemon info "unknown mode '$WIFI_MODE'"
+				_log it $funcname daemon info "unknown mode '$WIFI_MODE'"
 				return 1
 			;;
 		esac
@@ -436,7 +436,7 @@ _wifi_mode ()			# OUT1: string, ap | client | adhoc             // rename: wifi_
 	local SWITCH="$2"	# can be 'config' or <empty>
 
 	fgrep -q "${WIFI_DEV:-no_wifi}:" /proc/net/dev || {
-		_log do $funcname daemon debug "wifidev ${WIFI_DEV:-no_wifi} not found"
+		_log it $funcname daemon debug "wifidev ${WIFI_DEV:-no_wifi} not found"
 		return 1
 	}
 
@@ -486,10 +486,10 @@ _wifi_check_each_client()
 		[ "$exitcode" = "0" ] || {
 			ip="$( _net mac2ip $mac )" && {
 				if arping -q -f -c $max_arping -I $WIFIDEV $ip ; then
-					_log do $funcname daemon debug "[OK] arping - mac: $mac ip: $ip"
+					_log it $funcname daemon debug "[OK] arping - mac: $mac ip: $ip"
 					exitcode="0"
 				else
-					_log do $funcname daemon info "[ERR] arping - mac: $mac ip: $ip (no success for $max_arping probes)"
+					_log it $funcname daemon info "[ERR] arping - mac: $mac ip: $ip (no success for $max_arping probes)"
 					# iw dev "$WIFIDEV" station del "$mac"
 					exitcode="1"
 				fi
@@ -497,7 +497,7 @@ _wifi_check_each_client()
 		}
 
 		[ -e "$statsdir/$mac" ] || {
-			_log do $funcname daemon info "[OK] detected new station $mac"
+			_log it $funcname daemon info "[OK] detected new station $mac"
 			_system uptime >"$statsdir/$mac"
 		}
 	} done
@@ -516,7 +516,7 @@ _wifi_check_each_client()
 			rm "$statsdir/$mac"
 			up_diff="$(( $up2 - $up1 ))"
 
-			_log do $funcname daemon alert "[OK] station $mac left network $WIFIDEV, ($( _stopwatch seconds2humanreadable $up_diff ))"
+			_log it $funcname daemon alert "[OK] station $mac left network $WIFIDEV, ($( _stopwatch seconds2humanreadable $up_diff ))"
 		}
 	} done
 
