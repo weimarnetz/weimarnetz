@@ -360,9 +360,9 @@ fkt_build_clients_list ()	# these lists are used to to a fast 'grep $IP $FILE', 
 	# 10.63.167.94 cityvpn-serverside-n422.olsr cityvpn-serverside-n422		// for nicer traceroute
 	# 10.63.167.93 cityvpn-clientside-n422.olsr cityvpn-clientside-n422
 
-	eval $( _ipsystem do | grep ^WIFI_DHCP_PRE=	)
-	eval $( _ipsystem do | grep ^WIFINET=		)
-	eval $( _ipsystem do | grep ^WIFIBRC=		)
+	eval $( _ipsystem get | grep ^WIFI_DHCP_PRE=	)
+	eval $( _ipsystem get | grep ^WIFINET=		)
+	eval $( _ipsystem get | grep ^WIFIBRC=		)
 
 	build_network_clients "$WIFINET" "$WIFIBRC" "$WIFI_DHCP_PRE"	"WIFI"	>/tmp/CLIENTS_WIFI
 	build_network_clients "$LANNET"  "$LANBRC"  "$LANPRE"		"LAN"	>/tmp/CLIENTS_LAN 

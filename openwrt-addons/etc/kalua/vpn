@@ -538,7 +538,7 @@ eval $( _list random_element "$TABLE" )
 
  [ "${1}" != "stop" ] && INETOFFER="$( _net local_inet_offer )"
 	
- eval "$( _ipsystem do )"
+ eval "$( _ipsystem get )"
 }
 
 
