@@ -146,8 +146,6 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 						echo 1 >"/proc/sys/vm/panic_on_oom"
 					}
 
-					rm /tmp/wget_do_* 2>/dev/null			# fixme!
-
 					[ -e /tmp/.autorun ] && /tmp/.autorun		# can be helpful to make changes an many nodes
 											# script must first delete himself with 'rm $0'
 

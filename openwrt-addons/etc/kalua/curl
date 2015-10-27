@@ -9,7 +9,7 @@
 
 _curl_it()
 {
-	local funcname='wget_go'
+	local funcname='curl_it'
 	local url="$1"
 	local max="${2:-15}"	# maximal running time [sec]
 	local option="$3"	# e.g. 'noproxy' or "continue $filename" or combined: "noproxy,continue $filename"
