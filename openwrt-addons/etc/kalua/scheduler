@@ -1,6 +1,12 @@
-# ToDo:
-# option einbauen, um einen task zu einer bestimmten Uhrzeit in der Zukunft ausfuehren zu lassen,
-# z.b. +werbefilter-liste_update in 24h
+#!/bin/sh
+
+# we need a monotonic counter for both: SCHEDULER / SCHEDULER_IMPORTANT
+# with 8 digits -> max = 1157 days; note: var PID is the uptime
+PID= read -r PID _ </proc/uptime
+SCHEDULER=${SCHEDULER-/tmp/SCHEDULER/job_$(printf %08.0f ${PID%.*}; mkdir -p /tmp/SCHEDULER)}
+SCHEDULER_QUEUE='/tmp/SCHEDULER/*'
+SCHEDULER_IMPORTANT=${SCHEDULER_IMPORTANT-/tmp/SCHEDULER/important_$(printf %08.0f $$)}
+SCHEDULER_IMPORTANT_QUEUE='/tmp/SCHEDULER/important_*'
 
 _scheduler_vars ()
 {
