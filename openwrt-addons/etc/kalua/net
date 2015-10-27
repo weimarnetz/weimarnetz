@@ -89,7 +89,7 @@ _net_mac2vendor()
 			[ -e "$cache" ] || {
 				mkdir -p "/tmp/oui"
 				url="$url/${oui:0:2}/${oui:2:2}/${oui:4:2}"
-				_wget do "$url" 5 >"$cache" 2>/dev/null
+				_curl it "$url" 5 >"$cache" 2>/dev/null
 			}
 
 			if [ "$option" = "short" ]; then

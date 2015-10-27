@@ -132,7 +132,7 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 			ANSWER="$( /www/cgi-bin-sql.sh "$HASH" "$MAC" "$SIGNAL" "$KEYWORD" "$USER_LANG" )"
 		else
 			URL="http://${GATEWAY:-127.0.0.1}/cgi-bin-sql.sh"
-			ANSWER="$( _wget do "${URL}?${PARAMETERS}" 5 )"
+			ANSWER="$( _curl it "${URL}?${PARAMETERS}" 5 )"
 		fi
 
 		[ ${#ANSWER} -gt 10 ] && ANSWER="shortened: $( _sanitizer do "$ANSWER" firstline length:30 )"

@@ -35,8 +35,8 @@ ask_for_slave()
 	url="${url}?netaddr=$netaddr"
 	url="${url}&netmask=$netmask"
 
-	answer="$( _wget do "$url" 30 )"
-	_log it $funcname daemon info "$url -> '$answer'"
+	answer="$( _curl it "$url" 30 )"
+	_log do $funcname daemon info "$url -> '$answer'"
 
 	case "$answer" in
 		"NEVER")

@@ -7,7 +7,7 @@
 # here we simply start 'wget' in background, wait some seconds (default: 15)
 # and kill it (hard) if it's still there with the same PID
 
-_wget_do()
+_curl_it()
 {
 	local funcname='wget_go'
 	local url="$1"
