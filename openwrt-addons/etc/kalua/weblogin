@@ -53,12 +53,12 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 	}
 
 	has_leading_or_trailing_tabs_or_spaces "$USER" && {
-		_log do $FUNC daemon info "string tabs/spaces: username '$USER'"
+		_log it $FUNC daemon info "string tabs/spaces: username '$USER'"
 		USER="$( strip_leading_and_trailing_tabs_and_spaces "$USER" )"
 	}
 
 	has_leading_or_trailing_tabs_or_spaces "$PASS" && {
-		_log do $FUNC daemon info "string tabs/spaces: password '$PASS'"
+		_log it $FUNC daemon info "string tabs/spaces: password '$PASS'"
 		PASS="$( strip_leading_and_trailing_tabs_and_spaces "$PASS" )"
 	}
 
@@ -96,11 +96,11 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 						if mac_is_from_lan "$MAC"; then
 							FREE=1
 						else
-							_log do $FUNC daemon info "DHCP-mode, profile is $CONFIG_PROFILE - ignoring"
+							_log it $FUNC daemon info "DHCP-mode, profile is $CONFIG_PROFILE - ignoring"
 						fi
 					;;
 					*)
-						_log do $FUNC daemon info "FREE, is profile $CONFIG_PROFILE"
+						_log it $FUNC daemon info "FREE, is profile $CONFIG_PROFILE"
 						FREE=1
 					;;
 				esac
@@ -111,15 +111,15 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 	if   [ "$FREE" = "1" ] ; then
 		:
 	elif [ -e /tmp/FREE ]; then
-		_log do $FUNC daemon info "[OK] auth: existing /tmp/FREE"
+		_log it $FUNC daemon info "[OK] auth: existing /tmp/FREE"
 		FREE=1
 	elif [ -e /tmp/vds_user_${MAC:-mac_is_empty} ]; then
-		_log do $FUNC daemon info "[OK] auth: existing /tmp/vds_user_$MAC"
+		_log it $FUNC daemon info "[OK] auth: existing /tmp/vds_user_$MAC"
 		FREE=1
 	else
-		_log do $FUNC daemon info "query local db for '$HASH'"
+		_log it $FUNC daemon info "query local db for '$HASH'"
 		[ -n "$( _db user login query hash2id "$HASH" )" ] && {
-			_log do $FUNC daemon info "[OK] auth: local db knows hash '$HASH'"
+			_log it $FUNC daemon info "[OK] auth: local db knows hash '$HASH'"
 			FREE=1	# use local DB, if available - but also send logmsg to GW
 		}
 	fi
@@ -137,7 +137,7 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 
 		[ ${#ANSWER} -gt 10 ] && ANSWER="shortened: $( _sanitizer do "$ANSWER" firstline length:30 )"
 
-		_log do $FUNC daemon info "ANSWER: '$ANSWER' (1=ok) FREE: '$FREE' URL: '${URL:-locally_asked:}?${PARAMETERS}'"
+		_log it $FUNC daemon info "ANSWER: '$ANSWER' (1=ok) FREE: '$FREE' URL: '${URL:-locally_asked:}?${PARAMETERS}'"
 	}
 
 	[ "$ANSWER" = "1" -o "$FREE" = "1" ] && {
@@ -155,7 +155,7 @@ _weblogin_login_check()			# fixme! send HOSTNAME?
 				*":"*|"")	# macaddress OR empty
 				;;
 				*)
-					_log do $FUNC daemon alert "wrong credentials: mac: $MAC user: '$USER' pass: '$PASS' hash: '$HASH'"
+					_log it $FUNC daemon alert "wrong credentials: mac: $MAC user: '$USER' pass: '$PASS' hash: '$HASH'"
 				;;
 			esac
 		;;
