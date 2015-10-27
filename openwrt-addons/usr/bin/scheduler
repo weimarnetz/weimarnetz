@@ -337,7 +337,7 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 						}
 					}
 
-					_log it $funcname daemon debug "[OK] framecounter for dev $check_dev: old + diff = new : $( _sanitizer do "$framecount_old + $(( $framecount_new - $framecount_old )) = $framecount_new" number_humanreadable ) (during $uptime_diff sec)"
+					_log it $funcname daemon debug "[OK] framecounter for dev $check_dev: old + diff = new : $( _sanitizer run "$framecount_old + $(( $framecount_new - $framecount_old )) = $framecount_new" number_humanreadable ) (during $uptime_diff sec)"
 					return 0
 				fi
 			}

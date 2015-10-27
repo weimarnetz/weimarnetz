@@ -36,7 +36,7 @@ ask_for_slave()
 	url="${url}&netmask=$netmask"
 
 	answer="$( _curl it "$url" 30 )"
-	_log do $funcname daemon info "$url -> '$answer'"
+	_log it $funcname daemon info "$url -> '$answer'"
 
 	case "$answer" in
 		"NEVER")
