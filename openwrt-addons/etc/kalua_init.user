@@ -1,70 +1,11 @@
 #!/bin/sh
 
-[ -e "/etc/variables_fff+" ] && . "/etc/variables_fff+"
+# e.g. FFF_PLUS_VERSION
+[ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 
-which uci >/dev/null || {
-	# missing on e.g. vpn-server / debian
-
-	# output nothing with returncode 0 but allow config-file
-	cat >>"$LOADER" <<EOF
-uci()	# e.g. uci -q get system.@profile[0].nodenumber
-{
-	case "\$1" in
-		'-q')
-			shift
-		;;
-	esac
-
-	case "\$1" in
-		show)
-			[ -e /etc/kalua_uci ] && cat /etc/kalua_uci
-		;;
-		set)
-			grep -q ^"\$2" /etc/kalua_uci || echo "\$2" >>/etc/kalua_uci
-		;;
-		get)
-			[ -e /etc/kalua_uci ] || return 0
-			local line
-			while read line; do
-				case "\$line" in
-					"\$2="*)
-						echo "\$line" | cut -d'=' -f2
-					;;
-					"\$2='"*)
-						echo "\$line" | cut -d"'" -f2 | cut -d"'" -f1
-					;;
-					"\$2=\""*)
-						echo "\$line" | cut -d'"' -f2 | cut -d'"' -f1
-					;;
-				esac
-			done </etc/kalua_uci
-		;;
-	esac
-}
-EOF
-	. "$LOADER"	# for above uci()
-
-	case "$( readlink /bin/sh )" in
-		'dash')
-			# TODO: a lot of scripts fail in dash
-			logger -s '[ERR] please symlink /bin/sh to /bin/bash: rm /bin/sh && ln -s /bin/bash /bin/sh'
-		;;
-	esac
-
-	MYPATH="$( grep 'PATH=' "/etc/profile" | head -n1 )"
-	case "$MYPATH" in
-		'export PATH='*)
-			echo "$MYPATH"
-		;;
-		*'PATH='*)
-			echo "export $MYPATH"
-		;;
-	esac
-}
-
-which logread >/dev/null || {
-	# e.g. vpn-server
-	echo 'logread() { tail -n300 "/var/log/syslog" $1; }	# no native logread'
+[ -e '/etc/profile' ] && {
+	command . '/etc/profile' >/dev/null
+	echo "export PATH=$PATH"
 }
 
 # http://wiki.openwrt.org/doc/uci/system#time.zones
@@ -78,110 +19,113 @@ HOSTNAME="${HOSTNAME:-$( hostname 2>/dev/null || echo 'anonymous' )}"
 
 MONITORING_SERVERIP="$( uci -q get system.@monitoring[0].serverip )"
 MONITORING_SERVERIP="${MONITORING_SERVERIP:-84.38.67.43}"
-OPENWRT_REV="$( cut -b2- '/etc/openwrt_version' 2>/dev/null || echo '0' )"
+
+if   [ -e '/etc/openwrt_release' ]; then
+	. '/etc/openwrt_release'
+	OPENWRT_REV="${DISTRIB_REVISION//[^0-9]/}"
+elif [ -e '/etc/banner' ]; then					# FIXME for 'dash'
+	set -- $( grep ' r[1-9][0-9][0-9]' '/etc/banner' )	# CHAOS CALMER (Bleeding Edge, r46435)
+	OPENWRT_REV="${5//[^0-9]/}"				# 'r46435)' -> 46435
+fi
+# '0' is a good/simple test for 'is vpn server'
+OPENWRT_REV="${OPENWRT_REV:-0}"
 
 OPKG="$( which /bin/[o,i]pkg )"
-OPKG="${OPKG:-false}"
+OPKG="${OPKG:-'_software opkg_raminstaller'}"
 
-read HARDWARE 2>/dev/null <'/etc/HARDWARE' || {
+# each node has it's own "neary uniq" DHCP-range
+# which must be valid across the whole network,
+# e.g. 192.168.8.0/16 on node 8
+NODENUMBER_ROAMING="$( uci get system.@profile[0].nodenumber )"
+while [ ${NODENUMBER_ROAMING:=2} -gt 254 ]; do {
+	NODENUMBER_ROAMING=$(( NODENUMBER_ROAMING - 254 ))	# e.g. node 255 -> 1
+} done
+
+read -r HARDWARE 2>/dev/null <'/etc/HARDWARE' || {
 	# model name  : Intel(R) Xeon(R) CPU E5-2620 0 @ 2.00GHz
 	set -- $( grep ^'model name' '/proc/cpuinfo' | head -n1 )
 	shift 3
-	HARDWARE="$@"
+	HARDWARE="$*"
 }
+
+PERMDIR='/www/keep'	# for permanent (kept when rebooting)
+mkdir -p "$PERMDIR" || {
+	PERMDIR="$TMPDIR/permanent_fake"
+	mkdir -p "$PERMDIR"
+	logger -s -- "$0: fallback \$PERMDIR to '$PERMDIR'"
+}
+
 	cat <<EOF
 
-# user-vars from $0.user
+# from $0.user
 export TZ='$TIMEZONE'
-test "\$NODENUMBER" || NODENUMBER="$( uci -q get system.@profile[0].nodenumber )"
-test "\$CONFIG_PROFILE" || CONFIG_PROFILE='$( uci -q get system.@profile[0].name )'
+TMPDIR=$TMPDIR
+NODENUMBER_ROAMING=$NODENUMBER_ROAMING
+NODENUMBER=\${NODENUMBER-$( uci get system.@profile[0].nodenumber )}
+CONFIG_PROFILE=\${CONFIG_PROFILE-$( uci get system.@profile[0].name )}
 HARDWARE='$HARDWARE'
 HOSTNAME='$HOSTNAME'
-OPKG='$OPKG'
-MONITORING_SERVERIP='$MONITORING_SERVERIP'
-export HOME="$( grep -e ^"${USER:-root}:" '/etc/passwd' | cut -d':' -f6 )"
-FFF_PLUS_VERSION=$FFF_PLUS_VERSION;FFF_VERSION=$FFF_VERSION;OPENWRT_REV=$OPENWRT_REV
+OPKG=$OPKG
+MONITORING_SERVERIP=$MONITORING_SERVERIP
+export HOME=$( grep ^${USER:-root}: /etc/passwd | cut -d: -f6 )
+FFF_PLUS_VERSION=$FFF_PLUS_VERSION;OPENWRT_REV=$OPENWRT_REV
+PERMDIR=$PERMDIR
 
-bool_true()
+isnumber(){ test 2>/dev/null \${1-a} -eq \$*;}
+bool_true(){ case \$(uci -q get \$1) in 1|on|true|yes|en*);;*)false;;esac;}
+EOF
+# isnumber: http://stackoverflow.com/questions/806906/how-do-i-test-if-a-variable-is-a-number-in-bash
+
+read -r _ MEMTOTAL _ <'/proc/meminfo'
+[ $MEMTOTAL -gt 16384 ] || echo 'LOWMEM=true'
+
+test_iptables()
 {
-	case "\$( uci -q get \$1 )" in
-		1|on|true|enabled|yes)
-			return 0
-		;;
-		*)
-			return 1
-		;;
-	esac
-}
-EOF
-
-# we need a monotonic counter for both: SCHEDULER / SCHEDULER_IMPORTANT
-# case 5 is most likely: 10000...99999 sec = 2h46min...1d3h uptime
-# max is 11 days = 999.999 sec
-
-# PID = UP, but we dont want to overwrite the existing UP-var
-	cat <<EOF
-
-read PID REST </proc/uptime
-PID=\${PID%.*}
-case "\${#PID}" in
-5) REST="0\$PID" ;;
-4) REST="00\$PID" ;;
-3) REST="000\$PID" ;;
-2) REST="0000\$PID" ;;
-1) REST="00000\$PID" ;;
-esac
-SCHEDULER="/tmp/SCHEDULER/job_\$REST"
-SCHEDULER_QUEUE='/tmp/SCHEDULER/*'
-
-PID="\$\$"
-case "\${#PID}" in
-5) REST="0\$PID" ;;
-4) REST="00\$PID" ;;
-3) REST="000\$PID" ;;
-2) REST="0000\$PID" ;;
-1) REST="00000\$PID" ;;
-esac
-SCHEDULER_IMPORTANT="/tmp/SCHEDULER/important_\$REST"
-SCHEDULER_IMPORTANT_QUEUE='/tmp/SCHEDULER/important_*'
-
-EOF
-
-mkdir -p '/tmp/SCHEDULER'
-
-read NOP MEMTOTAL NOP <"/proc/meminfo"
-[ $MEMTOTAL -gt 16384 ] || {
-	echo "LOWMEM=true"
-#	echo 'while read LOAD </proc/loadavg; do case $PRELOAD$LOAD in 0.*) break ;; *) echo "kalua-loader: $0: $$: LOAD: $LOAD - wait 60 sec" >/dev/console; /bin/sleep 60 ;; esac; done'
-	# PRELOAD is a (normally unset) var, which can be filled to fool this check, e.g. PRELOAD=0.
+	# direct call can fail if PATH not set yet
+	if [ -e '/usr/sbin/iptables' ]; then
+		/usr/sbin/iptables --help | fgrep -q -- '--wait'
+	elif [ -e '/sbin/iptables' ]; then
+		/sbin/iptables --help | fgrep -q -- '--wait'
+	else
+		false
+	fi
 }
 
-if iptables --help | fgrep -q -- '--wait'; then
+if test_iptables; then
 	echo "IPT='iptables --wait'"
 else
-	echo "IPT='iptables'"
+	echo 'IPT=iptables'
 fi
 
-if [ -e "$LOADER_FINAL" ]; then
-	FILE_NETPARAM="/tmp/NETPARAM"
+echo "TC=$( which tc || echo 'false' )"		# TODO: wrapper function
+
+if [ -e "$TMPDIR/NETPARAM" ]; then
+	FILE_NETPARAM="$TMPDIR/NETPARAM"
 else
-	FILE_NETPARAM="/www/NETPARAM"
+	FILE_NETPARAM="$PERMDIR/NETPARAM"
 fi
 
-if [ -e "$FILE_NETPARAM" ]; then		# fixme! better concept needed
-	while read LINE; do {
+if [ -e "$FILE_NETPARAM" ]; then		# FIXME! better concept needed
+	while read -r LINE; do {
 		case "$LINE" in
 			*"="*)
-				echo -n "${LINE};"
+				printf '%s' "$LINE;"
 			;;
 		esac
 	} done <"$FILE_NETPARAM"
-	echo "BATADR='$( uci -q get network.mybridge.ipaddr )'"
+	echo "BATADR=$( uci -q get network.mybridge.ipaddr )"
 
 	. "$FILE_NETPARAM"
-
-	echo -n "$WIFIDEV" >"/tmp/WIFIDEV"	# is a hack for fast seeking our dev/ip
-	echo -n "$WIFIADR" >"/tmp/WIFIADR"
+	printf '%s' "$WIFIDEV" >"$TMPDIR/WIFIDEV"	# is a hack for fast seeking our dev/ip
+	printf '%s' "$WIFIADR" >"$TMPDIR/WIFIADR"
 else
-        logger -s "$0 [OK] could not use '$FILE_NETPARAM' - maybe later"
+        logger -s -- "$0: [OK] could not use '$FILE_NETPARAM' - maybe later"
 fi
+
+[ $OPENWRT_REV -eq 0 -a -e '/etc/profile.d/kalua.sh' ] && cat <<EOF
+case "\$-" in
+	*i*)
+		. /etc/profile.d/kalua.sh
+	;;
+esac
+EOF
