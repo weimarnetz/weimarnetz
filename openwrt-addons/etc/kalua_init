@@ -26,7 +26,17 @@ while read -r LINE; do {
 logger -s -- "$0: [OK] use \$TMPDIR which points to '${TMPDIR:=/tmp}'"
 chmod -R 777 "$TMPDIR"
 
-BASEDIR="$( dirname $0 )/kalua"		# e.g. /etc/kalua_init -> /etc | scriptbase, simply put your 'class'-files in
+# /etc/kalua_init -> /etc
+BASEDIR="$( dirname $0 )/kalua"		# place for the 'class'-files
+case "$BASEDIR" in
+	'/'*)
+		# /etc/kalua
+	;;
+	*)
+		# openwrt-addons/etc/kalua -> /home/user/mysource/openwrt-addons/etc/kalua
+		BASEDIR="$( pwd )/$BASEDIR"
+	;;
+esac
 POOLDIR="$TMPDIR/kalua_pool"
 LOADER="$TMPDIR/loader_$$"
 LOADER_FINAL="$TMPDIR/loader"		# later '$LOADER_ENTRY' is symlinked to it
@@ -34,10 +44,11 @@ LOADER_ENTRY='/tmp/loader'
 mkdir -p "$POOLDIR"
 
 # _ s    http		-> show methods for class 'http'
-# _ http arg1 argX	-> include + start
+# _ http arg1 argX	-> include + start with given arguments
 # _ http		-> list methods and include
 # _ http include	-> include only
 # _ t			-> test if loader already included
+# _ r (or rebuild)	-> rebuild loader
 # _			-> list classes
 
 cat >"$LOADER" <<EOF
@@ -47,8 +58,9 @@ _ t 2>/dev/null&&return
 _(){ case \$1 in
 s)sed -n "/;}$/! s/^\(_\${2}_.*\)()/\1/p" $BASEDIR/\$2|sort;;
 i)local a=\${3-s} b=\$2;shift 3;_ \$b;case \$a in include);;*)_\${b}_\$a "\$@";;esac;;
-t);;*)[ \$1 ]&&. $POOLDIR/\$1||ls -1 $POOLDIR|grep ^[a-z]|sort|sed s/^/_/;;esac;}
+t);;r*)${BASEDIR}_init;;*)[ \$1 ]&&. $POOLDIR/\$1||for _ in $POOLDIR/*;do echo _\${_##*/};done;;esac;}
 
+TMPDIR=$TMPDIR
 EOF
 
 # generate loader and add methods 'show' + 'include'
@@ -67,7 +79,7 @@ EOF
 		echo >>"$LOADER" "_$CLASS(){ logger -s -- class_error: _$CLASS \$@ ;}"
 	fi
 
-	# include GLOBAL_VARS which must be in head-section of CLASS, e.g. MYVAR=123
+	# include everything in head-section of CLASS, e.g. global var: MYVAR=123
 	# TODO: rewrite with 1 sed-call
 	read -r LINE _ <"$BASEDIR/$CLASS"
 	case "$LINE" in
