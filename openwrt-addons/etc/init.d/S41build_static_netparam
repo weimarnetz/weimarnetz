@@ -1,13 +1,13 @@
-#!/bin/sh
-. /tmp/loader
+#!/bin/sh /etc/rc.common
 
+START=41
 # todo:
 # with/without OLSR on all interfaces? or specific interfaces?
 
 ifname2mtu()
 {
 	ip link show dev "${1:-nonexistent_$2}" |
-	 sed -n 's/^.* mtu \([0-9]*\).*/\1/p;q'
+	sed -n 's/^.* mtu \([0-9]*\).*/\1/p;q'
 }
 
 netparam_for_uci_devices()
@@ -129,6 +129,8 @@ netparam_for_uci_devices()
 
 _build()
 {
+    . /tmp/loader
+
 	local FUNC="build"
 	local FILE="/tmp/NETPARAM"
 
@@ -136,30 +138,34 @@ _build()
 	netparam_for_uci_devices >$FILE
 }
 
+start() {
 
-if [ $( _system uptime sec ) -lt 60 ]; then
-	if [ -e "/www/NETPARAM" ]; then
-		cp "/www/NETPARAM" "/tmp/NETPARAM"
-	else
-		sleep 30		# fixme! ifstatus wlanadhoc empty, needs about 18 sec till OK on 1043ND
-	fi
-else
-	HASH_OLD="$( _file hash '/tmp/NETPARAM' )"
-	_build
+    . /tmp/loader
 
-	if [ -e "/www/NETPARAM" ]; then
-		. '/tmp/NETPARAM'
-		grep -q ^"WIFIDEV=$WIFIDEV"$ '/www/NETPARAM' || {
-			_log it earlyboot_netparam daemon alert "stored new version, now with WIFIDEV='$WIFIDEV'"
-			cp '/tmp/NETPARAM' '/www/NETPARAM'
-		}
-	else
-		_log it earlyboot_netparam daemon alert "stored initial version, WIFIDEV='$WIFIDEV'"
-		cp '/tmp/NETPARAM' '/www/NETPARAM'
-	fi
-fi
+    if [ $( _system uptime sec ) -lt 60 ]; then
+	    if [ -e "/www/NETPARAM" ]; then
+    		cp "/www/NETPARAM" "/tmp/NETPARAM"
+    	else
+    		sleep 30		# fixme! ifstatus wlanadhoc empty, needs about 18 sec till OK on 1043ND
+    	fi
+    else
+    	HASH_OLD="$( _file hash '/tmp/NETPARAM' )"
+    	_build
 
-HASH_NEW="$( _file hash /tmp/NETPARAM )"
-[ "$HASH_OLD" = "$HASH_NEW" ] || {
+    	if [ -e "/www/NETPARAM" ]; then
+    		. '/tmp/NETPARAM'
+    		grep -q ^"WIFIDEV=$WIFIDEV"$ '/www/NETPARAM' || {
+    			_log it earlyboot_netparam daemon alert "stored new version, now with WIFIDEV='$WIFIDEV'"
+    			cp '/tmp/NETPARAM' '/www/NETPARAM'
+    		}
+    	else
+    		_log it earlyboot_netparam daemon alert "stored initial version, WIFIDEV='$WIFIDEV'"
+    		cp '/tmp/NETPARAM' '/www/NETPARAM'
+    	fi
+    fi
+
+    HASH_NEW="$( _file hash /tmp/NETPARAM )"
+    [ "$HASH_OLD" = "$HASH_NEW" ] || {
 	/etc/kalua_init			# this includes a static version of NETPARAM
+    }
 }

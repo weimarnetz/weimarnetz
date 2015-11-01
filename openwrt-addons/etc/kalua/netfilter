@@ -1396,13 +1396,6 @@ $IPT -t mangle -D FORWARD -d $ip                            -j incoming_$mac
 $IPT -t mangle -X incoming_$mac
 $IPT -t mangle -X outgoing_$mac
 EOF
-	[ -e '/tmp/ENDBOOT' ] || {
-		pidof ulogd >/dev/null && /etc/init.d/ulogd stop
-		rmmod 2>/dev/null ipt_ULOG
-		rmmod 2>/dev/null ipt_REDIRECT
-		rmmod 2>/dev/null xt_state
-	}
-
 	bool_true 'system.weblogin.hideandseek' && {
 		_vpn hideandseek_user_add "$ip"
 	}
