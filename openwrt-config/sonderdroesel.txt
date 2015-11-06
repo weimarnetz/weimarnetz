@@ -8,6 +8,9 @@ node 154 (s140-cafe/m18):
 - wan-mac = c8:2a:14:44:ed:70
 - wan-proto = static mit 141.54.160.64/24 und gateway 141.54.160.254
 - password = im mr / auf router
+- firewall: 
+    - port 25,465 ausgehend gesperrt
+    - eingehend alles gesperrt 
 
 ping01 (maschinenraum, kein weimarnetz) 
 - wan-mac = 00:13:CE:0C:AB:1E
