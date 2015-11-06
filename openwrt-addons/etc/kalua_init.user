@@ -1,8 +1,6 @@
 #!/bin/sh
 
-# e.g. FFF_PLUS_VERSION
-[ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
-
+# use the same PATH like interactive
 [ -e '/etc/profile' ] && {
 	command . '/etc/profile' >/dev/null
 	echo "export PATH=$PATH"
@@ -20,10 +18,10 @@ HOSTNAME="${HOSTNAME:-$( hostname 2>/dev/null || echo 'anonymous' )}"
 MONITORING_SERVERIP="$( uci -q get system.@monitoring[0].serverip )"
 MONITORING_SERVERIP="${MONITORING_SERVERIP:-84.38.67.43}"
 
-OPKG="$( which /bin/[o,i]pkg )"
+OPKG="$( command -v /bin/[o,i]pkg )"
 OPKG="${OPKG:-'_software opkg_raminstaller'}"
 
-# each node has it's own "neary uniq" DHCP-range
+# each node has it's own "nearly uniq" DHCP-range
 # which must be valid across the whole network,
 # e.g. 192.168.8.0/16 on node 8
 NODENUMBER_ROAMING="$( uci get system.@profile[0].nodenumber )"
@@ -45,6 +43,9 @@ mkdir -p "$PERMDIR" || {
 	logger -s -- "$0: fallback \$PERMDIR to '$PERMDIR'"
 }
 
+# e.g. FFF_PLUS_VERSION
+[ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
+
 	cat <<EOF
 
 # from $0.user
@@ -60,8 +61,6 @@ export HOME=$( grep ^${USER:-root}: /etc/passwd | cut -d: -f6 )
 FFF_PLUS_VERSION=$FFF_PLUS_VERSION;OPENWRT_REV=$OPENWRT_REV
 PERMDIR=$PERMDIR
 
-isnumber(){ test 2>/dev/null \${1-a} -eq \$1;}
-bool_true(){ case \$(uci -q get \$1) in 1|on|true|yes|en*);;*)false;;esac;}
 EOF
 # isnumber: http://stackoverflow.com/questions/806906/how-do-i-test-if-a-variable-is-a-number-in-bash
 
@@ -86,7 +85,7 @@ else
 	echo 'IPT=iptables'
 fi
 
-echo "TC=$( which tc || echo 'false' )"		# TODO: wrapper function
+echo "TC=$( command -v tc || echo 'false' )"		# TODO: wrapper function
 
 if [ -e "$TMPDIR/NETPARAM" ]; then
 	FILE_NETPARAM="$TMPDIR/NETPARAM"
@@ -108,7 +107,7 @@ if [ -e "$FILE_NETPARAM" ]; then		# FIXME! better concept needed
 	printf '%s' "$WIFIDEV" >"$TMPDIR/WIFIDEV"	# is a hack for fast seeking our dev/ip
 	printf '%s' "$WIFIADR" >"$TMPDIR/WIFIADR"
 else
-        logger -s -- "$0: [OK] could not use '$FILE_NETPARAM' - maybe later"
+	logger -s -- "$0: [OK] could not use '$FILE_NETPARAM' - maybe later"
 fi
 
 [ $OPENWRT_REV -eq 0 -a -e '/etc/profile.d/kalua.sh' ] && cat <<EOF

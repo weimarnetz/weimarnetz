@@ -6,7 +6,7 @@
 # and automatically solve the dependencies for all 'classes' and it methods(),
 # e.g. for class '_system' and method architecture()
 #
-# TODO: method 'unload'
+# TODO: method 'unload' -> unset -f $funcname
 # TODO: method 'help'
 # TODO: show stats for each call: sed -n "s/^\(.*\) ().*/\1/p" $BASEDIR/$CLASS | wc -l | sed 's/ //g'
 
@@ -18,12 +18,14 @@ while read -r LINE; do {
 			set -- $LINE
 			mkdir -p "$2/kalua" 2>/dev/null && {
 				TMPDIR="$2/kalua"
+				LINE='is RAM-drive (tmpfs) and '
 				break
 			}
 		;;
 	esac
+	LINE=
 } done <'/proc/mounts'
-logger -s -- "$0: [OK] use \$TMPDIR which points to '${TMPDIR:=/tmp}'"
+logger -s -- "$0: [OK] use \$TMPDIR which ${LINE}points to '${TMPDIR:=/tmp}'"
 chmod -R 777 "$TMPDIR"
 
 # /etc/kalua_init -> /etc
@@ -47,8 +49,8 @@ mkdir -p "$POOLDIR"
 # _ http arg1 argX	-> include + start with given arguments
 # _ http		-> list methods and include
 # _ http include	-> include only
+# _ rebuild		-> rebuild loader
 # _ t			-> test if loader already included
-# _ r (or rebuild)	-> rebuild loader
 # _			-> list classes
 
 cat >"$LOADER" <<EOF
@@ -58,7 +60,7 @@ _ t 2>/dev/null&&return
 _(){ case \$1 in
 s)sed -n "/;}$/! s/^\(_\${2}_.*\)()/\1/p" $BASEDIR/\$2|sort;;
 i)local a=\${3-s} b=\$2;shift 3;_ \$b;case \$a in include);;*)_\${b}_\$a "\$@";;esac;;
-t);;r*)${BASEDIR}_init;;*)[ \$1 ]&&. $POOLDIR/\$1||for _ in $POOLDIR/*;do echo _\${_##*/};done;;esac;}
+t);;rebuild)${BASEDIR}_init;;*)[ \$1 ]&&. $POOLDIR/\$1||for _ in $POOLDIR/*;do echo _\${_##*/};done;;esac;}
 
 TMPDIR=$TMPDIR
 EOF

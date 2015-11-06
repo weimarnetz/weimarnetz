@@ -1,6 +1,6 @@
 #!/bin/sh
 
-which uci >/dev/null || {
+command -v uci >/dev/null || {
 	logger -s -- "$0: uci() faking OpenWrt-uci, use '/etc/kalua_uci' for your vars"
 	# when there is no output, we return with 0 (unlike to normal uci)
 	# FIXME! parsing var='value' (with quotes)
@@ -16,7 +16,7 @@ uci()	# e.g. uci -q get system.@profile[0].nodenumber
 
 	case "\$1" in
 		show)
-			[ -e /etc/kalua_uci ] && cat /etc/kalua_uci
+			grep -s \${2:+^}\${2:-.}\${2:+\.} /etc/kalua_uci
 		;;
 		set)
 			grep -q ^"\$2" /etc/kalua_uci || echo "\$2" >>/etc/kalua_uci
