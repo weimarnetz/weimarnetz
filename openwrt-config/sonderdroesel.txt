@@ -4,6 +4,12 @@ die irgendwie vom standard-schema abweichen.
 node 106 (monami-west):
 - wan-proto = static mit 192.168.2.222/24 und gateway 192.168.2.1
 
-node 154 (s142-cafe/m18):
-- wan-mac = ...
+node 154 (s140-cafe/m18):
+- wan-mac = c8:2a:14:44:ed:70
+- wan-proto = static mit 141.54.160.64/24 und gateway 141.54.160.254
+- password = im mr / auf router
+
+ping01 (maschinenraum, kein weimarnetz) 
+- wan-mac = 00:13:CE:0C:AB:1E
+- wan-proto = static mit 141.54.160.24/24 und gateway 141.54.160.254
 
