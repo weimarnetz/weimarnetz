@@ -223,7 +223,7 @@ _vpn_start ()
 
 _vpn_stop ()
 {
-        rm '/tmp/VPN_LOCK'
+        lock -u '/tmp/VPN_LOCK'
 	_vpn_remove_vtun_conf
 	_vpn_tunnel_stop
 	
