@@ -182,7 +182,7 @@ _vpn_needed()
 		return 1
 	}
 
-	[ "$( uci -q get system.@vpn[0].enable )" = "1" ] || {
+	[ "$( uci -q get system.@vpn[0].enable )" = "off" ] && {
 		_log it $FUNC daemon debug "vpn disabled by config - abort"
 		return 1
 	}
@@ -320,7 +320,7 @@ _vpn_write_vtun_conf()
 	local anonym
         local VPN_SERVER_IP="$(_net dns2ip $VPN_SERVER)"
 
-	[ -n "$( uci -q get system.@vpn[0].anonym )" ] && {
+	[ -n "$( uci -q get system.@vpn[0].enable )" = "innercity" ] && {
 		anonym="# (inactiv):"
 	}
 
