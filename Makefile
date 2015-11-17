@@ -1,4 +1,5 @@
-LASTCOMMIT:=$(shell git log -1 --pretty=format:%ct )
+ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+LASTCOMMIT:=$(shell git --git-dir $(ROOT_DIR)/.git log -1 --pretty=format:%ct )
 LAST_COMMIT_IN_HOURS:=$(shell echo $$((${LASTCOMMIT}/3600)) )
 compile: cleandir copy version
 
