@@ -6,7 +6,11 @@ unixtime_from_newest_file_on_disk()
 {
 	local dir file
 
-	find /etc -type d | while read -r dir; do
+	# typical often changes files are:
+	# /etc/local.hosts
+	# /etc/ethers
+	# /www/everlasting_syslog.txt
+	find /etc /www -type d | while read -r dir; do
 		file="$dir/$( ls -1t "$dir" | head -n1 )"
 		date -r "$file" +%s
 	done | sort -nr | head -n1
@@ -15,12 +19,13 @@ unixtime_from_newest_file_on_disk()
 boot() 
 {
 	# migrate whole olsr1-network from 'etx_ff' -> 'etx_ffeth'
-	# see: https://lists.olsr.org/pipermail/olsr-dev/2012-June/005734.html
+	# see: https://lists.olsr.org//pipermail/olsr-dev/2012-June/005591.html
 	#
 	# at this stage we have a valid date from init.d/boot or init.d/sysfixtime
 	# (filedate of the newest file on disk) if not - get&set it now
 
 	local year="$( date +%Y )"
+	local switchtime=1421380800	# Sa, 2016-jan-16 @ 04:00:00
 	local olsrd_metric="$( uci -q get 'olsrd.@olsrd[0].LinkQualityAlgorithm' )"
 	local olsrd_metric_wish='etx_ffeth'
 
@@ -30,7 +35,8 @@ boot()
 		year="$( date +%Y )"
 	}
 
-	[ $year -eq 2016 -a "$olsrd_metric" = 'etx_ff' ] && {
+	local unixtime_now="$( date +%s )"
+	[ $year -eq 2016 -a "$olsrd_metric" = 'etx_ff' -a $unixtime_now -lt $switchtime ] && {
 		. /tmp/loader
 
 		_log it switch_olsr_metric daemon alert "hard switch to $olsrd_metric_wish"
