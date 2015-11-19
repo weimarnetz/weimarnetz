@@ -11,6 +11,7 @@ TIMEZONE_BERLIN="CET-1CEST,M3.5.0,M10.5.0/3"
 TIMEZONE="$( uci -q get system.@system[0].timezone )"
 TIMEZONE="${TIMEZONE:-$TIMEZONE_BERLIN}"
 
+# TODO: on VPN-server autoset/change the uci-var if needed
 HOSTNAME="$( uci -q get system.@system[0].hostname )"
 HOSTNAME="${HOSTNAME:-$( cat '/etc/hostname' )}"
 HOSTNAME="${HOSTNAME:-$( hostname 2>/dev/null || echo 'anonymous' )}"
@@ -24,7 +25,7 @@ OPKG="${OPKG:-'_software opkg_raminstaller'}"
 # each node has it's own "nearly uniq" DHCP-range
 # which must be valid across the whole network,
 # e.g. 192.168.8.0/16 on node 8
-NODENUMBER_ROAMING="$( uci get system.@profile[0].nodenumber )"
+NODENUMBER_ROAMING="$( uci -q get system.@profile[0].nodenumber )"
 while [ ${NODENUMBER_ROAMING:=2} -gt 254 ]; do {
 	NODENUMBER_ROAMING=$(( NODENUMBER_ROAMING - 254 ))	# e.g. node 255 -> 1
 } done
@@ -37,7 +38,7 @@ read -r HARDWARE 2>/dev/null <'/etc/HARDWARE' || {
 }
 
 PERMDIR='/www/keep'	# for permanent (kept when rebooting)
-mkdir -p "$PERMDIR" || {
+mkdir -p "$PERMDIR" 2>/dev/null || {
 	PERMDIR="$TMPDIR/permanent_fake"
 	mkdir -p "$PERMDIR"
 	logger -s -- "$0: fallback \$PERMDIR to '$PERMDIR'"
@@ -48,11 +49,11 @@ mkdir -p "$PERMDIR" || {
 
 	cat <<EOF
 
-# from $0.user
+# from $0.user @ $(date)
 export TZ='$TIMEZONE'
 NODENUMBER_ROAMING=$NODENUMBER_ROAMING
-NODENUMBER=\${NODENUMBER-$( uci get system.@profile[0].nodenumber )}
-CONFIG_PROFILE=\${CONFIG_PROFILE-$( uci get system.@profile[0].name )}
+NODENUMBER=\${NODENUMBER:-$( uci -q get system.@profile[0].nodenumber )}
+CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get system.@profile[0].name )}
 HARDWARE='$HARDWARE'
 HOSTNAME='$HOSTNAME'
 OPKG=$OPKG
@@ -62,7 +63,6 @@ FFF_PLUS_VERSION=$FFF_PLUS_VERSION;OPENWRT_REV=$OPENWRT_REV
 PERMDIR=$PERMDIR
 
 EOF
-# isnumber: http://stackoverflow.com/questions/806906/how-do-i-test-if-a-variable-is-a-number-in-bash
 
 read -r _ MEMTOTAL _ <'/proc/meminfo'
 [ $MEMTOTAL -gt 16384 ] || echo 'LOWMEM=true'
@@ -97,7 +97,15 @@ if [ -e "$FILE_NETPARAM" ]; then		# FIXME! better concept needed
 	while read -r LINE; do {
 		case "$LINE" in
 			*"="*)
-				printf '%s' "$LINE;"
+				case "$LINE" in
+					*'='|*'='[0-9]|*'='[0-9][0-9])
+						# short lines if suiteable, e.g. after $DEVPRE
+						printf '%s\n' "$LINE"
+					;;
+					*)
+						printf '%s' "$LINE;"
+					;;
+				esac
 			;;
 		esac
 	} done <"$FILE_NETPARAM"
