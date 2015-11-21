@@ -1166,7 +1166,6 @@ _config_dhcp ()			# domain = .olsr
 	uci -q set dhcp.lan.leasetime="2h"
 	uci -q set dhcp.lan.force="1"
 	uci -q set dhcp.lan.ignore=${DHCP_IGNORE_LAN:-0}
-	uci -q add_list dhcp.lan.dhcp_option="121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d'=' -f2 )"
 	
 	uci -q delete dhcp.wlan
 	uci -q set dhcp.wlan="dhcp"
