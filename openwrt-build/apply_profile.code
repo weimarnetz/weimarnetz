@@ -755,7 +755,7 @@ $hide_chanbw	option chanbw		"$chanbw"	# since r32596
 $hide_mac	option macaddr		"$MAC"
 	option frag		"off"
 $hidetx	option txpower		"$TXPOWER"
-	option beacon_int 	"1000"
+	option beacon_int 	"375"
 $hide_noscan	option noscan		"1"
 EOF
 
@@ -873,7 +873,7 @@ $hide_chanbw	option chanbw		"$chanbw"		# since r32596
 $hide_mac	option macaddr		"$MAC"
 	option frag		"off"
 $hidetx	option txpower		"$TXPOWER"
-	option beacon_int	"1000"
+	option beacon_int	"375"
 $hide_noscan	option noscan		"1"
 EOF
 
