@@ -194,7 +194,7 @@ _vpn_start ()
 	local FUNC='vpn_start'
 	local LOCKFILE='/tmp/VPN_LOCK'
 
-	[ -e $LOCKFILE ] && {
+	_watch vpn && {
 		_log it $FUNC daemon info 'already running, aborting'
 		return 1
         }
