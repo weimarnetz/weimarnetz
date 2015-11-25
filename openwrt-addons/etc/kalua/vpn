@@ -192,28 +192,37 @@ _vpn_needed()
 _vpn_start ()
 {
 	local FUNC='vpn_start'
+	local LOCKFILE='/tmp/VPN_LOCK'
 
-	lock -n '/tmp/VPN_LOCK' || {
+	[ -e $LOCKFILE ] && {
 		_log it $FUNC daemon info 'already running, aborting'
 		return 1
         }
 
+	lock $LOCKFILE
+
 	_vpn_defer_start
-	_vpn needed || return 1
+	_vpn needed || {
+		lock -u $LOCKFILE
+		return 1
+	}
 	_vpn_build_vars
 
 	[ -n "$SERV" ] || {
 		_log it $FUNC daemon debug "no suitable server found"
+		lock -u $LOCKFILE
 		return 1
 	}
 	
 	[ -n "$PORT" ] || {
 		_log it $FUNC daemon debug "no server with suitable vtun setup found for you, please try again later"
+		lock -u $LOCKFILE
 		return 1
 	}
 	
 	[ -z "$NODE_NUMBER" ] && {
 		_log it $FUNC daemon debug "node not configured yet - abort"
+		lock -u $LOCKFILE
 		return 1
 	}
 		
@@ -224,9 +233,10 @@ _vpn_start ()
 
 _vpn_stop ()
 {
-        lock -u '/tmp/VPN_LOCK'
+	local LOCKFILE='/tmp/VPN_LOCK'
 	_vpn_remove_vtun_conf
 	_vpn_tunnel_stop
+	lock -u $LOCKFILE 
 	
 }
 
