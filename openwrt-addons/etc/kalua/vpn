@@ -194,14 +194,17 @@ _vpn_start ()
 	local FUNC='vpn_start'
 	local LOCKFILE='/tmp/VPN_LOCK'
 
-	_watch vpn && {
+	_watch vpn && { # FIXME! Workaround until lock -n <filename> is implemented
 		_log it $FUNC daemon info 'already running, aborting'
 		return 1
         }
 
-	lock $LOCKFILE
+	lock -n $LOCKFILE
 
-	_vpn_defer_start
+	_vpn_defer_start && {
+		lock -u $LOCKFILE
+		return 1
+	}
 	_vpn needed || {
 		lock -u $LOCKFILE
 		return 1
@@ -462,8 +465,9 @@ _vpn_defer_start ()
 
 	[ -n "$DIRTY" ] && {
 		_log it init daemon debug "call: '$1' - abort: '$DIRTY'"
-		exit
+		return 1
 	}
+  return 0
 }
 
 _vpn_probe_vtund_type ()
