@@ -465,9 +465,9 @@ _vpn_defer_start ()
 
 	[ -n "$DIRTY" ] && {
 		_log it init daemon debug "call: '$1' - abort: '$DIRTY'"
-		return 1
+		return 0
 	}
-  return 0
+  	return 1
 }
 
 _vpn_probe_vtund_type ()
