@@ -10,7 +10,6 @@ copy:
 	cp openwrt-build/apply_profile.code ipkg-install/etc/init.d/
 	cp openwrt-build/apply_profile.code.definitions ipkg-install/etc/init.d/
 	cp openwrt-build/apply_profile.watch ipkg-install/etc/init.d/
-	cp openwrt-patches/regulatory.bin ipkg-install/etc/init.d/apply_profile.regulatory.bin
 
 version:
 	@echo FFF_PLUS_VERSION=${LAST_COMMIT_IN_HOURS} > ipkg-install/etc/variables_fff+
