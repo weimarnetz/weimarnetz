@@ -4,19 +4,12 @@ PERMLOG='/www/everlasting_syslog.txt'
 
 _log_shell_is_interactive()
 {
-	case "$-" in
-		*i*)
-			return 0
+	case "$PS1" in
+		*'@'*)
+			# definition in interactive /etc/profile does not have it
 		;;
 		*)
-			case "$SHELL" in
-				"/bin/ash"|"-ash")
-					return 0
-				;;
-				*)
-					return 1
-				;;
-			esac
+			return 1
 		;;
 	esac
 }
@@ -103,21 +96,30 @@ _log_debug()
 	fi
 }
 
-_log_it()				# CALL: _log it my_function_name daemon info "mytext"
+_log_it()		# CALL: _log it my_function_name daemon info "mytext"
 {
+	case "$-" in
+		*'x'*)
+			# too much text during debugging with 'set -x'
+			return 0
+		;;
+	esac
+
+	[ "$3" = 'debug' -a ! -e '/tmp/DEBUG' ] && {
+		# early exit when not interactive and no enforced debugmode
+		_log shell_is_interactive || return 0
+	}
+
 	local FATHER_PROCESS="$0"
-	local FUNCTION="$1"		# ARG1, string (name of function, from where call was invoked)
-	local FACILITY="$2"		# ARG2, string (source = kern,user,mail,daemon,syslog,lpr,news,uucp,cron,authpriv,local0-7)
-	local PRIO="$3"			# ARG3, string (emerg,alert,crit,err,warning,notice,info,debug,sms)	// nonstandard: sms
-	local MESSAGE="$4"		# ARG4, string (humanreadable verbose message, all is syslog-alike)
-	local message_sms="$5"
-	local phonenumber="$6"
-	local force="$7"
-	local EVERLOG="/www/everlasting_syslog.txt"
-	local MEM UPTIME DATE i
+	local FUNCTION="$1"		# name of function, from where call was invoked
+	local FACILITY="$2"		# source = kern,user,mail,daemon,syslog,lpr,news,uucp,cron,authpriv,local0-7
+	local PRIO="$3"			# emerg,alert,crit,err,warning,notice,info,debug
+	local MESSAGE="$4"		# humanreadable verbose message, all is syslog-alike
+	local PERMLOG_RAM="$TMPDIR/everlasting_syslog.txt"
+	local MEM UPTIME DATE i list message_to_send username password dest text ARCHIV_NODE_MESSAGE UNIXTIME
 
 	[ -z "$MESSAGE" ] && {		# from stdin (pipe into function)
-		while read -t 3 MESSAGE; do {
+		while read -r -t 3 MESSAGE; do {
 			_log it "$FUNCTION" "$FACILITY" "$PRIO" "STDIN${i}: ${MESSAGE:-stdin_was_empty}"
 			i=$(( ${i:-1} + 1 ))
 		} done
@@ -125,15 +127,11 @@ _log_it()				# CALL: _log it my_function_name daemon info "mytext"
 		return 0
 	}
 
-	case "$FUNCTION" in
-		firmware*)
-			_log debug "${HOSTNAME:-box} $FATHER_PROCESS: $FUNCTION: $MESSAGE"
-		;;
-	esac
+	[ -n "$LOWMEM" ] && {
+		_log shell_is_interactive || return 0
+	}
 
-	[ -e /tmp/LOWMEM ] && return	# fixme! maybe everlasting and log to console should work?
-
-	mem_uptime_and_date ()
+	mem_uptime_and_date()
 	{
 		[ -z "$MEM" -o -z "$UPTIME" -o -z "$DATE" ] && {
 			_system ram_free	MEM=
@@ -143,64 +141,37 @@ _log_it()				# CALL: _log it my_function_name daemon info "mytext"
 	}
 
 	case "$PRIO" in
-		debug|emerg|alert|crit|sms)			# idea: [ $MEM -lt 999999 ] && PRIO="alert"
+		debug|emerg|alert|crit)
 			eval $( mem_uptime_and_date )
 
-			[ "$PRIO" != "debug" ] && {		# write to logfile in flash, which is not lost after reboot
-			
-				[ "$( _system flash_free )" -gt 150 ] && {
-					echo >>$EVERLOG "$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
-					case "$CONFIG_PROFILE" in
-						ffweimar*)
-							_watch archivsize "$EVERLOG" 250
-						;;
-						*)
-							_watch archivsize "$EVERLOG" 1000
-						;;
-					esac
-				}
+			[ "$PRIO" != 'debug' ] && {
+				text="$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
+
+				if [ $( _system flash_free ) -gt 150 ]; then
+					# write to logfile in flash, which is not lost after reboot
+					echo >>$PERMLOG "$text"
+				else
+					echo >>$PERMLOG_RAM "$text"
+				fi
 
 				MESSAGE="$( _sanitizer run "$MESSAGE" strip_newlines )"
-				local UNIXTIME="$( _system date unixtime )"
-				local ARCHIV_NODE_MESSAGE="$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
-				echo >>/tmp/ARCHIV_MONITORING "log=$( _sanitizer run "$ARCHIV_NODE_MESSAGE" alphanumspacedot urlvalue )&time=${UNIXTIME}"
-				touch /tmp/SEND_ALIVE_FAILED
+				UNIXTIME="$( _system date unixtime )"
+				ARCHIV_NODE_MESSAGE="$text"
+				echo >>"$TMPDIR/ARCHIV_MONITORING" "log=$( _sanitizer run "$ARCHIV_NODE_MESSAGE" shellsafe urlvalue )&time=${UNIXTIME}"
+				touch "$TMPDIR/SEND_ALIVE_FAILED"
 			}
 		;;
 	esac
 
-	_log shell_is_interactive && {			# fixme! it does'nt work in nested functions, e.g. _net mac2vendor $MAC
+	_log shell_is_interactive && {
 		eval $( mem_uptime_and_date )
+
 		FATHER_PROCESS="TERM:${TERM} $0"
-		echo "$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE" 1>&2   # to stderr
+		# output to STDERR
+		echo 1>&2 "$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
 	}
 
-	boot_and_debug_message ()
-	{
-		if [ -e "/tmp/service_ssh_nowatching" ]; then
-			[ -e "/tmp/messages" ] && rm "/tmp/messages"
-		else
-			pidof syslogd >/dev/null || {		# write to special logfile
-				eval $( mem_uptime_and_date )
-				echo >>/tmp/messages "$DATE ' [up ${UPTIME}s $MEM bytes free] ${FACILITY}.${PRIO} fff+ $FATHER_PROCESS ${FUNCTION}() $MESSAGE"
-				# _log netmessage "$MESSAGE"	# fixme!
-			}
-		fi
-	}
-
-	if [ "$PRIO" = "debug" ]; then
-
-		[ ! -e /tmp/DEBUG ] && {
-			_log shell_is_interactive || return 0
-		}
-		boot_and_debug_message
-	else
-		boot_and_debug_message
-	fi
-
-	# fixme! howto print out logging when webserver executes a script?
-
-	logger -t "fff+ $FATHER_PROCESS ${FUNCTION}()" -p "${FACILITY}.${PRIO}" -- "$MESSAGE"
+	logger -t "kalua: $FATHER_PROCESS" -p "${FACILITY}.${PRIO}" -- "$FUNCTION() $MESSAGE"
 }
 
 _log_append_info()
