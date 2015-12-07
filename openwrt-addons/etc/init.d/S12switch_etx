@@ -25,7 +25,7 @@ boot()
 	# (filedate of the newest file on disk) if not - get&set it now
 
 	local year="$( date +%Y )"
-	local switchtime=1421380800	# Sa, 2016-jan-16 @ 04:00:00
+	local switchtime=1452916800	# Sa, 2016-jan-16 @ 04:00:00
 	local olsrd_metric="$( uci -q get 'olsrd.@olsrd[0].LinkQualityAlgorithm' )"
 	local olsrd_metric_wish='etx_ffeth'
 

@@ -755,7 +755,7 @@ $hide_chanbw	option chanbw		"$chanbw"	# since r32596
 $hide_mac	option macaddr		"$MAC"
 	option frag		"off"
 $hidetx	option txpower		"$TXPOWER"
-	option beacon_int 	"1000"
+	option beacon_int 	"375"
 $hide_noscan	option noscan		"1"
 EOF
 
@@ -873,7 +873,7 @@ $hide_chanbw	option chanbw		"$chanbw"		# since r32596
 $hide_mac	option macaddr		"$MAC"
 	option frag		"off"
 $hidetx	option txpower		"$TXPOWER"
-	option beacon_int	"1000"
+	option beacon_int	"375"
 $hide_noscan	option noscan		"1"
 EOF
 
@@ -1166,7 +1166,6 @@ _config_dhcp ()			# domain = .olsr
 	uci -q set dhcp.lan.leasetime="2h"
 	uci -q set dhcp.lan.force="1"
 	uci -q set dhcp.lan.ignore=${DHCP_IGNORE_LAN:-0}
-	uci -q add_list dhcp.lan.dhcp_option="121,10.63.0.0/16,$( _ipsystem ffweimar $NODE | grep LANADR= | cut -d'=' -f2 )"
 	
 	uci -q delete dhcp.wlan
 	uci -q set dhcp.wlan="dhcp"

@@ -1,3 +1,4 @@
+#!/bin/sh
 #
 # check a random neighbour for ssh/httpd || {
 # 	udhcpc -i wlan0 -r 10.10.52.2 -n -q -r retter -S;reboot
@@ -92,7 +93,14 @@ _watch_vpn()
 
 		vpn_server_is_neigh()
 		{
-			sed -n '/Table: Links/,/Table: Neighbors/p' /tmp/OLSR/ALL | grep -q '10\.63\.1\.[1-63]'
+			local file='/tmp/OLSR/ALL'
+			local ip_other_side
+
+			ip_other_side="$( _ipsystem getvar 'WIFIVPNSERVERADR' )"
+			ip_other_side="$( _sanitizer run "$ip_other_side" escape_dots )"
+
+			_log it $func daemon info "checking $file for ip: $ip_other_side"
+			sed -n '/Table: Links/,/Table: Neighbors/p' "$file" | grep -q "$ip_other_side"
 		}
 
 		if vpn_server_is_neigh; then
