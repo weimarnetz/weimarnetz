@@ -1,4 +1,6 @@
-# ToDo: 
+#!/bin/sh
+
+# ToDo:
 # - integer
 #   - shortint
 #   - integer
@@ -14,11 +16,11 @@ _sanitizer_run()	# example_call: _sanitizer run "$MYSTRING" mac hex lowercase ch
 {			#               _sanitizer run "$MYSTRING" length:24
 	local INPUT="$1"
 	local WORK="$1"
-	local CHEAT="$3$4$5$6$7"	# see kalua_init/maxargs
 	local KEYWORD OPTION
 
-	while [ -n "$2" ]; do {	
+	[ -z "$INPUT" ] && return 1
 
+	while [ -n "$2" ]; do {
 		KEYWORD="$2"
 		OPTION=
 
@@ -27,8 +29,8 @@ _sanitizer_run()	# example_call: _sanitizer run "$MYSTRING" mac hex lowercase ch
 			KEYWORD="${KEYWORD%[:]*}"	# cut string before "_", e.g.: string "keyword_option" -> string "keyword"
 		}
 
-		case $KEYWORD in
-			check)
+		case "$KEYWORD" in
+			'check')
 				if [ "${WORK:-dummy}" = "$INPUT" ]; then
 					return 0
 				else
@@ -36,33 +38,33 @@ _sanitizer_run()	# example_call: _sanitizer run "$MYSTRING" mac hex lowercase ch
 				fi
 			;;
 			*)							# hex|lowercase|uppercase|email|urlvalue|mac|alphanum
-				WORK="$( _sanitizer_$KEYWORD "$WORK" "$OPTION" )" || {
-					_log it sanitizer daemon alert "'_sanitizer_$KEYWORD ${OPTION} $1' - invalid call"
+				WORK="$( _sanitizer $KEYWORD "$WORK" "$OPTION" )" || {
+					_log it sanitizer_$KEYWORD daemon alert "[ERR] data: '$WORK' opt: '$OPTION' input: '$INPUT'"
 					return 1
 				}
 			;;
 		esac
-		
+
 		shift
 	} done
 
 	echo -n "$WORK"
 }
 
-_sanitizer_mobilenumber()	# SENS: cell phone number
+_sanitizer_mobilenumber()	# SENSE: cell phone number
 {
 	local NUMBER="$1"
 
 	echo "$NUMBER"
 	return 0
 
-	case $NUMBER in		# fixme!
+	case "$NUMBER" in		# fixme!
 		"+49")		# http://stackoverflow.com/questions/123559/a-comprehensive-regex-for-phone-number-validation
 			:	# http://stackoverflow.com/questions/41925/is-there-a-standard-for-storing-normalized-phone-numbers-in-a-database
 		;;		# idea: let the user choose via form: country/network/number
-	esac	
-	
-	case $NUMBER in
+	esac
+
+	case "$NUMBER" in
 		0170*|0171*|0176*|0179*)
 			:
 		;;
@@ -77,7 +79,7 @@ _sanitizer_firstword()		# space is fieldseparator
 	for WORD in $LINE; do {
 		echo $WORD
 		break
-	} done	
+	} done
 }
 
 _sanitizer_firstline()
@@ -96,7 +98,7 @@ _sanitizer_strip_newlines()
 {
 	local LINE
 
-	echo "$1" | while read LINE; do echo -n "$LINE"; done
+	echo "$1" | while read -r LINE; do echo -n "$LINE"; done
 }
 
 _sanitizer_newlines2spaces()
@@ -104,34 +106,37 @@ _sanitizer_newlines2spaces()
 	local line out
 
 	if [ -n "$1" ]; then
-		out="$( echo "$1" | while read line; do echo -n "$line "; done )"
+		out="$( echo "$1" | while read -r line; do echo -n "$line "; done )"
 		echo "$out" | cut -b 1-$(( ${#out} -1 ))
 	else
 		echo "$1"
 	fi
 }
 
-_sanitizer_ip4()	# testcase: "1a 1.2.3. 11.12.a.1 523.234.157.254 45.32.0.1 a1"
-{			# fixme! implement this with sed
-	local args="$@"
+_sanitizer_ip4()	# testcase: "1a 1.2.3. 11.12.a.1 523.234.157.254 45.32.0.1 1.2.3.4.5 a1 178.24.108.0"
+{			# fixme! catch an IP even in strings embedded: e.g. "OK-10.11.12.13-BLA"
+	local args="$*"	# fixme! 178.24.108.0 is a valid IP
 	local string=
 
 	for string in $args; do {
 		case "$string" in
 			[0-9]*)
-				local oldifs="$IFS"; IFS="."; set $string; IFS="$oldifs"
+				local oldifs="$IFS"; IFS="."; explode $string; IFS="$oldifs"
 
+				# only allow numbers
 				case "$1${2:-x}${3:-x}${4:-x}" in
 					*[!0-9]*) continue ;;
 				esac
 
+				# test what should NOT be
 				test $1 -eq 0 -o $1 -gt 254 \
 				  -o $2 -gt 254 \
 				  -o $3 -gt 254 \
-				  -o $4 -eq 0 -o $4 -gt 254 && continue
+				  -o $4 -eq 0 -o $4 -gt 254 \
+				  -o -n "$5" && continue
 
 				echo "$string"
-				return
+				return 0
 			;;
 		esac
 	} done
@@ -164,24 +169,25 @@ _sanitizer_uppercase()
 
 _sanitizer_email()
 {
-	echo -n "$1" | sed 's/[^0-9a-zA-Z@\._-]//g'		# fixme! only one '@'
+	echo -n "$1" | sed 's/[^0-9a-zA-Z@\._-]//g'		# FIXME! only one '@'
 }
 
 _sanitizer_mac()
 {
 	local input="$1"
-	local hex="0-9a-fA-F"
-	local hex_without_f="0-9a-eA-E"		# mac's starting with ff: are invalid: http://standards.ieee.org/regauth/oui/oui.txt
+	local hex='0-9a-fA-F'
+	local hex_without_f='0-9a-eA-E'
 
 	case "$input" in
-		*[$hex][$hex_without_f][:-][$hex][$hex][:-][$hex][$hex][:-][$hex][$hex][:-][$hex][$hex][:-][$hex][$hex]*)
-
+		*[0-9a-fA-F][0-9a-eA-E][:-][0-9a-fA-F][0-9a-fA-F][:-][0-9a-fA-F][0-9a-fA-F][:-][0-9a-fA-F][0-9a-fA-F][:-][0-9a-fA-F][0-9a-fA-F][:-][0-9a-fA-F][0-9a-fA-F]*)
+			# mac's starting with ff: are invalid: http://standards.ieee.org/regauth/oui/oui.txt
+			# so the 2nd byte only test from a-e,not a-f
 			echo -n "$input" | sed -n "s/^.*\([$hex][$hex_without_f]\)[:-]\([$hex]\{2\}\)[:-]\([$hex]\{2\}\)[:-]\([$hex]\{2\}\)[:-]\([$hex]\{2\}\)[:-]\([$hex]\{2\}\).*/\1:\2:\3:\4:\5:\6/p"
 		;;
 	esac
 }
 
-_sanitizer_numeric()
+_sanitizer_numeric()	# FIXME! accept negative
 {
 	echo -n "$1" | sed 's/[^0-9]//g'
 }
@@ -191,45 +197,51 @@ _sanitizer_alphanum()
 	echo -n "$1" | sed 's/[^a-zA-Z0-9]//g'
 }
 
-_sanitizer_alphanumspacedot()
+_sanitizer_shellsafe()		# allow only a-z A-Z 0-9 . _ - ~ {}     ()     ,    SPACE   = + ? @   \ / :
 {
-	echo -n "$1" | sed 's/[^a-zA-Z0-9\. ]//g'
+	echo -n "$1" | sed 's/[^-a-zA-Z0-9\._-~}{(), =+?@\\/]://g'
 }
 
-_sanitizer_essid()		# allow only a-z A-Z 0-9 . _ - ~ {} $ ^ () ! * , <> SPACE | = + ? @ # \ / and not ; : ' " [ ]
+_sanitizer_essid()		# allow only a-z A-Z 0-9 . _ - ~ {} $ ^ () ! * , <> SPACE | = + ? @ # \ / and _NOT_ these ; : ' " [ ]
 {
 	echo -n "$1" | sed 's/[^-a-zA-Z0-9\._-~}{$^()!*,<> |=+?@#\\/]//g'		# fixme! allow more and escape it?
 }
 
 _sanitizer_hostname()		# rfc-952/rfc-1123 - but shorter - respect: rfc-1178 ("good hostnames")
 {
-	local HOSTNAME="$( echo -n "$1" | sed 's/[^-a-zA-Z0-9]//g' )"
+	local hostname="$( printf "%s" "$1" | sed -e 's/^-//' -e 's/[^-a-zA-Z0-9]//g' )"
 
-	_sanitizer run "$HOSTNAME" length:63
+	_sanitizer run "$hostname" length:63
 }
 
 _sanitizer_length()
 {
-	local STRING="$1"
-	local LENGTH="$2"
+	local string="$1"
+	local length="$2"
 
-	echo -n "$STRING" | cut -b1-${LENGTH}
+	printf "%s" "$string" | cut -b1-$length
 }
 
-_sanitizer_strip_nonsafe_url()		# SENS: strip all chars, which are not URL-safe (RFC-3986, chapter 2.3. unreserved chars)
+_sanitizer_strip_nonsafe_url()		# SENSE: strip all chars, which are not URL-safe (RFC-3986, chapter 2.3. unreserved chars)
 {
-	echo "$1" | sed 's/[^a-zA-Z0-9_\.~-]//g'			# fixme! sed 's/%[0-9a-fA-F][0-9a-fA-F]//g'
+	echo "$1" | sed 's/[^a-zA-Z0-9%_\.~-]//g'			# fixme! sed 's/%[0-9a-fA-F][0-9a-fA-F]//g'
 									# -> leave already encoded chars in?!
 }
 
-_sanitizer_strip_nonsafe_url_special()		# SENS: strip all chars, which are in our special table (see next function!)
+_sanitizer_strip_nonsafe_url_special()		# SENSE: strip all chars, which are in our special table in next function
 {
-	echo "$1" | sed -e 's/[}{\$\^[()!*\[,"|	;<>'\\\''=+:?@#\\/ ]//g' -e 's/]//g'	# is: { } $ ^ [ ] ( ) ! * , " | TAB ; < > ' = + : ? @ # / space
+	# is: & { } $ ^ [ ] ( ) ! * , " | TAB ; < > ' = + : ? @ # / space
+	echo "$1" | sed -e 's/[}{\$\^[()!*\[,"|	;<>'\\\''=+:?@#\\/ ]//g' -e 's/]//g' -e 's/&//g'
 }
 
-_sanitizer_encode_nonsafe_url_special()		# SENS: converting chars using a fixed table, where we know the URL-encodings
-{						#   is: , ; : ? # [ ] / @ + = " ' | ( ) TAB < > ! * { } $ ^ space
-	echo "$1" | sed -e 's/,/%2c/g'	\
+_sanitizer_encode_nonsafe_url_special()		# SENSE: converting chars using a fixed table, where we know the URL-encodings
+{
+	# is: , ; : ? # [ ] / @ + = " ' | ( ) TAB < > ! * { } $ ^ % space
+	# e.g. a 'comma' does not need encoding: http://tools.ietf.org/html/rfc3986#section-2.2
+
+	echo "$1" | sed -e 's/%/%25/g'	\
+			-e 's/&/%26/g'	\
+			-e 's/,/%2c/g'	\
 			-e 's/;/%3b/g'	\
 			-e 's/:/%3a/g'	\
 			-e 's/?/%3f/g'	\
@@ -238,7 +250,7 @@ _sanitizer_encode_nonsafe_url_special()		# SENS: converting chars using a fixed 
 			-e 's/\]/%5d/g'	\
 			-e 's/\//%2f/g'	\
 			-e 's/@/%40/g'	\
-			-e 's/+/%2b/g'  \
+			-e 's/+/%2b/g'	\
 			-e 's/=/%3d/g'	\
 			-e 's/"/%22/g'	\
 			-e "s/'/%27/g"	\
@@ -246,15 +258,15 @@ _sanitizer_encode_nonsafe_url_special()		# SENS: converting chars using a fixed 
 			-e "s/[(]/%28/g" \
 			-e "s/[)]/%29/g" \
 			-e "s/	/%09/g"	\
-			-e 's/</%3c/g'  \
-			-e 's/>/%3e/g'  \
-			-e 's/!/%21/g' \
-			-e 's/*/%2a/g' \
-			-e 's/{/%7b/g' \
-			-e 's/}/%7d/g' \
-			-e 's/\$/%24/g' \
-			-e 's/\^/%5e/g' \
-			-e 's/ /%20/g'
+			-e 's/</%3c/g'	\
+			-e 's/>/%3e/g'	\
+			-e 's/!/%21/g'	\
+			-e 's/*/%2a/g'	\
+			-e 's/{/%7b/g'	\
+			-e 's/}/%7d/g'	\
+			-e 's/\$/%24/g'	\
+			-e 's/\^/%5e/g'	\
+			-e 's/ /+/g'
 }
 
 _sanitizer_urlvalue()				# fixme! on cmdline this produces error on each "!"-sign, but output is ok
@@ -262,34 +274,40 @@ _sanitizer_urlvalue()				# fixme! on cmdline this produces error on each "!"-sig
 	local funcname="sanitizer_urlvalue"	# OUT1: string (URL-encoded, RFC2396)
 	local text="$1"
 	local strip="$( _sanitizer strip_nonsafe_url "$text" )"
+	local firstline='true'
+	local out char hex line
 	local pos=0
-	local out char hex
 
 	[ "$text" = "$strip" ] && {	# no need for conversion, only safe chars
 		echo "$text"
 		return
 	}
 
-	# conversion of unsafe chars is possible with a fast table
+	# conversion of unsafe chars is possible with a fast table / we strip leading+trailing whitespaces
 	[ "$strip" = "$( _sanitizer strip_nonsafe_url_special "$text" )" ] && {
-		_sanitizer encode_nonsafe_url_special "$text"
-		return
+		echo "$text" | while read -r line; do {
+			[ -z "$firstline" ] && echo -n '%0a'
+			printf "%s" "$( _sanitizer encode_nonsafe_url_special "$line" )"
+			firstline=
+		} done
+
+		return 0
 	}
 
 	# seems that we have special chars, that are not in our table,
 	# so we have to check char by char, which is slow...
 	# maybe we should auto-generate a table when using this functions for the first time?
 
-	_log it $funcname daemon info "[OK] activating slow parser"
+	_log it $funcname daemon info "[OK] activating slow parser: '$text'"
 
 	while [ $pos -lt ${#text} ]; do {					# 0...length_of_text
 		char="${text:$pos:1}"						# char at $pos
-		pos=$(( $pos + 1 ))
+		pos=$(( pos + 1 ))
 
 		if [ -n "$( _sanitizer strip_nonsafe_url "$char" )" ]; then
 			out="${out}${char}"					# char is safe: append
 		else
-			set -- $( echo "$char" | hexdump -C )			# # is unsafe char
+			explode $( echo "$char" | hexdump -C )			# # is unsafe char
 			hex="$2"						# no matter: a-z = A-Z
 			out="${out}%${hex}"
 		fi
@@ -319,16 +337,16 @@ _sanitizer_TODO_split_string()		# ARG1: string
 
 	while [ $b -lt $ANZAHL ]; do {
 
-		b=$(( $b + 1 ))
-		von=$(( $pos + $von ))
-		von=$(( $von * $b ))
-		bis=$(( $bis + $step ))
+		b=$(( b + 1 ))
+		von=$(( pos + von ))
+		von=$(( von * b ))
+		bis=$(( bis + step ))
 
-		POS_START=$(( ($b * $step) - $step + 1 ))
+		POS_START=$(( (b * step) - step + 1 ))
 		POS_END=$bis
-		
+
 		echo "LOOP: '$b' POS_START: '$POS_START' POS_END: '$POS_END'"
-		
+
 		echo "$TEXT" | cut -b $POS_START-$POS_END
 	} done
 }
@@ -357,9 +375,9 @@ _sanitizer_add_length_diff_with_spaces()	# special: ARG1 is separated by space i
 
 	local MAX="${#STRING_MAX}"		# fixme! strings cannot have "spaces"
 	local LENGTH="${#STRING_COMPARE}"
-	local DIFF=$(( $MAX - $LENGTH ))
+	local DIFF=$(( MAX - LENGTH ))
 
-	case $DIFF in
+	case "$DIFF" in
 		0) return ;;
 		1) echo -n ' ' ;;
 		2) echo -n '  ' ;;
