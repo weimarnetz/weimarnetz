@@ -99,7 +99,7 @@ _build_hosts ()				# SENS: modulary builds /etc/local.hosts
 			echo  >$SUB_WIFI "# entrys for wifi-subnet"
 
 			DEFAULT="wardriver"
-			NODE="$( uci -q get system.@profile[0].nodenumber )"
+			NODE="$( uci -q get system.profile.nodenumber )"
 			DOMAIN="$( uci -q get dhcp.@dnsmasq[0].domain )"
 			CLIENT=0
 			MODE="$1"
@@ -136,7 +136,7 @@ _build_hosts ()				# SENS: modulary builds /etc/local.hosts
 			}
 
 			DEFAULT="anonymous"
-			NODE="$( uci -q get system.@profile[0].nodenumber )"
+			NODE="$( uci -q get system.profile.nodenumber )"
 			DOMAIN="$( uci -q get dhcp.@dnsmasq[0].domain )"
 			CLIENT=0
 			MODE="$1"
@@ -196,7 +196,7 @@ _build_hosts ()				# SENS: modulary builds /etc/local.hosts
 				echo >>$SUB_VIRT "$WIFIADR     login.$DOMAIN login"
 			}
 
-			VPN_SERVER="$( uci -q get system.@vpn[0].ipaddr )"
+			VPN_SERVER="$( uci -q get system.vpn.ipaddr )"
 			VPN_SERVER="77.87.48.19"				# fixme!
 
 			echo >>$SUB_VIRT
@@ -260,7 +260,7 @@ fkt_write_ethers ()			# writes /etc/ethers which is "mac-address hostname" per l
 
 	local CLIENT=0
 	local DOMAIN="$( uci -q get dhcp.@dnsmasq[0].domain )"
-	local NODE="$( uci -q get system.@profile[0].nodenumber )"
+	local NODE="$( uci -q get system.profile.nodenumber )"
 	local LIST="$( uci -q get system.@ethers[0].$MODE )"
 	local DEBUG_FILE="/tmp/ethers"
 	local DEBUG_VAR="fff_ethers_$MODE"		# format e.g.: fff_ethers_wifi="00:11:22:33:44:55=admin-computername;11:22:33:44:55:66=free-computername;..."

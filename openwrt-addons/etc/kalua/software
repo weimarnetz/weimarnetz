@@ -100,7 +100,7 @@ _software_is_essential ()	# fixme! how to determine, if package is part of a met
 		 		    return 0	# yes!
 				;;	 
 				*)
-					[ "$( uci -q get system.@weblogin[0].enabled )" = "1" ] && {
+					[ "$( uci -q get system.weblogin.enabled )" = "1" ] && {
 
 						case $PACKAGE in
 		                 			xyssl) return 0 ;;
@@ -110,7 +110,7 @@ _software_is_essential ()	# fixme! how to determine, if package is part of a met
 						   busybox-nc) return 0 ;;
 						esac
 
-						case "$( uci -q get system.@profile[0].name )" in
+						case "$( uci -q get system.profile.name )" in
 							monami*)
 								case $PACKAGE in
 									freifunk-olsr-viz-*) return 0 ;;
