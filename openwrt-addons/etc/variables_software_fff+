@@ -36,9 +36,9 @@ fkt_build_vars ()			# fixme! this is a real mess - we need profile_specific soft
 
 	local NONEEDLESS=0
 	
-	[ "$( uci -q get system.@weblogin[0].enabled )" = "1" ]	&& NONEEDLESS=1
+	[ "$( uci -q get system.weblogin.enabled )" = "1" ]	&& NONEEDLESS=1
 
-	case "$( uci -q get system.@profile[0].name )" in
+	case "$( uci -q get system.profile.name )" in
 		liszt28_ap|liszt28_mesh) NONEEDLESS=0
 	esac
 
@@ -179,7 +179,7 @@ fkt_check_dependencies ()
 
 							LIST_SOFTWARE=""
 	test    -e "/tmp/PPPOE_NEEDED"			&&	LIST_SOFTWARE="$LIST_SOFTWARE $SOFTWARE_PPPOE"
-	[ "$INETOFFER" != "false" -a "$( uci -q get system.@vpn[0].active )" != "0" ] && LIST_SOFTWARE="$LIST_SOFTWARE $SOFTWARE_TUNNEL"
+	[ "$INETOFFER" != "false" -a "$( uci -q get system.vpn.active )" != "0" ] && LIST_SOFTWARE="$LIST_SOFTWARE $SOFTWARE_TUNNEL"
 	test "$INETOFFER" != "false"		&&	LIST_SOFTWARE="$LIST_SOFTWARE $SOFTWARE_INETGW"
 							LIST_SOFTWARE="$LIST_SOFTWARE $SOFTWARE_BASE"
 
@@ -193,7 +193,7 @@ fkt_check_dependencies ()
 
 		[ "$( _wifi mode $WIFIDEV )" != "adhoc" ] &&  	LIST_SOFTWARE="$LIST_SOFTWARE wl-adv"
 
-		uci -q get system.@profile[0].name | grep -q ffsundi && LIST_SOFTWARE="$LIST_SOFTWARE wl-adv"		# fixme!
+		uci -q get system.profile.name | grep -q ffsundi && LIST_SOFTWARE="$LIST_SOFTWARE wl-adv"		# fixme!
 	
 		_wifi feature_probe 802.11a $WIFIDEV	&&	LIST_SOFTWARE="$LIST_SOFTWARE wl-adv"
 	else
