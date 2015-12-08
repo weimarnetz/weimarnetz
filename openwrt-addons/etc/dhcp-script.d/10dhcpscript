@@ -46,7 +46,7 @@ esac
 
 case "$MODE" in
 	add|old)
-		bool_true 'system.@weblogin[0].enabled' && {
+		bool_true 'system.weblogin.enabled' && {
 			case "$HOST" in
 				'old')
 					_netfilter user_probe "$MAC" && exit 0
@@ -87,7 +87,7 @@ case "$MODE" in
 
 	;;
 	del)
-#		if bool_true 'system.@weblogin[0].dhcpautologout'; then
+#		if bool_true 'system.weblogin.dhcpautologout'; then
 			echo >>$SCHEDULER "_netfilter user_del $MAC dhcp_del"
 #		else
 #			_netfilter set_arp reachable "$MAC" "$IP" "$DEV"
