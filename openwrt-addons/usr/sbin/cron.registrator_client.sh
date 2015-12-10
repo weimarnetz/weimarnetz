@@ -80,7 +80,7 @@ if [ "$( _ipsystem getvar 'NODE_NUMBER_RANDOM' )" = 'false' -a -z "$OPTION" ]; t
 
 			# TODO: resetting the number here would auto-recover lost passwords
 			#       and assign new NODENUMBER on next try. like this:
-			#	uci delete system.@profile[0].nodenumber
+			#	uci delete system.profile.nodenumber
 			_log it registrator daemon alert "[ERR] somebody has your number '$NODENUMBER' or your pass/sshkey-fingerprint has changed"
 
 			# API call is: Send a 'Create', with MAC and PASS.

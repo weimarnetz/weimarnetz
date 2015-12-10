@@ -158,7 +158,7 @@ EOF
 	#
 	### UCI:
 	# echo >>/etc/kalua_uci 'system.@system[0].hostname=ChicagoVPS'
-	# echo >>/etc/kalua_uci 'system.@fwupdate[0].mode=testing'
+	# echo >>/etc/kalua_uci 'system.fwupdate.mode=testing'
 	# echo >>/etc/kalua_uci 'system.vpn.port=5001'
 	# - sms_password
 	#
