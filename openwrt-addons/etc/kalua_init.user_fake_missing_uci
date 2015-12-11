@@ -6,7 +6,7 @@ command -v uci >/dev/null || {
 	# FIXME! parsing var='value' (with quotes)
 
 	cat >>"$LOADER" <<EOF
-uci()	# e.g. uci -q get system.profile.nodenumber
+uci()	# e.g. uci -q get system.@profile[0].nodenumber
 {
 	case "\$1" in
 		'-q')
