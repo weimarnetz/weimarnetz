@@ -1499,6 +1499,11 @@ EOF
 	cp "/rom/etc/opkg.conf" "/etc/opkg.conf"
 }
 
+# copy profile as it will be kept by sysupgrade 
+[ -e /rom/etc/profile ] && {
+	cp "/rom/etc/profile" "/etc/profile"
+}
+
 # rewrite new settings
 for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 	log "....working on section '$SECTION'"
