@@ -16,18 +16,18 @@ HOSTNAME="$( uci -q get system.@system[0].hostname )"
 HOSTNAME="${HOSTNAME:-$( cat '/etc/hostname' )}"
 HOSTNAME="${HOSTNAME:-$( hostname 2>/dev/null || echo 'anonymous' )}"
 
-MONITORING_SERVERIP="$( uci -q get system.monitoring.serverip )"
+MONITORING_SERVERIP="$( uci -q get system.@monitoring[0].serverip )"
 MONITORING_SERVERIP="${MONITORING_SERVERIP:-84.38.67.43}"
 
 OPKG="$( command -v /bin/[o,i]pkg )" || {
 	echo "opkg(){ _software opkg_raminstaller \"\$@\";}"
-	OPKG='_software opkg_raminstaller'
+	OPKG="'_software opkg_raminstaller'"
 }
 
 # each node has it's own "nearly uniq" DHCP-range
 # which must be valid across the whole network,
 # e.g. 192.168.8.0/16 on node 8
-NODENUMBER_ROAMING="$( uci -q get system.profile.nodenumber )"
+NODENUMBER_ROAMING="$( uci -q get system.@profile[0].nodenumber )"
 while [ ${NODENUMBER_ROAMING:=2} -gt 254 ]; do {
 	NODENUMBER_ROAMING=$(( NODENUMBER_ROAMING - 254 ))	# e.g. node 255 -> 1
 } done
@@ -54,8 +54,8 @@ mkdir -p "$PERMDIR" 2>/dev/null || {
 # from $0.user @ $(date)
 export TZ='$TIMEZONE'
 NODENUMBER_ROAMING=$NODENUMBER_ROAMING
-NODENUMBER=\${NODENUMBER:-$( uci -q get system.profile.nodenumber )}
-CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get system.profile.name )}
+NODENUMBER=\${NODENUMBER:-$( uci -q get system.@profile[0].nodenumber )}
+CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get system.@profile[0].name )}
 HARDWARE='$HARDWARE'
 HOSTNAME='$HOSTNAME'
 OPKG=$OPKG
