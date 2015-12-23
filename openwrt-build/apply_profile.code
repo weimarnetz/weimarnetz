@@ -431,6 +431,11 @@ _config_system ()
 		}
 	}
 	
+	# restrict access to wan subnet 
+	[ -z "$( uci -q get system.system.restrict_local )" ] && {
+	    uci set system.system.restrict_local="1"
+	}
+	
 	#ntp section of system
 
 	uci delete system.ntp
