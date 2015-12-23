@@ -799,7 +799,7 @@ _netfilter_masquerade_start()
 
 	_log it $funcname daemon info "active for device $device ($devname)"
 
-	if bool_true 'system.@system[0].restrict_local'; then
+	if bool_true 'system.weblogin.restrict_local'; then
 		echo "$IPT -t nat -A POSTROUTING -o $device ! -d $WANNET/$WANPRE -j MASQUERADE" >"$statfile"
 		$IPT -t nat -A POSTROUTING -o $device ! -d $WANNET/$WANPRE -j MASQUERADE
 	else
