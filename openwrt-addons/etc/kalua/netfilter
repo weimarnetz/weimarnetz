@@ -848,11 +848,9 @@ _netfilter_splash_start()
 	local funcname='netfilter_splash_start'
 	local myhna="$( _netfilter myhna )"
 #	local debug="echo"			# must be empty for debug-mode
-	local ip source destination dev temp_dev dnsport
-	local dnsport dnsfake_ip
+	local ip source destination dev temp_dev 
 	local private_networks="172.16.0.0/12 192.168.0.0/16 10.0.0.0/8 169.254.0.0/16 127.0.0.0/8"
 
-	dnsport=53
 
 	mkdir -p "/tmp/NETFILTER/USER" \
 		 "/tmp/NETFILTER/MAC2IP" \
@@ -889,10 +887,6 @@ _netfilter_splash_start()
 
 ### end of ACCEPT
 
-#$debug	$IPT -t mangle -A PREROUTING -p udp --dport 53 ! -d $myhna -j LOG --log-prefix "MANGLE.DNSq-UDP: "
-	$IPT -t mangle -A PREROUTING -p udp --dport 53 ! -d $myhna -j MARK --set-mark 0x15	# redirect DNS - todo: limit rate via 'recent'
-#$debug	$IPT -t mangle -A PREROUTING -p tcp --dport 53 ! -d $myhna -j LOG --log-prefix "MANGLE.DNSq-TCP: "
-	$IPT -t mangle -A PREROUTING -p tcp --dport 53 ! -d $myhna -j MARK --set-mark 0x16	# redirect DNS - dig @8.8.8.8 +tcp google.com
 #$debug	$IPT -t mangle -A PREROUTING -p tcp --dport 80	       -j LOG --log-prefix "MANGLE.splash.HTTP: "
 	$IPT -t mangle -A PREROUTING -p tcp --dport 80 	       -j MARK --set-mark 0x11	# redirect HTTP
 
@@ -921,8 +915,6 @@ _netfilter_splash_start()
 		ip="$( _net dev2ip "$dev" )" || return 1
 		[ "$temp_dev" = 'gateway0' ] && dev='gateway0'
 
-		$IPT -t nat -A PREROUTING -p udp -i $dev -m mark --mark 0x13/0xff -j DNAT --to-destination $ip:53
-		$IPT -t nat -A PREROUTING -p tcp -i $dev -m mark --mark 0x14/0xff -j DNAT --to-destination $ip:53
 		$IPT -t nat -A PREROUTING -p tcp -i $dev -m mark --mark 0x11/0xff -j DNAT --to-destination $ip:80
 	}
 
@@ -940,8 +932,6 @@ _netfilter_splash_start()
 
 	# control-group: any packets left?
 	for dev in '-i eth+' '-i wlan+' ''; do {
-		$IPT -t nat -A PREROUTING -p udp $dev -m mark --mark 0x13/0xff -j REDIRECT --to-port 53
-		$IPT -t nat -A PREROUTING -p tcp $dev -m mark --mark 0x14/0xff -j REDIRECT --to-port 53
 		$IPT -t nat -A PREROUTING -p tcp $dev -m mark --mark 0x11/0xff -j REDIRECT --to-port 80
 	} done
 }
@@ -1352,15 +1342,11 @@ _netfilter_user_add()
 	$IPT -t mangle -I PREROUTING -m mac --mac-source $mac -j ACCEPT	# we should not see packets in above rule
 
 	myhna="$( _netfilter myhna )"
-	$IPT -t mangle -I PREROUTING -m mac --mac-source $mac -p udp --dport 53 ! -d $myhna -j MARK --set-mark 0x13
-	$IPT -t mangle -I PREROUTING -m mac --mac-source $mac -p tcp --dport 53 ! -d $myhna -j MARK --set-mark 0x14
 	$IPT -t mangle -I INPUT      -m mac --mac-source $mac -j ACCEPT
 
 	cat >"/tmp/NETFILTER/USER/$mac/user_del" <<EOF
 dev='$dev'
 $IPT -t mangle -D INPUT      -m mac --mac-source $mac -j ACCEPT
-$IPT -t mangle -D PREROUTING -m mac --mac-source $mac -p tcp --dport 53 ! -d $myhna -j MARK --set-mark 0x14
-$IPT -t mangle -D PREROUTING -m mac --mac-source $mac -p udp --dport 53 ! -d $myhna -j MARK --set-mark 0x13
 $IPT -t mangle -D PREROUTING -m mac --mac-source $mac -j ACCEPT
 $IPT -t mangle -D PREROUTING -s $ip -j ACCEPT
 $IPT -t mangle -D PREROUTING -d $ip -j ACCEPT
