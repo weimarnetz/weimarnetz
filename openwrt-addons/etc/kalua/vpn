@@ -518,7 +518,7 @@ _vpn_build_vars()
 
 	vars_are_sane()
 	{
-		test -n "$SERVER" -a "$CLIENTS" -ge 0 -a "$MTU" -ge 0 -a "$PORT" -ge 0" 2>/dev/null
+		test -n "$SERVER" -a "$CLIENTS" -ge 0 -a "$MTU" -ge 0 -a "$PORT" -ge 0 2>/dev/null
 	}
 
        if vars_are_sane; then
