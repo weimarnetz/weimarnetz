@@ -431,11 +431,6 @@ _config_system ()
 		}
 	}
 	
-	# restrict access to wan subnet 
-	[ -z "$( uci -q get system.system.restrict_local )" ] && {
-	    uci set system.system.restrict_local="1"
-	}
-	
 	#ntp section of system
 
 	uci delete system.ntp
@@ -461,6 +456,10 @@ _config_system ()
 	uci set system.weblogin.namespace="capital_citys_de"
 	[ -z "$hide_lang" ] && {
 		uci set system.weblogin.adminlang="en"
+	}
+	# restrict access to wan subnet 
+	[ -z "$( uci -q get system.weblogin.restrict_local )" ] && {
+	    uci set system.weblogin.restrict_local="1"
 	}
 
 	#profile section of system
@@ -1502,6 +1501,11 @@ EOF
 # copy opkg.conf from build system
 [ -e /rom/etc/opkg.conf ] && {
 	cp "/rom/etc/opkg.conf" "/etc/opkg.conf"
+}
+
+# copy profile as it will be kept by sysupgrade 
+[ -e /rom/etc/profile ] && {
+	cp "/rom/etc/profile" "/etc/profile"
 }
 
 # rewrite new settings

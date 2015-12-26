@@ -31,7 +31,7 @@ _netfilter_start()
     _vpn needed && _vpn block start
 
 
-	bool_true 'system.@weblogin[0].enabled' && {
+	bool_true 'system.weblogin.enabled' && {
 		[ -e "/www/SIMPLE_MESHNODE" ] || {
 			_netfilter splash_start
 			echo >>$SCHEDULER '_netfilter splash_autoadd'
@@ -185,10 +185,10 @@ _netfilter_traffic_control_user_add()
 
 	[ -z "$speed_up" ] && {
 		# TODO: fetch from DB
-		speed_up="$(   uci -q get system.@weblogin[0].default_speed_up   )" || return 0
-		speed_down="$( uci -q get system.@weblogin[0].default_speed_down )" || return 0
+		speed_up="$(   uci -q get system.weblogin.default_speed_up   )" || return 0
+		speed_down="$( uci -q get system.weblogin.default_speed_down )" || return 0
 
-		case " $( uci -q get system.@weblogin[0].mac_unshaped ) " in
+		case " $( uci -q get system.weblogin.mac_unshaped ) " in
 			*" $mac "*)
 				return 0
 			;;
@@ -592,10 +592,10 @@ _netfilter_conntrack_adjust_max()	# see: http://wiki.khnet.info/index.php/Conntr
 	local buckets old_buckets old_max
 
 	# dont conntrack DNS/olsrd
-#	$IPT -t raw -I PREROUTING -p udp --dport 53 -j NOTRACK	# with this rule contacting external DNS over >1 hop does not work
-	$IPT -t raw -I OUTPUT     -p udp --dport 53 -j NOTRACK
-	$IPT -t raw -I PREROUTING -p udp --dport 698 -d 255.255.255.255 -j NOTRACK
-	$IPT -t raw -I OUTPUT     -p udp --dport 698 -d 255.255.255.255 -j NOTRACK
+#	$IPT -t raw -I PREROUTING -p udp --dport 53 -j CT --notrack	# with this rule contacting external DNS over >1 hop does not work
+	$IPT -t raw -I OUTPUT     -p udp --dport 53 -j CT --notrack
+	$IPT -t raw -I PREROUTING -p udp --dport 698 -d 255.255.255.255 -j CT --notrack
+	$IPT -t raw -I OUTPUT     -p udp --dport 698 -d 255.255.255.255 -j CT --notrack
 
 	# below still needs fixing
 	return 0
@@ -799,7 +799,7 @@ _netfilter_masquerade_start()
 
 	_log it $funcname daemon info "active for device $device ($devname)"
 
-	if bool_true 'system.@system[0].restrict_local'; then
+	if bool_true 'system.weblogin.restrict_local'; then
 		echo "$IPT -t nat -A POSTROUTING -o $device ! -d $WANNET/$WANPRE -j MASQUERADE" >"$statfile"
 		$IPT -t nat -A POSTROUTING -o $device ! -d $WANNET/$WANPRE -j MASQUERADE
 	else
@@ -1195,7 +1195,7 @@ _netfilter_user_reachable()	# output: string/devname e.g. 'wlan0-1'
 	fi
 
 	if   [ "$dev_guess" = "$LANDEV" ]; then
-		[ "$( uci -q get system.@weblogin[0].force_lan_reachable )" = '1' ] && {
+		[ "$( uci -q get system.weblogin.force_lan_reachable )" = '1' ] && {
 			echo "$LANDEV"
 			return 0
 		}
@@ -1403,7 +1403,7 @@ EOF
 		rmmod 2>/dev/null xt_state
 	}
 
-	bool_true 'system.@weblogin[0].hideandseek' && {
+	bool_true 'system.weblogin.hideandseek' && {
 		_vpn hideandseek_user_add "$ip"
 	}
 
@@ -1470,7 +1470,7 @@ _netfilter_user_del()
 	[ -d "/tmp/NETFILTER/USER/$mac" ] && {
 		read ip <"/tmp/NETFILTER/MAC2IP/$mac"
 
-		bool_true 'system.@weblogin[0].logtraffic' && {
+		bool_true 'system.weblogin.logtraffic' && {
 			comment="$reason $( _db user_macenabled_comment_get "$mac" )"
 			traffic="$( _netfilter stats "$mac" megabytes )"
 			message="mac: $mac ip: $ip traffic: $traffic mb comment: $comment"
@@ -1483,7 +1483,7 @@ _netfilter_user_del()
 
 		_netfilter traffic_control_user_del "$mac"
 
-		bool_true 'system.@weblogin[0].hideandseek' && {
+		bool_true 'system.weblogin.hideandseek' && {
 			_vpn hideandseek_user_del "$ip"
 		}
 
