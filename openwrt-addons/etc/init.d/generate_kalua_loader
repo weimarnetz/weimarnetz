@@ -17,7 +17,9 @@ boot()
 
     touch /tmp/BOOT
     touch /tmp/DEBUG
-    /etc/kalua_init
+    /etc/kalua_init 
 
+    . /tmp/loader
+    _watch flash_free_space
 }
 
