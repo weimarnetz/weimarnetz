@@ -1,4 +1,4 @@
-#!/bin/sh /etc/rc.common 
+#!/bin/sh /etc/rc.common
 
 START=12 
 
@@ -43,4 +43,3 @@ boot()
 		uci commit olsrd
 	}
 }
-
