@@ -1,10 +1,11 @@
-#!/bin/sh
-. /tmp/loader
+#!/bin/sh /etc/rc.common 
 
-if [ -n "$FAILSAFE" ] || [ -n "$READONLY" ] || [ ! -e "/www/SOFTWARE_FULLY_INSTALLED" ]; then exit; fi
+EXTRA_COMMANDS="call"
+START=43 
 
 build_network_clients ()
-{						# SENS: print IP-list of (potential) clients
+{
+    . /tmp/loader    # SENS: print IP-list of (potential) clients
 	local STARTIP="$1"			# ARG1: string, interface-IP (first useable address of network)
 	local   ENDIP="$2"			# ARG2: string, interface-broadcast-address
 	local     PRE="$3"			# ARG3: string, interface-netmask in CIDR-notation (e.g. /24)
@@ -72,6 +73,7 @@ build_network_clients ()
 
 _build_hosts ()				# SENS: modulary builds /etc/local.hosts
 {
+    . /tmp/loader
 	local FUNC="build_hosts"
 	local FILE="/etc/local.hosts"
 	local SUB_PATH="/tmp"
@@ -344,6 +346,7 @@ fkt_write_ethers ()			# writes /etc/ethers which is "mac-address hostname" per l
 
 fkt_restart_running_dnsserver ()
 {
+    . /tmp/loader
 	local FUNC="restart_running_dnsserver"
 	local PID="$( _system get_first_pid dnsmasq )"
 
@@ -371,59 +374,21 @@ fkt_build_clients_list ()	# these lists are used to to a fast 'grep $IP $FILE', 
 	cat /tmp/CLIENTS_WIFI /tmp/CLIENTS_LAN /tmp/CLIENTS_WAN	>/tmp/CLIENTS_ALL	# not used 
 }
 
+call() {
+	. /tmp/loader 
+	fkt_write_ethers remove
+	fkt_write_ethers wifi
+	fkt_write_ethers lan
+	fkt_build_clients_list
 
-uci -q get system.@system[0].hostname | grep -q ^node && {					# fixme! unneeded?
-	MAC="$( _sanitizer run "$( _net dev2mac $WIFIDEV )" hex )"	
-	_nvram set wan_hostname "wifimac$MAC"
+	_build_hosts lan
+	_build_hosts wifi
+	_build_hosts virtual
+	_build_hosts join
+	fkt_restart_running_dnsserver
 }
 
-case $1 in
-	build_network_clients)
-		fkt_build_clients_list
-	;;
-	call)
-		fkt_write_ethers remove
-		fkt_write_ethers wifi
-		fkt_write_ethers lan
-
-		fkt_build_clients_list
-
-		_build_hosts lan
-		_build_hosts wifi
-		_build_hosts virtual
-
-		case "$( uci -q get firewall.@adblock[0].enabled )" in
-			0|off|false) DROP=0 ;;
-			          *) [ "$( uci -q get system.@community[0].splash )" = "0" ]	&& DROP=0
-				     [ -e "/tmp/LOWMEM" ]		  			&& DROP=0 ;;
-		esac
-
-		DROPFILE="/etc/hosts.drop"
-		if [ "$DROP" = "0" ]; then
-			[ -e "$DROPFILE" ] && {
-				_log it "del_adblock" daemon debug "must be deactivated, removing '$DROPFILE'"
-				rm "$DROPFILE"
-			}
-		else
-			_stopwatch start adblock
-			_build_hosts drop
-			_stopwatch stop adblock quiet
-
-			if [ -e "$DROPFILE" ]; then
-				_log it "add_adblock" daemon debug "$( _file size "$DROPFILE" ) bytes in $( _file lines "$DROPFILE" ) entries"
-			else
-				_log it "add_adblock" daemon debug "was not possible, missing '$DROPFILE'"
-			fi
-		fi
-
-		_build_hosts join
-
-		fkt_restart_running_dnsserver
-	;;
-	start)
-		_scheduler add "$0 call"
-	;;
-	*)
-		echo "Usage: $0 (start|call|build_network_clients)"
-	;;
-esac
+start() {
+        if [ -n "$FAILSAFE" ] || [ -n "$READONLY" ] || [ ! -e "/www/SOFTWARE_FULLY_INSTALLED" ]; then exit; fi
+        . /tmp/loader && _scheduler add "S43ethers_fff+ call"
+}

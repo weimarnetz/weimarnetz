@@ -1,8 +1,10 @@
-#!/bin/sh
-. /tmp/loader
+#!/bin/sh /etc/rc.common 
+
+START=51 
 
 func_cron_daemon_start ()
 {
+    . /tmp/loader
 	local funcname="cron_daemon_start"
 
 	[ -e /etc/init.d/cron ] && {					# fixme!
@@ -26,6 +28,7 @@ func_cron_daemon_start ()
 
 cron_watchdog()
 {
+    . /tmp/loader
 	local func="cron_watchdog"
 	local mode="$1"		# start|stop
 
@@ -112,6 +115,7 @@ EOF
 
 func_cron_daemon_stop ()
 {
+    . /tmp/loader
 	local FUNC="cron_daemon_stop"
 	
 	pidof crond >/dev/null && {
@@ -125,12 +129,15 @@ func_cron_daemon_stop ()
 
 func_cron_start ()
 {
+    . /tmp/loader
 	func_cron_config_write $1
 	func_cron_daemon_start && cron_watchdog start
 }
 
 func_cron_stop ()
 {
+    . /tmp/loader
+
 	local option="$1"
 
 	[ "$option" = "leave_watchdog" ] || cron_watchdog stop
@@ -139,6 +146,7 @@ func_cron_stop ()
 
 func_cron_status ()
 {
+    . /tmp/loader
 	local FUNC="cron_status"
 	
 	pidof crond >/dev/null || {
@@ -152,6 +160,7 @@ func_cron_status ()
 
 func_cron_config_write ()
 {
+    . /tmp/loader
 	local FUNC="cron_config_write"
 	local CRONFILE="/etc/crontabs/root"
 	local CRONDIR="$( dirname $CRONFILE )"
