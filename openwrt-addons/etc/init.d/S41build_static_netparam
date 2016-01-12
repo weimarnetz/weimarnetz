@@ -2,6 +2,13 @@
 
 START=41
 
+EXTRA_COMMANDS="call"
+EXTRA_HELP=<<EOF
+        call same as start
+EOF
+
+
+
 call()
 {
 	start
