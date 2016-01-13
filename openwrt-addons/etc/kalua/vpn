@@ -98,12 +98,12 @@ _vpn_innercity_master_iface()
   local i=0
   local bytes packets uptime uptime_sec numbers
 
-  while ! mkdir "/tmp/lock-$funcname"; do {
-    i=$(( i + 1 ))
-    [ $i -gt 5 ] && _log it $funcname daemon info "locked: $action/$dev must wait for '$( cat "/tmp/lock-$funcname/info" )'"
-    sleep 1
-  } done
-  echo "action: $action dev: $dev" >"/tmp/lock-$funcname/info"
+#  while ! mkdir "/tmp/lock-$funcname"; do {
+#    i=$(( i + 1 ))
+#    [ $i -gt 5 ] && _log it $funcname daemon info "locked: $action/$dev must wait for '$( cat "/tmp/lock-$funcname/info" )'"
+#    sleep 1
+#  } done
+#  echo "action: $action dev: $dev" >"/tmp/lock-$funcname/info"
   _log it $funcname daemon info "[START] action: $action dev: $dev"
 
   local olsrd_config='/etc/olsrd.conf'
@@ -112,7 +112,7 @@ _vpn_innercity_master_iface()
   local limit=8   # throttling - FIXME! use olsr_throttle?
   local limit_burst=5
   local mask=30   # ip here + ip other side + net + broadcast = 4 = /30
-  local mtu=1450    # why? example-conf does it too
+  local mtu=1280    # why? example-conf does it too
         # see: http://sourceforge.net/p/vtun/mailman/message/27935441/
 
   if [ "$action" = 'up' ]; then
