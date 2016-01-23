@@ -1525,7 +1525,8 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 /etc/init.d/S70prepare_fff+ enable
 /etc/init.d/S43ethers_fff+ enable
 /etc/init.d/S41build_static_netparam enable
-/etc/init.d/zram enable
+# disable zram until https://github.com/weimarnetz/weimarnetz/issues/251 is solved
+/etc/init.d/zram disable
 /etc/init.d/S99vpn enable
 /etc/init.d/netfilter enable
 /etc/init.d/crashlog_apport enable
