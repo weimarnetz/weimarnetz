@@ -1520,6 +1520,8 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 /etc/init.d/generate_netparams enable
 /etc/init.d/end_boot enable
 /etc/init.d/prepare_stuff enable
+# disable zram until https://github.com/weimarnetz/weimarnetz/issues/251 is resolved
+/etc/init.d/zram disable 
 
 /etc/init.d/cron.user enable
 /etc/init.d/cron disable
