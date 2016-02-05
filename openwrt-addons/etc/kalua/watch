@@ -94,11 +94,11 @@ _watch_vpn()
 
 		vpn_server_is_neigh()
 		{
-			local file='/tmp/OLSR/ALL'
+			local file='/tmp/OLSR/LINKS'
 			local ip_other_side="$( _sanitizer run "$ip_server" escape_dots )"
 
-			_log it $func daemon info "checking $file for ip: $ip_server"
-			sed -n '/Table: Links/,/Table: Neighbors/p' "$file" | grep -q "$ip_other_side"
+			_log it $func daemon debug "checking '$file' for ip: $ip_server"
+			grep -q "$ip_other_side" "$file"
 		}
 
 		if vpn_server_is_neigh; then
