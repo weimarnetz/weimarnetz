@@ -1,4 +1,6 @@
 #!/bin/sh
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
+
 command . /tmp/loader || exit 0		# TODO: rebuild loader + enable cron?
 
 MODE="${1:-unset}"
@@ -27,7 +29,7 @@ case "${DEV%-1}" in
 		[ "$MAC" = '00:00:00:00:00:00' ] && MODE='cron-watchdog'
 	;;
 	'by-mybridge'|'gateway0') TYPE='batman' ;;	# just for better logging
-	       *) TYPE="unknown" ;;
+		   *) TYPE="unknown" ;;
 esac
 
 if [ "$MODE" = "old" ]; then
@@ -88,7 +90,7 @@ case "$MODE" in
 	;;
 	del)
 #		if bool_true 'system.weblogin.dhcpautologout'; then
-			echo >>$SCHEDULER "_netfilter user_del $MAC dhcp_del"
+#			echo >>$SCHEDULER "_netfilter user_del $MAC dhcp_del"
 #		else
 #			_netfilter set_arp reachable "$MAC" "$IP" "$DEV"
 #		fi
