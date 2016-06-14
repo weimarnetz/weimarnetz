@@ -1,4 +1,5 @@
 #!/bin/sh
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
 
 # marks:
 # 0x11 = port80, redirect to local port 80
@@ -103,7 +104,7 @@ _netfilter_traffic_control_show()
 
 					read mac <"/tmp/NETFILTER/IP2MAC/$ip"
 					echo -n "${tab}${tab}${tab}# remove via: _"
-					echo    "netfilter traffic_control_user_del $mac"
+					echo	"netfilter traffic_control_user_del $mac"
 				;;
 				*)
 					echo "${tab}${tab}$line"
@@ -444,7 +445,7 @@ _netfilter_traffic_control_user_change_speed()		# <mac> <ip>
 			;;
 			*"%")
 				new_speed_down=$(( ( $speed_down * ${speed_change} ) / 100 ))
-				new_speed_up=$((   ( $speed_up   * ${speed_change} ) / 100 ))
+				new_speed_up=$((   ( $speed_up	 * ${speed_change} ) / 100 ))
 			;;
 			initial)
 				params="$mac $ip $interface $classid_download $classid_upload $speed_down $speed_up"
@@ -593,9 +594,9 @@ _netfilter_conntrack_adjust_max()	# see: http://wiki.khnet.info/index.php/Conntr
 
 	# dont conntrack DNS/olsrd
 #	$IPT -t raw -I PREROUTING -p udp --dport 53 -j CT --notrack	# with this rule contacting external DNS over >1 hop does not work
-	$IPT -t raw -I OUTPUT     -p udp --dport 53 -j CT --notrack
+	$IPT -t raw -I OUTPUT	  -p udp --dport 53 -j CT --notrack
 	$IPT -t raw -I PREROUTING -p udp --dport 698 -d 255.255.255.255 -j CT --notrack
-	$IPT -t raw -I OUTPUT     -p udp --dport 698 -d 255.255.255.255 -j CT --notrack
+	$IPT -t raw -I OUTPUT	  -p udp --dport 698 -d 255.255.255.255 -j CT --notrack
 
 	# below still needs fixing
 	return 0
@@ -894,12 +895,12 @@ _netfilter_splash_start()
 #$debug	$IPT -t mangle -A PREROUTING -p tcp --dport 53 ! -d $myhna -j LOG --log-prefix "MANGLE.DNSq-TCP: "
 	$IPT -t mangle -A PREROUTING -p tcp --dport 53 ! -d $myhna -j MARK --set-mark 0x16	# redirect DNS - dig @8.8.8.8 +tcp google.com
 #$debug	$IPT -t mangle -A PREROUTING -p tcp --dport 80	       -j LOG --log-prefix "MANGLE.splash.HTTP: "
-	$IPT -t mangle -A PREROUTING -p tcp --dport 80 	       -j MARK --set-mark 0x11	# redirect HTTP
+	$IPT -t mangle -A PREROUTING -p tcp --dport 80	       -j MARK --set-mark 0x11	# redirect HTTP
 
 	_netfilter is_meshnode && {
 		$IPT -A FORWARD ! -i $WIFIDEV ! -o $WIFIDEV		# wire -> wire
-		$IPT -A FORWARD ! -i $WIFIDEV   -o $WIFIDEV		# wire -> wifi
-		$IPT -A FORWARD   -i $WIFIDEV   -o $WIFIDEV		# wifi -> wifi
+		$IPT -A FORWARD ! -i $WIFIDEV	-o $WIFIDEV		# wire -> wifi
+		$IPT -A FORWARD   -i $WIFIDEV	-o $WIFIDEV		# wifi -> wifi
 	}
 
 	grep -q ^'ipt_REJECT ' /proc/modules || insmod ipt_REJECT	# fixme! remove later when new cron.patch_patch_kmodules.sh is active
@@ -1058,8 +1059,8 @@ _netfilter_walledgarden_list()
 		141.54.160.48/32	m18.uni-weimar.de
 		87.118.106.19/32	www.weimarnetz.de
 		77.87.48.19/32		www.weimarnetz.de_newserver
-        176.28.11.93        freifunk.net
-        217.197.80.242      wiki.freifunk.net
+	176.28.11.93	    freifunk.net
+	217.197.80.242	    wiki.freifunk.net
 		188.40.166.25		wireless.subsignal.org
 		"
 
@@ -1379,7 +1380,8 @@ EOF
 		'br-mybridge'|'gateway0')
 		;;
 		*)
-			_netfilter set_arp permanent "$mac" "$ip" "$dev"
+		# FIXME! works only with new sheduler
+		#	_netfilter set_arp permanent "$mac" "$ip" "$dev"
 		;;
 	esac
 
@@ -1387,14 +1389,14 @@ EOF
 	$IPT -t mangle -N outgoing_$mac
 	$IPT -t mangle -N incoming_$mac
 
-	$IPT -t mangle -A FORWARD -d $ip                            -j incoming_$mac
+	$IPT -t mangle -A FORWARD -d $ip			    -j incoming_$mac
 	$IPT -t mangle -A FORWARD -s $ip -m mac ! --mac-source $mac -j incoming_$mac
-	$IPT -t mangle -A FORWARD        -m mac   --mac-source $mac -j outgoing_$mac
+	$IPT -t mangle -A FORWARD	 -m mac   --mac-source $mac -j outgoing_$mac
 
 	cat >>"/tmp/NETFILTER/USER/$mac/user_del" <<EOF
-$IPT -t mangle -D FORWARD        -m mac   --mac-source $mac -j outgoing_$mac
+$IPT -t mangle -D FORWARD	 -m mac   --mac-source $mac -j outgoing_$mac
 $IPT -t mangle -D FORWARD -s $ip -m mac ! --mac-source $mac -j incoming_$mac
-$IPT -t mangle -D FORWARD -d $ip                            -j incoming_$mac
+$IPT -t mangle -D FORWARD -d $ip			    -j incoming_$mac
 $IPT -t mangle -X incoming_$mac
 $IPT -t mangle -X outgoing_$mac
 EOF
@@ -1426,7 +1428,7 @@ _netfilter_set_arp()
 		;;
 	esac
 
-	ip neigh add    $ip dev $dev lladdr $mac nud $nudmode 2>/dev/null
+	ip neigh add	$ip dev $dev lladdr $mac nud $nudmode 2>/dev/null
 	ip neigh change $ip dev $dev lladdr $mac nud $nudmode 2>/dev/null
 
 	return 0
