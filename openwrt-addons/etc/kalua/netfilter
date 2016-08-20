@@ -1065,7 +1065,7 @@ _netfilter_walledgarden_list()
 		"
 
 	# include installation-specific entries:
-	_weblogin metadata_locationname default walled_garden
+	# _weblogin metadata_locationname default walled_garden
 
 	echo "$list"
 }
@@ -1145,31 +1145,6 @@ _netfilter_user_list()
 			ls -1 "$dir" 2>/dev/null
 		;;
 	esac
-}
-
-_netfilter_user_stats_collect()		# this runs every minute, so speedcode!
-{
-	local bytes_incoming=0
-	local mac line bytes_outgoing uptime rest
-	read uptime rest <"/proc/uptime"; uptime="${uptime%.*}"
-
-	$IPT -t mangle -nxvL FORWARD |
-	 while read line; do {
-		case "$line" in
-			*'incoming_'*)
-				set -- $line
-				bytes_incoming=$(( $bytes_incoming + $2 ))
-				mac="${3#*_}"
-			;;
-			*"outgoing_"*)
-				set -- $line
-				bytes_outgoing="$2"
-
-				echo "$uptime $bytes_incoming $bytes_outgoing" >>"/tmp/NETFILTER/USER/${mac:-empty_mac}/stats"
-				bytes_incoming=0
-			;;
-		esac
-	} done
 }
 
 _netfilter_user_reachable()	# output: string/devname e.g. 'wlan0-1'
@@ -1472,10 +1447,6 @@ _netfilter_user_del()
 			traffic="$( _netfilter stats "$mac" megabytes )"
 			message="mac: $mac ip: $ip traffic: $traffic mb comment: $comment"
 			_log it $funcname daemon alert "$message"
-
-			[ $traffic -gt 1000 ] && {
-				_weblogin authserver_message "$funcname() $message"
-			}
 		}
 
 		_netfilter traffic_control_user_del "$mac"
@@ -1505,113 +1476,3 @@ _netfilter_user_shaping_del()
 	local mac="$1"
 }
 
-_netfilter_user_stats_process()
-{
-	local funcname='netfilter_user_stats_process'
-	local server_ip url server_response mac line hash message= count=0
-	local user_list="$( _netfilter user_list )"
-	local ip unixtime_server unixtime_now datestring
-
-	_netfilter user_stats_collect
-
-	for mac in $user_list; do {
-		[ -e "/tmp/NETFILTER/USER/$mac/stats" ] || continue
-
-		local uptime_old= uptime uptime_diff time_used=0
-		local bytes_incoming_old= bytes_incoming bytes_incoming_sum=0 bytes_incoming_diff
-		local bytes_outgoing_old= bytes_outgoing bytes_outgoing_sum=0 bytes_outgoing_diff
-
-		[ -e "/tmp/NETFILTER/USER/$mac/stats" ] || {
-			bytes_incoming_old=0
-			bytes_outgoing_old=0
-		}
-
-		while read line; do {
-			set $line
-			uptime="$1"
-			bytes_incoming="$2"
-			bytes_outgoing="$3"
-
-			uptime_diff=$(( $uptime - ${uptime_old:-$uptime} ))
-			uptime_old="$uptime"
-
-			bytes_incoming_diff=$(( $bytes_incoming - ${bytes_incoming_old:-$bytes_incoming} ))
-			bytes_incoming_old="$bytes_incoming"
-			bytes_incoming_sum=$(( $bytes_incoming_sum + $bytes_incoming_diff ))
-
-			bytes_outgoing_diff=$(( $bytes_outgoing - ${bytes_outgoing_old:-$bytes_outgoing} ))
-			bytes_outgoing_old="$bytes_outgoing"
-			bytes_outgoing_sum=$(( $bytes_outgoing_sum + $bytes_outgoing_diff ))
-
-			[ $bytes_incoming_diff -gt 0 -o $bytes_outgoing_diff -gt 0 ] && {
-				time_used=$(( $time_used + $uptime_diff ))
-			}
-
-		} done <"/tmp/NETFILTER/USER/$mac/stats"
-
-		# CMA = client mac address
-		# CIA = client ip address
-		# CTU = client time used
-		# CBI = client bytes incoming ("downloaded")
-		# CBO = client bytes outgoing ("uploaded")
-		# CAH = client authentication hash
-
-		read ip </tmp/NETFILTER/MAC2IP/$mac
-		[ $(( $bytes_incoming_sum + $bytes_outgoing_sum )) -eq 0 ] && {
-#			_netfilter user_reachable "$mac" "$ip" >/dev/null || _netfilter user_del "$mac" 'no_traffic'
-
-			continue	# dont generate any message for this user
-		}
-
-		if [ -e "/tmp/vds_user_$mac" ]; then
-			read hash <"/tmp/vds_user_$mac"
-		else
-			hash=
-		fi
-
-		count=$(( $count + 1 ))
-		mac="${mac//:/%3a}"		# urlencode
-		message="${message}${message:+&}CMA_${count}=${mac}&CIA=${ip}&CTU_${count}=${time_used}&CBI_${count}=${bytes_incoming_sum}&CBO_${count}=${bytes_outgoing_sum}&CAH_${count}=${hash}"
-	} done
-
-	server_ip="$( _weblogin authserver )"
-
-	case "$server_ip" in
-		$LOADR|$WIFIADR|$LANADR|$WANADR)
-			echo "UPTIME=${uptime}&REMOTE_ADDR=${WIFIADR}&${message}" >>"/tmp/COLLECT_DATA"
-			server_response="OK"
-		;;
-		*)
-			url="http://$server_ip/cgi-bin-collect.sh?${message}"
-			server_response="$( _curl it "$url" 20 )"
-		;;
-	esac
-
-	case "$server_response" in
-		OK*|*:*)
-			for mac in $user_list; do {
-				mv "/tmp/NETFILTER/USER/$mac/stats" "/tmp/NETFILTER/USER/$mac/stats.lastsend"
-			} done
-
-			for mac in $server_response; do {
-				case "$mac" in
-					*:*)
-						# add allowed macs from server to this station
-						[ -e "/tmp/vds_user_$mac" ] || touch "/tmp/vds_user_$mac"
-					;;
-					'OK-UNIXTIME='*)
-						unixtime_server="$( echo "$mac" | cut -d'=' -f2 )"
-						unixtime_now="$( date +%s )"
-
-						[ $(( $unixtime_now - $unixtime_server )) -gt 600 -o \
-						  $(( $unixtime_server - $unixtime_now )) -gt 600 ] && {
-							_log it $funcname daemon info "timeset to $unixtime_server - was: $unixtime_now"
-							datestring="$( date -d @$unixtime_server "+%Y-%m-%d %H:%M:%S" )"
-							date --set "$datestring"
-						}
-					;;
-				esac
-			} done
-		;;
-	esac
-}
