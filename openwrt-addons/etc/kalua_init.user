@@ -46,9 +46,6 @@ mkdir -p "$PERMDIR" 2>/dev/null || {
 	logger -s -- "$0: fallback \$PERMDIR to '$PERMDIR'"
 }
 
-# e.g. FFF_PLUS_VERSION
-[ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
-
 	cat <<EOF
 
 # from $0.user @ $(date)
