@@ -1,106 +1,258 @@
 #!/bin/sh
-if /sbin/uci -q get system.@system[0].hostname >/dev/null; then	# test something essential
-	read UP REST </proc/uptime
+#if /sbin/uci get system.@system[0].hostname >/dev/console; then	# test something essential
+if true; then								# will be activated during cron-startup
+	read -r UP REST </proc/uptime
+	read -r LOAD REST </proc/loadavg
 else
-	UP=999999
+	UP=999999999
 fi
 
-[ ${UP%.*} -gt 129600 ] && {	# 36h
-	rm "/tmp/CRON_IS_CAREFUL"
-	( echo "ALERT: overup - up: $UP" >>/www/everlasting_syslog.txt; sync ) &
-	/bin/sleep 5
+[ ${UP%.*} -gt 169200 -o -z "$UP" ] && {	# 1.5 days
+	. /tmp/loader
 
-	echo "c" >/proc/sysrq-trigger
-	/sbin/reboot
+	if [ "$UP" = '999999999' ]; then
+		_system crashreboot 'procfs_broken'
+	else
+		bool_true 'system.@system[0].avoid_autoreboot' || _system crashreboot 'over_uptime'
+	fi
 }
 
+# mimics the stopwatch() API
+echo "${UP%.*}${UP#*.}" >'/tmp/CRON_LASTCALL'
+
+[ -e '/tmp/LOAD_SIMULATE' ] && {
+	read -r LOAD <'/tmp/LOAD_SIMULATE'		# e.g. '0.50' or '0.50 keep'
+	case "$LOAD" in
+		*' keep')
+			LOAD="${LOAD% *}"
+		;;
+	esac
+
+	rm '/tmp/LOAD_SIMULATE'
+}
+
+# TODO:
+# scheduler_run() should detect, if sec 00 is coming/near
+# and sleep until there is a ready-signal from this script for preventing concurrence
+
 if [ -e "/tmp/CRON_PSWORK" ]; then
-	( echo "ALERT: pswork - up: $UP" >>/www/everlasting_syslog.txt; sync ) &
+	  echo "REBOOT: pswork - up: $UP"  >/dev/console
+	( echo "REBOOT: pswork - up: $UP" >>$PERMLOG; sync ) &
 	/bin/sleep 5
 
-	echo "c" >/proc/sysrq-trigger
+	# FIXME! crashreboot?
+	echo 'c' >/proc/sysrq-trigger
 	/sbin/reboot -f
 else
-	ps >"/tmp/CRON_PSWORK"		# test something essential
+	case "$LOAD" in
+		0.*)
+			ps >"/tmp/CRON_PSWORK"		# test something essential
+		;;
+#		*)
+#			case "$REST" in
+#				*'1/3'*|*'2/3'*)	# from loadavg: normal is ~33...39 tasks with 1 or 2 running tasks
+#				;;
+#				*)
+#					touch '/tmp/CRON_PSWORK'
+#					ps >/dev/console
+#				;;
+#			esac
+#		;;
+	esac
 fi
 
-read LOAD REST </proc/loadavg
+pidof()
+{
+	local task="$1"
+	local rc=0
+
+#	echo "$( date +%s ) pidof: $task mypid: $$ me: $0 funcname: $funcname" >>/tmp/PIDOF
+
+	if [ -e '/tmp/PIDOF' ]; then
+		# FIXME! while true; check; sleep 1;done
+		# be a little bit variant
+		sleep ${#task}
+
+		if [ -e '/tmp/PIDOF' ]; then
+			. /tmp/loader
+			_system crashreboot 'pidof_hangs'
+		else
+			touch '/tmp/PIDOF'
+			/bin/pidof "$task" || rc=$?
+			rm '/tmp/PIDOF'
+		fi
+	else
+		touch '/tmp/PIDOF'
+		/bin/pidof "$task" || rc=$?
+		rm '/tmp/PIDOF'
+	fi
+
+	return $rc
+}
+
 # uncomment to collect 1) date 2) lockstatus 3) network-traffic and 4) freemem/uptime/load 5) taskcount and 6) dump into '/tmp/CRONSTATUS'
 #1# REST="$( date ) "
 #2# [ -e /tmp/CRON_LOCK ] && REST="$REST [LOCKED] "
-#3# while read L;do case $L in *wlan*)set $L;REST="$REST $1 rx:$2/$3 tx:${10}/${11} ";;esac;done</proc/net/dev
-#4# while read L;do case $L in MemFree:*)set $L;M=$2;;Buffers:*)set $L;REST="$REST mem:$((($M+$2)*1024)) up:$UP load:$LOAD";break;esac;done</proc/meminfo
+#3# while read -r L;do case $L in *wlan*)set $L;REST="$REST $1 rx:$2/$3 tx:${10}/${11} ";;esac;done</proc/net/dev
+#4# while read -r L;do case $L in MemFree:*)set $L;M=$2;;Buffers:*)set $L;REST="$REST mem:$(((M+$2)*1024)) up:$UP load:$LOAD";break;esac;done</proc/meminfo
 #5# REST="$REST tasks: $( wc -l </tmp/CRON_PSWORK )"
 #6# echo "$REST" >>/tmp/CRONSTATUS
 #7# see /etc/kalua/scheduler: scheduler_add() and uncomment the last line in function
 #8# see /usr/bin/scheduler: uncomment line on top
+echo "up: $UP load: $LOAD rest: $REST" >/dev/console
+# echo "up: $UP load: $LOAD rest: $REST" >>/tmp/CRONSTATUS
 
-rm "/tmp/CRON_PSWORK"
+# we only generate this during low-load and this test is cheaper than file-i/o
+case "$LOAD" in
+	0.*)
+		rm "/tmp/CRON_PSWORK"
+	;;
+esac
 
+### PINGCHECK ###
+. /usr/sbin/cron.taskplanner.default
 ### PING_MONITORING_SERVER ###
+
+case "$LOAD" in
+	0.*)
+		if cat '/proc/cmdline' >'/tmp/ramdisc_testwrite'; then
+			rm '/tmp/ramdisc_testwrite'
+		else
+
+			. /tmp/loader
+			_watch space_tmpfs
+		fi
+
+### CALL_APPLYPROFILE ###
+### CALL_ZRAMCHECK ###
+### CALL_ZRAMREBOOT ###
+### GENERATE_AP_STATION_STATS ###
+### CALL_WIFICHECK ###
+### CALL_IRQ ###
 ### CALL_RRD ###
 ### CALL_WEBCAM ###
 ### WAIT_FOR_APPLY_PROFILE ###
 ### NOCRON_DURING_CLIENT_ACTION ###
+### CHECK_AUDIOPLAYER ###
+### CHECK_OLSR_RATE_LAN ###
+### FORCE_WIFIRATE ###
+	;;
+esac
 
 case "$LOAD" in
 	1.00)
-		[ -e "/bin/dmesg" ] && . /usr/sbin/cron.check_klog
+		. /usr/sbin/cron.check_klog
 
 		if [ -e "/tmp/CRON_OVERLOAD" ]; then
-			read I <"/tmp/CRON_OVERLOAD"
+			read -r I <"/tmp/CRON_OVERLOAD"
 		else
 			I=
 		fi
 
 		case "$I" in
-			""|"#"*)
+			''|'#'*)
 				. /tmp/loader
-				_watch topusage_task
-				rm "/tmp/CRON_OVERLOAD"
+				_watch topusage_task "cron.minutely: load = $LOAD"
+				_watch monitoring
+				rm '/tmp/CRON_OVERLOAD'
+				[ -e '/tmp/CRON.wifidown' ] && {
+					_wifi phy_restart "$WIFIDEV" force
+				}
 			;;
 		esac
 	;;
-	1.*|0.9*|0.8*)
-		[ -e "/tmp/CRON_OVERLOAD" ] && {
-			read I <"/tmp/CRON_OVERLOAD"
+	0.9*|0.8*)
+		. /tmp/loader
+		. /usr/sbin/cron.check_klog
+		_watch monitoring
+
+		[ -e '/tmp/CRON_OVERLOAD' ] && {
+			read -r I <'/tmp/CRON_OVERLOAD'
 			case "$I" in
 				"#"*)
-					rm "/tmp/CRON_OVERLOAD"
+					rm '/tmp/CRON_OVERLOAD'
+					echo "ALERT: $( date ) loady_after_overload - load: $LOAD - I: $I - up: $UP" >>/dev/console
+					[ -e '/tmp/CRON.wifidown' ] && {
+						_wifi phy_restart "$WIFIDEV" force
+					}
 				;;
 			esac
 		}
 	;;
 	0*)
-		[ -e "/bin/dmesg" ] && . /usr/sbin/cron.check_klog
+### CALL_UBUSCHECKER ###
+		. /usr/sbin/cron.check_klog
+
 		[ -e "/tmp/CRON_OVERLOAD" ] && {
-			read I <"/tmp/CRON_OVERLOAD"
+			read -r I <"/tmp/CRON_OVERLOAD"
 			case "$I" in
 				"#"*)
 					rm "/tmp/CRON_OVERLOAD"
+					[ -e '/tmp/CRON.wifidown' ] && {
+						. /tmp/loader
+						_wifi phy_restart "$WIFIDEV" force
+					}
 				;;
 			esac
 		}
 
-		if [ -e /tmp/CRON_LOCK ]; then
+		if [ -e "/tmp/CRON_LOCK" ]; then
+			. /tmp/loader
+
+			# on 'locked' state, check at least some essential services
+			# otherwise this is done in taskplanner
+			[ -e "$TMPDIR/service_olsrd_nowatching" ] || {
+				pidof olsrd >/dev/null || {
+					_olsr daemon start 'no running daemon'
+				}
+			}
+			pidof uhttpd  >/dev/null || _watch webserver
+			pidof dnsmasq >/dev/null || _watch dns_resolution
+
 			case "$LOAD" in
 				0.00|0.01|0.02)
-					echo -n '#' >>"/tmp/CRON_UNDERLOAD"
-					read I <"/tmp/CRON_UNDERLOAD"
-					[ ${#I} -gt 30 ] && {
-						rm "/tmp/CRON_IS_CAREFUL"
+					echo -n '#' >>'/tmp/CRON_UNDERLOAD'
+					read -r I <'/tmp/CRON_UNDERLOAD'
+					[ ${#I} -gt 90 ] && {
+						bool_true 'system.@system[0].avoid_autoreboot' || _system crashreboot 'underload'
 
-						( echo "ALERT: $( date ) underload - load: $LOAD - I: $I - up: $UP" >>/www/everlasting_syslog.txt; ps >>/www/everlasting_syslog.txt; sync ) &
-						/bin/sleep 5
-
-						echo "c" >/proc/sysrq-trigger
-						/sbin/reboot -f
+						rm '/tmp/CRON_UNDERLOAD'
+						echo '0.40' >'/tmp/LOAD_SIMULATE'
 					}
 
-					. /tmp/loader
-					for PRG in mv scp nc wget; do {
-						pidof $PRG && _watch hanging_command $PRG
-					} done
+					_watch hanging_command 'usual_suspects'
+				;;
+				0.*)
+					[ -e "/tmp/CRON_UNDERLOAD" ] && rm "/tmp/CRON_UNDERLOAD"
+
+					# still exists?
+					[ -e '/tmp/CRON_LOCK' ] && {
+						[ $( _stopwatch stop '/tmp/CRON_LOCK' interim,nolog,seconds ) -gt 3600 ] && {
+							APPEND="load: $LOAD last task:"
+							APPEND="$APPEND $( tail -n1 '/tmp/scheduler.log' || echo 'no /tmp/scheduler.log' )"
+							APPEND="$APPEND - file '/tmp/scheduler.log':"
+							APPEND="$APPEND $( _file size '/tmp/scheduler.log' || echo 'n/a' )"
+							APPEND="$APPEND - file '/tmp/CRON_LOCK':"
+							APPEND="$APPEND $( _file size '/tmp/CRON_LOCK' || echo 'n/a' )"
+
+							[ -e '/tmp/scheduler.log.debug' ] && {
+								mv '/tmp/scheduler.log.debug' "/tmp/scheduler.log.debug.$$"
+								APPEND="$APPEND, debug: '/tmp/scheduler.log.debug.$$'"
+							}
+
+							if _watch coredump 'during: cron.minutely' ; then
+								_log it old_lockfile daemon alert "removing after coredump, $APPEND"
+							else
+								ps >>"$PERMLOG"
+								_log it old_lockfile daemon alert "removing, coredump not found, $APPEND"
+							fi
+
+							# TODO:
+							# normally we must also remove '/tmp/scheduler.log',
+							# otherwise the whole joblist will be executed again
+							rm '/tmp/CRON_LOCK'
+						}
+					}
 				;;
 			esac
 		else
@@ -108,71 +260,82 @@ case "$LOAD" in
 
 			case "$( pidof dropbear )" in						# REM
 				*" "*)								# REM
+					logger -s "cron.minutely: LOAD: $LOAD - no action"	# REM
 				;;								# REM
 				*)								# REM
-					trap "rm /tmp/CRON_LOCK; exit" INT TERM EXIT
-					>/tmp/CRON_LOCK
+					# mimics the stopwatch() API
+					echo "${UP%.*}${UP#*.}" >'/tmp/CRON_LOCK'
 
-					/usr/bin/scheduler -U -S newstyle -O -P -f -H -w
 					. /tmp/loader
 					_scheduler run
 
-					rm /tmp/CRON_LOCK
-					trap - INT TERM EXIT
+					rm '/tmp/CRON_LOCK'
 				;;								# REM
 			esac									# REM
 		fi
 	;;
 	*)
+		. /tmp/loader
+
 		if [ -e "/tmp/CRON_OVERLOAD" ]; then
-			read I <"/tmp/CRON_OVERLOAD"
+			read -r I <"/tmp/CRON_OVERLOAD"
 		else
 			echo -n '#' >>"/tmp/CRON_OVERLOAD"
 			I="#"
 		fi
 
-		# dont complain the first 30 mins
-		[ ${UP%.*} -lt 1800 ] && I=
+		# do not complain the first 30 mins
+		if [ ${UP%.*} -lt 1800 ]; then
+			I=
+		else
+			bool_true 'system.@monitoring[0].ignore_load' && {
+				_net inet_seems_stable		# change SSID if needed
+				I=
+			}
+		fi
 
 		case "$I" in
-			"#"*)
-				echo -n '#' >>"/tmp/CRON_OVERLOAD"
+			'#'*)
+				printf '#' >>'/tmp/CRON_OVERLOAD'
 
 				case ${#I} in
-					0|1|2|3)
+					0|1|2|3|4)
 					;;
-					4|5|6|7)
-						killall dropbear	# maybe a script attack
+					5)
+						[ -e '/tmp/cron.webcam' ] || {
+							# maybe a login-script attack
+							killall dropbear && echo "ALERT: overload_$I - $LOAD - up: $UP - killed dropbear" >/dev/console
+						}
 
-						. /tmp/loader
+						[ -e '/tmp/CRON.wifidown' ] && rm '/tmp/CRON.wifidown'
+					;;
+					6|7|8|9|10|1*|2*)
 						_watch space_tmpfs
-						_watch topusage_task
-						[ -n "$LOWMEM" ] && echo "#" >"/tmp/CRON_OVERLOAD"
+						_watch topusage_task "cron.minutely: load = $LOAD I=$I"
+						[ -n "$LOWMEM" ] && echo '#' >"/tmp/CRON_OVERLOAD"
 
-						echo "ALERT: overload - killed dropbear" >>/www/everlasting_syslog.txt
+						echo "ALERT: overload_$I - $LOAD - up: $UP" >>$PERMLOG
+						[ ${#I} -eq 7 ] && top -b -n1 >>$PERMLOG
+					;;
+					30)
+						echo "ALERT: overload_$I - $LOAD - up: $UP - wifi_down" >/dev/console
+						wifi down
+						touch '/tmp/CRON.wifidown'
+					;;
+					3*)
 					;;
 					*)
-						rm "/tmp/CRON_IS_CAREFUL"
+						bool_true 'system.@system[0].avoid_autoreboot' || _system crashreboot 'overload'
 
-						( echo "ALERT: overload - $LOAD - up: $UP" >>/www/everlasting_syslog.txt; sync ) &
-						/bin/sleep 5
-
-						echo "c" >/proc/sysrq-trigger
-						/sbin/reboot -f
+						rm '/tmp/CRON_OVERLOAD'
+						echo '0.40' >'/tmp/LOAD_SIMULATE'
 					;;
 				esac
 			;;
 		esac
+
+		_watch monitoring
 	;;
 esac
 
-[ -e /tmp/service_olsrd_nowatching ] || {
-	[ ${UP%.*} -gt 600 ] && {
-		pidof olsrd >/dev/null || {
-			sleep 90
-			pidof olsrd >/dev/null || {
-				reboot
-			}
-		}
-	}
-}
+# read -r UP2 REST </proc/uptime; REST=$(( ${UP2%.*} - ${UP%.*} )); test $REST -gt 58 && echo "ALERT: $( date ) longexec: $REST sec, up: $UP load: $LOAD" >>$PERMLOG

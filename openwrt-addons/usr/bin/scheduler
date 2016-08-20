@@ -1,468 +1,78 @@
 #!/bin/sh
 . /tmp/loader
 
+# FIXME! remove this file, it _was_ called from S51cron with 'lazy' and 'minimal'
+
 [ -e "/tmp/LOCKFILE_APPLY" ] && {
 	_log it apply_profile daemon info "[OK] no scheduler action"
 	exit 0
 }
 
-
 ERR=1
-while getopts "S:a:A:wrlpfOPHU" FLAG; do {
-
+while getopts "S:a:A:rlpfOPHU" FLAG; do {
 	ERR=0
 
-	case $FLAG in
-		U)
-			if   [ -e "/tmp/START_SYSUPGRADE" ]; then
-				_scheduler queue_list is_empty >/dev/null && {
-					DO_UPGRADE="true"
-				}
-			elif [ -e "/www/START_SYSUPGRADE" ]; then
-				DO_UPGRADE="true"
-			fi
-
-			[ "$DO_UPGRADE" = "true" ] && {
-				rm "/www/START_SYSUPGRADE" "/tmp/START_SYSUPGRADE"
-
-				_firmware configure_keep_files
-
-				FILE="/tmp/fw"
-
-				[ -e "/www/fw" ] || {
-					[ $( _system ram_size ) -gt 16384 ] && {
-						# ssh nexthop
-						# copy fw to /tmp/fw
-						# md5sum /tmp/fw
-						# ln -s /tmp/fw /www/fw
-						# ssh thisrouter
-						# _firmware wget /tmp/fw http://nexthop/fw $md5sum
-						_firmware wget "$FILE"
-
-						if [ $( _file size "$FILE" kb ) -lt $( _system flash_free ) ]; then
-							mv "$FILE" "/www/fw"
-						else
-							_log it prepare_fwupdate daemon info "image-on-flash failed, fallback to ram-mode"
-						fi
-					}
-				}
-
-				[ -e "/www/fw" ] && {
-					# patching early startup for:
-					# - not loading any kernel-modules if "/www/fw" exists
-					# - disable any wireless action
-					# - moving "/www/fw" to "/tmp/fw"
-					# - sysupgrade this firmware file
-
-					if fgrep -q "# another round of" "/etc/init.d/boot"; then
-						sed  -i -e 's/^.*\.failsafe$/&\ntest -e \/www\/fw || {/' \
-							-e 's/^.*rm -f \/tmp\/wireless.tmp$/&\n}/' \
-							-e 's/# another round of/test -e \/www\/fw \&\& {\n. \/tmp\/loader\nuci set wireless.radio0.disabled=1\n\/bin\/mv \/www\/fw \/tmp\/fw\n_firmware burn \/tmp\/fw\nuci revert wireless.radio0.disabled\n}\n\n&/' \
-								"/etc/init.d/boot" && reboot
-					else
-						sed  -i -e 's/^.*\.failsafe$/&\ntest -e \/www\/fw || {/' \
-							-e 's/^.*rm -f \/tmp\/wireless.tmp$/&\n}/' \
-							-e 's/^.*\/dev\/root$/&\n}\ntest -e \/www\/fw \&\& {\n. \/tmp\/loader\nuci set wireless.radio0.disabled=1\n\/bin\/mv \/www\/fw \/tmp\/fw\n_firmware burn \/tmp\/fw\nuci revert wireless.radio0.disabled\n}\nbla()\n{\n:/' \
-								"/etc/init.d/boot" && reboot
-					fi
-				}
-
-				[ -e "$FILE" ] || {
-					_firmware wget_prepare_for_lowmem_devices && {
-						LOWMEM="true"
-					}
-
-					_firmware wget "$FILE" || {	# or add manually: FILE | URL | HASH
-						rm "$FILE"
-					}
-				}
-
-				if [ -e "$FILE" ]; then
-					_firmware burn $FILE
-				else
-					[ "$LOWMEM" = "true" ] && {
-						_log it wget_firmware daemon alert "download failed on lowmem-device, rebooting"
-						reboot -f
-					}
-				fi
-
-				pidof crond >/dev/null || {
-					_log it cron_died daemon alert "empty pid"
-					reboot -f
-				}
-
-				[ -e "/tmp/LOCKFILE_APPLY" ] && rm "/tmp/LOCKFILE_APPLY"        # unblock scheduler
-
-				exit 0
-			}
-		;;
+	case "$FLAG" in
 		S)
-			MINUTE="$( date +%M )"	# 00...59
-			HOUR="$(   date +%H )"	# 00...23
+			# MINUTE = 00...59
+			# HOUR   = 00...23
+			eval $( date '+MINUTE=%M; HOUR=%H; WEEKDAY=%A; DAYOFMONTH=%e;' )
 
-			watch_hanging_command()
-			{
-				local option
-
-				for option in mv scp wget nc; do {
-					_watch hanging_command $option
-				} done
-			}
+			echo >>$SCHEDULER '_watch monitoring'
+			echo >>$SCHEDULER '_watch coredump "during: cron.minutely"'
+			echo >>$SCHEDULER '_wifi watch_phy_problems'
 
 			case "$OPTARG" in
 				minimal)
 					case "$MINUTE" in
 						00|15|30|45)
-							_scheduler add 15min_checks
+							echo >>$SCHEDULER '/etc/init.d/S69watch_olsrd_fff+'
 
 							case "$MINUTE" in
 								00)
-									_scheduler add 1h_checks
-
 									case "$HOUR" in
 										04)
-											_firmware update_pmu
+											echo >>$SCHEDULER '_firmware update_pmu'
 										;;
 									esac
 								;;
 							esac
 
-							watch_hanging_command
+							echo >>$SCHEDULER '_watch hanging_command usual_suspects'
 						;;
 					esac
 				;;
 				lazy)
-					[ -e /tmp/.autorun ] && /tmp/.autorun
-
-					case "$MINUTE" in
-						00|15|30|45)
-							:
-							# _scheduler add monitoring
-						;;
-					esac
+					_watch autorun
 				;;
 				newstyle)
-					grep -qs 0 "/proc/sys/vm/panic_on_oom" && {
-						echo 1 >"/proc/sys/vm/panic_on_oom"
-					}
-
-					[ -e /tmp/.autorun ] && /tmp/.autorun		# can be helpful to make changes an many nodes
-											# script must first delete himself with 'rm $0'
-
-					while [ $( _system disc_free /tmp percent ) -lt 40 ]; do {
-						df -h | grep /tmp$ | _log it high_discusage_before daemon alert
-						rm "$( ls -S1 /tmp/user-* | head -n1 )"
-						df -h | grep /tmp$ | _log it high_discusage_after daemon alert
-					} done
-
-					pidof uhttpd >/dev/null || _watch webserver
-
-					_netfilter traffic_control_autoapply_speedsuggest
-
-					_scheduler check_if_every_Nth_minute 360 && {	# e.g. daily restart is at 4:05
-						_scheduler add upgrade_packages		# so: 10:05, 16:05, 22:05
-						_firmware update_pmu
-					}
-
-					_scheduler check_if_every_Nth_minute 60 && {
-						[ -e /usr/sbin/owm.lua ] && {
-							/usr/sbin/owm.lua		# write data to owm every hour
-						}
-						_scheduler add registrator		# register client at registrator
-					}
-
-					fgrep -sq "nf_conntrack: table full, dropping packet." "/tmp/dmesg.recent" && {
-						_log it conntrack_full daemon info "dropping packet"
-
-						[ "$( fgrep "nf_conntrack: table full, dropping packet." "/tmp/dmesg.recent" | wc -l )" -gt 10 ] && {
-							_system reboot_safe "nf_conntrack: table full"
-						}
-					}
-
-
-					pidof dnsmasq >/dev/null || _watch dns_resolution
-					_watch local_proxy
-
-					case "$HOUR" in
-						04)
-							[ $( _system uptime min ) -gt 60 ] || {
-								MINUTE=06
-							}
-
-							case "$MINUTE" in
-								00|01|02|03|04|05)
-									_netfilter stop remember_over_reboot
-									_netfilter ipforwarding_start
-									_netfilter masquerade_start
-
-									[ -e "/tmp/cron.webcam" ] && {
-										touch /tmp/webcam_force_safe
-										. /tmp/cron.webcam
-									}
-
-									sleep 300	# give time for collecting userdata
-
-									[ "$( uci -q get system.@system[0].timezone )" = "UTC" ] && {
-										uci set system.@system[0].timezone="CET-1CEST,M3.5.0,M10.5.0/3"
-										uci commit system
-									}
-
-									_system reboot_safe "nightly"
-								;;
-							esac
-						;;
-					esac
-
-					case "$MINUTE" in
-						00|15|30|45)
-							_scheduler add gateway_check
-							_scheduler add 15min_checks
-							_scheduler add monitoring
-
-
-							_scheduler add "_tunnel clientside_control check_connection all"
-							_watch webserver
-
-							case "$MINUTE" in
-								00)
-									_scheduler add 1h_checks
-
-									case "$HOUR" in
-										06)
-											killall dbclient	# reinit reverse ssh-tunnel
-
-											[ "$( _system uptime hours )" -gt 2 ] && {
-												/etc/init.d/netfilter restart
-											}
-
-										;;
-									esac
-								;;
-							esac
-
-							watch_hanging_command
-						;;
-					esac
-				;;
-			esac
-		;;
-		w)
-			[ -n "$WIFIDEV" ] && {
-				ip address show dev $WIFIDEV | fgrep -q "inet " || {
-					_wifi phy_restart $WIFIDEV "no ip on dev" || touch /tmp/WIFI_PHY_ERROR
-					# avoid fail of next checks
-					WIFIDEV=
-				}
-			}
-
-			incoming_wifi_activity()
-			{
-
-				local funcname="incoming_wifi_activity"
-				local framecount_old framecount_new check_dev uptime_old uptime_new uptime_diff
-				local file_framecount="/tmp/WIFI_INCOMING_FRAME_COUNTER_$WIFIDEV"
-				local file_activity_seen="$file_framecount.active"
-				local file_uptime="$file_framecount.uptime"
-				local monitoring_vif="mon.$WIFIDEV"
-				local logprio="alert"
-
-				[ -z "$WIFIDEV" ] && return 0
-
-				if   fgrep -sq "wlan0-1" /var/etc/olsrd.conf; then	# hybrid adhoc/ap - check adhoc
-					check_dev="wlan0-1"
-				elif fgrep -q "$monitoring_vif:" /proc/net/dev; then
-					check_dev="$monitoring_vif"
-				else
-					check_dev="$WIFIDEV"
-				fi
-
-				eval "$( sed -n "s/.*${check_dev}: *[0-9]* *\([0-9]*\).*/framecount_new=\1/p" /proc/net/dev )"
-
-				uptime_new="$( _system uptime )"
-				read uptime_old 2>/dev/null <"$file_uptime"
-				echo "$uptime_new" >"$file_uptime"
-				uptime_diff="$(( $uptime_new - ${uptime_old:-0} ))"
-
-				[ $uptime_diff -gt 65 ] && \
-					_log it $funcname daemon info "[ERR] timediff > 60 sec = $uptime_diff"
-
-				if [ -e "$file_framecount" ]; then
-					read framecount_old <"$file_framecount"
-				else
-					framecount_old="-1"			# ensures, that first start is without errors
-				fi
-
-				echo "$framecount_new" >"$file_framecount"
-
-				if [ "$framecount_old" = "$framecount_new" ]; then
-
-					case "$WIFIMODE" in
-						ap)
-							logprio="info"
-						;;
-						*)
-							[ "$framecount_new" = "0" ] && {
-								logprio="info"
-							}
-						;;
-					esac
-
-					_log it $funcname daemon $logprio "[ERR] framecounter for $check_dev old/new: $framecount_old = $framecount_new timediff: $uptime_diff sec"
-					echo "0" >"$file_framecount"
-					[ -d "/sys/kernel/debug/ieee80211/phy0/ath9k" ] && {
-						cat >"${file_framecount}.error_debug.${uptime_new}" \
-							"/sys/kernel/debug/ieee80211/phy0/ath9k/base_eeprom" \
-							"/sys/kernel/debug/ieee80211/phy0/ath9k/reset"
-					}
-
-					if [ $uptime_diff -ge 60 ]; then
-						[ $( _wifi phy_uptime $WIFIDEV ) -ge 60 ] || return 0
-
-						if [ -e "$file_activity_seen" ]; then
-							rm "$file_activity_seen"
-							return 1
-						else
-							return 0
-						fi
-					else
-						return 0
-					fi
-				else
-					[ -e "$file_activity_seen" ] || {
-						[ "$framecount_old" = "-1" ] || {
-							_log it $funcname daemon info "[OK] first activity seen on dev $check_dev ($framecount_old packets) - marking"
-							touch "$file_activity_seen"
-						}
-					}
-
-					_log it $funcname daemon debug "[OK] framecounter for dev $check_dev: old + diff = new : $( _sanitizer run "$framecount_old + $(( $framecount_new - $framecount_old )) = $framecount_new" number_humanreadable ) (during $uptime_diff sec)"
-					return 0
-				fi
-			}
-
-			# we check:
-			# wlan0 in adhoc-mode or
-			# mon.wlan0 in ap-mode
-			# on newstyle-devices
-
-			WIFIMODE="$( _wifi mode $WIFIDEV )"
-
-			incoming_wifi_activity || {
-				case "$WIFIMODE" in
-					*adhoc*)
-						_wifi phy_restart $WIFIDEV "no incoming_wifi_activity"
-					;;
-					*)
-						if [ -n "$( iw dev $WIFIDEV station dump )" ]; then
-							_wifi check_each_client || {
-								_wifi phy_restart $WIFIDEV "clients active, no incoming_wifi_activity, mode $WIFIMODE"
-							}
-						else
-							# _wifi phy_restart $WIFIDEV "no clients, no incoming_wifi_activity, mode $WIFIMODE" info
-							_log it incoming_wifi_activity daemon info "no clients, no incoming_wifi_activity, mode $WIFIMODE"
-						fi
-					;;
-				esac
-			}
-
-			case "$WIFIMODE" in
-				*adhoc*)
-					:
-				;;
-				*)
-					_wifi check_each_client || {
-						_log it check_each_client daemon info "tx/arping to all clients failed"
-					}
-
-					case "$WIFIMODE" in
-						*ap*|*client*)
-							which hostapd >/dev/null && {
-								if pidof hostapd >/dev/null; then
-									touch "/tmp/DAEMON_hostapd_seen"
-								else
-									if [ -z "$( _net dev2ip $WIFIDEV )" ]; then
-										_system reboot_safe "missing hostapd and no IP on wifidev $WIFIDEV - $( tail -n1 "/tmp/dmesg.recent" )"
-									else
-										[ -e "/tmp/DAEMON_hostapd_seen" ] && {
-											_wifi phy_restart $WIFIDEV "missing_hostapd"
-										}
-									fi
-								fi
-							}
-						;;
-					esac
+					# only compat-layer
+					. /usr/sbin/cron.taskplanner.default
 				;;
 			esac
 		;;
 		a)
-			_scheduler add "$OPTARG"
+			echo >>$SCHEDULER "$OPTARG"
 		;;
 		r)
-			[ -e /tmp/SEND_ALIVE_FAILED ] && {				# fixme! this is a hack
-				_scheduler queue_list | grep -q 15min_checks || {
-					_scheduler add 15min_checks move2top
-				}
+			[ -e "$TMPDIR/SEND_ALIVE_FAILED" ] && {				# fixme! this is a hack
+				echo >>$SCHEDULER_IMPORTANT '/etc/init.d/S69watch_olsrd_fff+'
 			}
-
-			_scheduler run
 		;;
 		l)
 			_scheduler queue_list
-		;;
-		A)									# fixme! doubled entrys with -A ?
-			_log it user_defined_now daemon debug "start '$OPTARG'"
-			COMMAND="$( _scheduler task2command "$OPTARG" )"
-			_log it user_defined_now daemon debug "start '$OPTARG' ('$COMMAND')"
-			/bin/sh -c "${COMMAND:-true}"
-			_log it user_defined_now daemon debug "ready '$OPTARG' ('$COMMAND')"
 		;;
 		P)
 			case "$( uci -q get network.@gatewaycheck[0].mode )" in
 				ping|1)
 					SERVER_IP="8.8.8.8"
 					LOSS="$( ping -q -c 1 $SERVER_IP | sed -n 's/^.* received, \([0-9]*\)%.*/\1/p' )"
-					[ "${LOSS:-222}" -gt 0 ] && _log pingtest daemon info "[ERR] packetloss is ${LOSS}% to IP $SERVER_IP"
+					[ "${LOSS:-222}" -gt 0 ] && _log it pingtest daemon info "[ERR] packetloss is ${LOSS}% to IP $SERVER_IP"
 				;;
 			esac
 		;;
 		p)
 			_scheduler queue_purge
-		;;
-		O)
-			if pidof olsrd >/dev/null ; then
-				_olsr build_tables
-
-				_olsr restarts_are_suspicious_often && {
-					_system reboot_safe "[ERR] olsr restarts > normality"
-				}
-
-				[ "$( uci -q get olsrd.@meta[0].hnaslave )" = "1" ] && {
-						case "$CONFIG_PROFILE" in
-						*)
-							/usr/sbin/cron.olsr-hna-slave
-						;;
-					esac
-				}
-			else
-				if [ -e "/tmp/service_olsrd_nowatching" ]; then
-					[ -e "/tmp/OLSR_HNA_SLAVE_PINGTEST" ] && {
-						read IP </tmp/OLSR_HNA_SLAVE_PINGTEST
-						ping -qc 1 $IP >/dev/null || {
-							ip route del default
-							rm /tmp/service_olsrd_nowatching	# fire olsr
-						}
-					}
-				else
-					_olsr daemon start "no running daemon"
-				fi
-			fi
-		;;
-		H)
-			[ -e /usr/sbin/uhttpd ] && \
-				echo -n "$WIFIADR #" >/tmp/WELCOME_HELPER
-		;;
-		f)
-			# removeme!
 		;;
 		*)
 			ERR=1
@@ -470,4 +80,8 @@ while getopts "S:a:A:wrlpfOPHU" FLAG; do {
 	esac
 } done
 
-[ "$ERR" = "1" ] && _scheduler print_usage && exit 1
+if [ "$ERR" = "1" ]; then
+	_scheduler print_usage && exit 1
+else
+	true
+fi
