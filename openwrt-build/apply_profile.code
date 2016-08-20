@@ -745,7 +745,7 @@ _config_wireless ()			# fixme! channels hardcoded
 
 	case "$PROFILE_MODE" in
 		hybrid)
-			local ssid_adhoc="weimarnetz"			# fixme! work with 'hidden'
+			local ssid_adhoc="ff.intern.$NODE.${radiotype##11}"			# fixme! work with 'hidden'
 			local ssid_ap="$( uci -q get wireless.@wifi-iface[$(( ${radiocard} + 1 ))].ssid )"
 			[ -z "$ssid_ap" -o "$ssid_ap" = "OpenWrt" ] && ssid_ap="Weimarnetz - Knoten $NODE"
 
