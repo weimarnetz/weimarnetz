@@ -1,20 +1,60 @@
-_ssh_key_public_fingerprint_get ()	# output differs, wether its a SHA1 or MD5 hash
+#!/bin/sh
+
+# upload
+# DEST="bastian@bwireless.mooo.com:.ssh/authorized_keys.$CONFIG_PROFILE.$HOSTNAME.$MODE"
+# for MODE in rsa dss; do scp -P 222 .ssh/dropbear_${MODE}_host_key.pub $DEST; done
+# on server:
+# cat ~/.ssh/authorized_keys.* >~/.ssh/authorized_keys
+
+_ssh_key_public_fingerprint_get()	# output differs, wether its a SHA1 or MD5 hash
 {
-	local file="/etc/dropbear/dropbear_dss_host_key"
+	local option="$1"		# keywords: 'retry' or 'keyfilename' or <empty>
+	local me='ssh_key_public_fingerprint_get'
+	local file_openwrt1='/etc/dropbear/dropbear_dss_host_key'	# old
+	local file_openwrt2='/etc/dropbear/dropbear_rsa_host_key'	# newer/since r46814
+	local file_openwrt3='/etc/dropbear/dropbear_ecdsa_host_key'	# e.g. debian or future TODO: ed25519
+	local file_debian='/etc/ssh/ssh_host_rsa_key'
+	local nop file
 
-	[ -e "$file" ] || _ssh sanitize_and_cleanup_keys
+	# TODO: path can be /etc/ssh/... (debian)
 
-	dropbearkey -y -f "$file" |
-	 fgrep "Fingerprint:" |
-	  cut -d' ' -f3
+
+	[ "$option" = 'keyfilename' ] && nop=':'
+
+	if   [ -e "$file_openwrt2" ]; then	# try modern first
+		file="$file_openwrt2"
+		$nop dropbearkey -y -f "$file" | fgrep 'Fingerprint:' | cut -d' ' -f3
+	elif [ -e "$file_openwrt1" ]; then
+		file="$file_openwrt1"
+		$nop dropbearkey -y -f "$file" | fgrep 'Fingerprint:' | cut -d' ' -f3
+	elif [ -e "$file_openwrt3" ]; then
+		file="$file_openwrt3"
+		$nop dropbearkey -y -f "$file" | fgrep 'Fingerprint:' | cut -d' ' -f3
+	elif [ -e "$file_debian" ]; then
+		# https://bugs.launchpad.net/ubuntu/+source/dropbear/+bug/1009868
+		/usr/lib/dropbear/dropbearconvert openssh dropbear "$file_debian" "$file_openwrt2" && {
+			_$me 'retry'
+			return 0
+		}
+
+		file="$file_debian"
+		# e.g. SHA256:LliBzdefJ+t2Kczv131e/ae2sIPnAk2giX7zZiZJ8O8
+		$nop ssh-keygen -l -f "$file" | cut -d' ' -f2
+	else
+		[ -z "$option" ] && {
+			_ssh sanitize_and_cleanup_keys && _$me 'retry'
+		}
+	fi
+
+	[ -n "$file" -a "$option" = 'keyfilename' ] && echo "$file"
 }
 
-_ssh_start ()
+_ssh_start()
 {
-	/etc/init.d/*dropbear start
+	/etc/init.d/dropbear start
 }
 
-_ssh_stop ()
+_ssh_stop()
 {
 	killall dropbear
 	sleep 3
@@ -24,97 +64,69 @@ _ssh_stop ()
 
 _ssh_regen_keys()
 {
-	local FUNC="ssh_regen_keys"
-	local KEYFILE="/etc/dropbear/dropbear_dss_host_key"
+	local funcname='ssh_regen_keys'
+	local file1='/etc/dropbear/dropbear_dss_host_key'
+	local file2='/etc/dropbear/dropbear_rsa_host_key'
+	local file3='/etc/dropbear/dropbear_ecdsa_host_key'
+	local file
 
-	_log it $FUNC daemon info "[START] regenerating ssh-keys"
+	_log it $funcname daemon info '[START]'
 
-	rm $KEYFILE.pub
-	rm $KEYFILE
+	for file in $file1 $file.pub $file2 $file2.pub $file3 $file3.pub; do {
+		[ -e "$file" ] && rm "$file"
+	} done
 
 	_ssh start
 
-	while [ ! -e "$KEYFILE" ]; do {
+	[ -e "/tmp/$funcname" ] && rm "/tmp/$funcname"
+	while true; do {
+		[ -e "$file1" -o -e "$file2" -o -e "$file3" ] && break
+
+		_watch counter "/tmp/$funcname" increment 1 max 100 || return 0
 		sleep 1
 	} done
 
 	_ssh sanitize_and_cleanup_keys
 
-	_log it $FUNC daemon info "[READY] regenerating ssh-keys"
+	_log it $funcname daemon info '[READY]'
 }
 
-_ssh_generate_and_store_private_dss_key ()
+_ssh_sanitize_and_cleanup_keys()
 {
-	local DSSFILE="/etc/dropbear/dropbear_dss_host_key"
+	local funcname='ssh_sanitize_and_cleanup_keys'
+	local file mode keyok
 
-	dropbearkey -t dss -f "$DSSFILE"
+	public_keyfile_ok()
+	{
+		local file="$1"
 
-	_nvram set ff_dsskey $( _file convert_bin2hex "$DSSFILE" )
-	_nvram set commit "set new dropbearkey_dsskey"
-}
+		[ -e '/usr/bin/dropbearkey' ] || return 0		# simulate OK
+		[ -e "$file.pub" ] || return 1
+		[ $( _file size "$file.pub" ) -eq 0 ] && return 1
 
-_ssh_sanitize_and_cleanup_keys ()
-{
-	local DSSFILE="/etc/dropbear/dropbear_dss_host_key"		# if no dropbear is in firmware and we install it,
-	local DSSKEY="$( nvram get ff_dsskey )"				# the key in nvram is not respected
-	local TEMP="/tmp/DSSKEY"
-
-	[ -e /usr/bin/dropbearkey ] && [ ! -e "${DSSFILE}.pub" ] && {
-		_log it setup_dropbear_keys daemon info "writing ${DSSFILE}.pub"
-		dropbearkey -y -f "$DSSFILE" | grep ^ssh- >"${DSSFILE}.pub"
-		chmod 0600 "${DSSFILE}.pub"
+		return 0
 	}
 
-	if [ -L $HOME/.ssh ]; then
-		:
-	else
-		rm -fR $HOME/.ssh
-		ln -s /etc/dropbear $HOME/.ssh
-	fi
-
-	return
-
-	if [ ! -e $DSSFILE ] || [ "${#DSSKEY}" -le 256 ] || [ "$DSSKEY" != "$( _file convert_bin2hex $DSSFILE )" ]; then
-
-		mkdir -p etc/dropbear		# key in nvram is more important, than (maybe new generated) keyfile
-	
-		if [ "${#DSSKEY}" -ge 256 ]; then
-			_log it setup_dropbear_keys daemon info "keyfile differs from keys in nvram - restoring keys from nvram"
-			echo -n "$DSSKEY" >$TEMP
-			_file convert_hex2bin "$TEMP" >$DSSFILE
-			rm $TEMP
-			chmod 0600 $DSSFILE                    
+	keyok=
+	for mode in rsa dss ecdsa; do {
+		file="/etc/dropbear/dropbear_${mode}_host_key"
+		if [ -e "$file" ]; then
+			keyok='true'
 		else
-			_log it setup_dropbear_keys daemon info "keyfile differs from keys in nvram - generating new keys"
-		
-			if [ -e /usr/bin/dropbearkey ]; then
-				[ -e $DSSFILE ] && {
-					_log it setup_dropbear_keys daemon info "$DSSFILE already exists - why? deleting it!"
-					rm $DSSFILE
+			[ -z "$keyok" ] && {
+				dropbearkey -t "$mode" -f "/etc/dropbear/dropbear_${mode}_host_key" && {
+					keyok='true'
 				}
-
-				_ssh generate_and_store_private_dss_key
-			else
-				_log it setup_dropbear_keys daemon info "SSH-DSS-key does not exist (yet) - abort"
-			fi
+			}
 		fi
 
-		[ "$( _system uptime min )" -gt 5 ] && {
-			dropbear || _log it setup_dropbear_keys daemon info "starting daemon failed"
-		}
-	else
-		_log it setup_dropbear_keys daemon debug "SSH-DSS-key seems to be correct"
+		public_keyfile_ok "$file" || {
+			_log it $funcname daemon info "writing $file.pub"
 
-		[ "$( _file size "${DSSFILE}.pub" )" = "0" ] && rm "${DSSFILE}.pub"
-
-		[ -e /usr/bin/dropbearkey ] && [ ! -e "${DSSFILE}.pub" ] && {
-			_log it setup_dropbear_keys daemon info "writing ${DSSFILE}.pub"
-			dropbearkey -y -f "$DSSFILE" | grep ^ssh- >"${DSSFILE}.pub"
-			chmod 0600 "${DSSFILE}.pub"
+			dropbearkey -y -f "$file" | grep ^'ssh-' >"$file.pub"
+			chmod 0600 "$file.pub"
 		}
+	} done
 
-		[ -z "$( nvram get ff_dsskey_pub )" ] && {
-			_nvram set ff_dsskey_pub $( _file convert_bin2hex "${DSSFILE}.pub" )
-		}
-	fi
+	[ -h "$HOME/.ssh" ] || ln -fs '/etc/dropbear' "$HOME/.ssh"
 }
