@@ -1518,8 +1518,7 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 /etc/init.d/count_reboots enable
 /etc/init.d/generate_kalua_loader enable
 /etc/init.d/end_boot enable
-/etc/init.d/S51crond_fff+ enable
-/etc/init.d/cron disable
+/etc/init.d/cron enable
 /etc/init.d/S12switch_etx enable
 /etc/init.d/set_etc_hardware enable
 /etc/init.d/S70prepare_fff+ enable

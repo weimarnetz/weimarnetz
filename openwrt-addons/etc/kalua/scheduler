@@ -212,7 +212,7 @@ _scheduler_check_if_every_Nth_minute ()
 
 _scheduler_wait_till_cpuload_is_low ()
 {
-	[ -e "/tmp/CRON_IS_CAREFUL" ] && return 0
+	[ -e "/usr/sbin/cron.minutely" ] && return 0
 
 	_system include
 
@@ -288,7 +288,6 @@ _scheduler_run ()
 		exit 1		# fixme! use return?
 	}
 
-	_cron watchdog_is_running || _cron daemon_restart "watchdog missing"
 
 	if _scheduler allow_run ; then
 		trap "scheduler_cleanup" SIGINT	# SIGINT = CTRL+C, SIGHUP/SIGTERM?
@@ -297,7 +296,6 @@ _scheduler_run ()
 		return 1
 	fi
 
-	_cron watchdog_is_running || _cron daemon_restart "watchdog missing"
 
 	local list_scheduler_file_parts="$( ls -1 ${FILE_SCHEDULER_TMP}* 2>/dev/null )"
 	if [ -n "$list_scheduler_file_parts" ]; then
@@ -327,7 +325,6 @@ _scheduler_run ()
 
 	rm $FILE_SCHEDULER $FILE_SCHEDULER_COPY $LOCKFILE 2>/dev/null
 
-	_cron watchdog_is_running || _cron daemon_restart "watchdog missing"
 
 	return 0
 }

@@ -193,7 +193,7 @@ _firmware_wget_prepare_for_lowmem_devices()
 	local ip="$( _net dns2ip "$server_dnsname" )"
 	_log it $funcname daemon info "[OK] serverstring2ip: $server_dnsname -> $ip"
 
-	_firmware remove_cron_stuff
+	#_firmware remove_cron_stuff
 
 	_log it $funcname daemon info "[OK] removing some things in RAM-Disk"
 	rm /tmp/weblogin*
