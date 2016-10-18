@@ -382,7 +382,7 @@ case "$HARDWARE" in
 esac
 
 #get old hostname or hostname set in system config
-OLD_HOSTNAME="$( uci -q get -q meshwizard.system.hostname )"
+OLD_HOSTNAME="$( uci -q get meshwizard.system.hostname )"
 [ -z "$OLD_HOSTNAME" ] && {
 	OLD_HOSTNAME="$( uci -q get system.@system[0].hostname )"
 }
