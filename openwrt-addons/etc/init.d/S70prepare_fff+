@@ -13,12 +13,6 @@ start() {
 		}
 	}
 
-    # fix cron on sysupgrade
-    [ -e "/etc/init.d/deactivated_cron_daemon" ] && {
-        mv /etc/init.d/deactivated_cron_daemon /etc/init.d/S51crond_fff+
-        /etc/init.d/S51crond_fff+ start
-    }
-
     # write latlong into file 
     [ -n "$( uci -q get system.@system[0].latitude )" ] && {
         echo "$( uci -q get system.@system[0].latitude ),$( uci -q get system.@system[0].longitude )">/var/run/latlon.txt
