@@ -11,6 +11,12 @@ join the [club](http://www.weimarnetz.de) or ask for [consulting](http://bittorf
 
 [![Flattr this git repo](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=weimarnetz&url=https://github.com/weimarnetz/weimarnetz&title=weimarnetz&language=&tags=github&category=software)
 
+versions
+--------
+
+The `GebrannteMandeln` branch is the current stable version that is running on most routers at the moment (1/2017). The master `branch` is bleeding edge at the moment and should work with LEDE.
+
+
 how to get a release for a specific hardware
 --------------------------------------------
 
