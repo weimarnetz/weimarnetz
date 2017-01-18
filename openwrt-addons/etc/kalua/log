@@ -176,7 +176,7 @@ _log_it()		# CALL: _log it my_function_name daemon info "mytext"
 
 _log_append_info()
 {
-	local location="$( _weblogin metadata_locationname )"
+#	local location="$( _weblogin metadata_locationname )"
 	local host="$( uci -q get system.@system[0].hostname )"
 	local date="$( _system date humanreadable nice )"
 
