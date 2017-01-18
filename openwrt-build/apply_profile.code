@@ -388,7 +388,7 @@ OLD_HOSTNAME="$( uci -q get meshwizard.system.hostname )"
 }
 
 case "$OLD_HOSTNAME" in
-	OpenWrt|"")
+	OpenWrt|LEDE|"")
 		OLD_HOSTNAME="${INSTALLATION}-${PROFILE_MODE}-${GATEWAY}-${NODENUMBER}"
 		log "using new hostname $OLD_HOSTNAME"
 	;;
@@ -733,31 +733,21 @@ _config_wireless ()			# fixme! channels hardcoded
 		;;
 	esac
 
-	if   [ -e /etc/init.d/apply_profile.regulatory.bin ]; then
-		country="US		# see hacked /usr/lib/crda/regulatory.bin"
-	elif [ $CHANNEL -gt 13 ]; then
-		country="JP"
-	elif [ $CHANNEL -gt 11 ]; then
-		country="DE"
-	else
-		country="US"
-	fi
+	country="DE"
 
 	case "$PROFILE_MODE" in
 		hybrid)
 			local ssid_adhoc="ff.intern.$NODE.ch$CHANNEL"			# fixme! work with 'hidden'
 			local ssid_ap="$( uci -q get wireless.@wifi-iface[$(( ${radiocard} + 1 ))].ssid )"
-			[ -z "$ssid_ap" -o "$ssid_ap" = "OpenWrt" ] && ssid_ap="Weimarnetz - Knoten $NODE"
+			[ -z "$ssid_ap" -o "$ssid_ap" = "OpenWrt" -o "$ssid_ap" = "LEDE" ] && ssid_ap="Weimarnetz - Knoten $NODE"
 
 			cat >> "$temp" <<EOF
 config wifi-device radio${radiocard}
 	option type		"$radiotype"
 	option country		"$country"
 	option channel		"$CHANNEL"
-#	option ath9k_chanbw	"$chanbw"		# temporary, 5, 10 or 20 (default)
 $hide_chanbw	option chanbw		"$chanbw"	# since r32596
 $hide_mac	option macaddr		"$MAC"
-	option frag		"off"
 $hidetx	option txpower		"$TXPOWER"
 $hide_noscan	option noscan		"1"
 EOF
@@ -832,7 +822,6 @@ config wifi-device radio${radiocard}
 $hidetx	option txpower		"$TXPOWER"
 	option channel		"$CHANNEL"
 $hide_mac	option macaddr		"$MAC"
-	option frag		"off"
 ${hide_noscan}	option noscan		"1"
 EOF
 
@@ -871,10 +860,8 @@ config wifi-device radio${radiocard}
 	option type		"$radiotype"
 	option country		"$country"
 	option channel		"$CHANNEL"
-#	option ath9k_chanbw	"$chanbw"		# temporary, 5, 10 or 20 (default)
 $hide_chanbw	option chanbw		"$chanbw"		# since r32596
 $hide_mac	option macaddr		"$MAC"
-	option frag		"off"
 $hidetx	option txpower		"$TXPOWER"
 $hide_noscan	option noscan		"1"
 EOF
@@ -902,7 +889,6 @@ config wifi-iface
 	option bssid		"${BSSID}"
 	option ssid		"${new_essid}"
 	option mcast_rate	"${MCAST_RATE}"
-#	option bintval		"1000"
 EOF
 		;;
 	esac
@@ -910,9 +896,6 @@ EOF
 } done
 
 	cat >> "$temp" <<EOF
-
-config auto_optimize
-	option neigh		"off"
 EOF
 
 	mv "$temp" /etc/config/wireless
@@ -923,13 +906,6 @@ _config_network ()
 {
 	local NODE="$1"
 	local PROTO LANDEV WANDEV
-
-	case "$HARDWARE" in
-		"Dell TrueMobile 2300")
-			LANMAC="00:90:4b:39:7b:5e"	# fixme!
-			WANMAC="00:90:4b:39:7b:5f"	# fixme!
-		;;
-	esac
 
 	LANDEV="$( uci -q get network.lan.ifname )"
 	WANDEV="$( uci -q get network.wan.ifname )"
@@ -1455,15 +1431,6 @@ EOF
 #EOF
 }
 
-[ -e /etc/init.d/apply_profile.regulatory.bin ] && {
-	rm "/usr/lib/crda/regulatory.bin"
-	if ln -s "/etc/init.d/apply_profile.regulatory.bin" "/usr/lib/crda/regulatory.bin"; then
-		log "[OK] installed new/magic regulatory.bin in /usr/lib/crda"
-	else
-		log "[ERR] failed to install regulatory.bin in /usr/lib/crda"
-	fi
-}
-
 [ -e "/etc/kalua_init" ] && {
 	PARTITION="$( mount | sed -n 's/\(^.*mtd.*\) on .*/\1/p' )"       
         flash_free=$(df | sed -n "s#^${PARTITION:-/dev/root}[^0-9]*[0-9]*[^0-9]*[0-9]*[^0-9]*\([0-9]*\).*#\1#p")
@@ -1556,7 +1523,7 @@ uci set uhttpd.main.error_page="/weimar-splash-index.sh"
 uci set uhttpd.main.config="/etc/httpd.conf"
 uci set uhttpd.main.interpreter=".sh=/bin/ash"
 # set bootstrap as new default theme
-uci set luci.main.mediaurlbase="/luci-static/bootstrap"
+#uci set luci.main.mediaurlbase="/luci-static/bootstrap"
 
 uci set uhttpd.main.max_requests="5"
 # uci set uhttpd.main.script_timeout=5			// fixme! needs testing
