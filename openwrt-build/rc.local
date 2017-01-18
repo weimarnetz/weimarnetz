@@ -1,7 +1,0 @@
-# Put your custom commands here that should be executed once
-# the system init finished. By default this file does nothing.
-#
-# write gps 
-echo "$(uci -q get system.@system[0].latitude),$(uci -q get system.@system[0].longitude)">/var/run/latlon.txt
-
-exit 0

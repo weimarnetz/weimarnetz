@@ -1,6 +1,0 @@
-CONFIG_PACKAGE_luci-app-owm=y
-CONFIG_PACKAGE_luci-app-owm-ant is not set
-CONFIG_PACKAGE_luci-app-owm-cmd=y
-CONFIG_PACKAGE_luci-app-owm-gui is not set
-CONFIG_PACKAGE_luci-lib-httpclient=y
-CONFIG_PACKAGE_luaneightbl=y

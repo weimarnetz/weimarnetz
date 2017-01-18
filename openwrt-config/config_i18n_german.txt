@@ -1,8 +1,0 @@
-CONFIG_LUCI_LANG_en=y
-CONFIG_LUCI_LANG_de=y
-CONFIG_PACKAGE_luci-i18n-base-de=y
-CONFIG_PACKAGE_luci-i18n-base-en=y
-CONFIG_PACKAGE_luci-i18n-freifunk-de=y
-CONFIG_PACKAGE_luci-i18n-freifunk-en=y
-CONFIG_PACKAGE_luci-i18n-olsr-de=y
-CONFIG_PACKAGE_luci-i18n-olsr-en=y
