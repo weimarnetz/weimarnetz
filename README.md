@@ -1,8 +1,8 @@
 kalua - build mesh-networks _without_ pain
 ==========================================
 
-* community: http://wireless.subsignal.org
-* monitoring: http://intercity-vpn.de/networks/dhfleesensee/
+* community: http://wireless.subsignal.org | http://weimarnetz.de
+* monitoring: http://weimarnetz.de/monitoring
 * documentation: [API](http://wireless.subsignal.org/index.php?title=Firmware-Dokumentation_API)
 
 
@@ -11,16 +11,12 @@ join the [club](http://www.weimarnetz.de) or ask for [consulting](http://bittorf
 
 [![Flattr this git repo](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=weimarnetz&url=https://github.com/weimarnetz/weimarnetz&title=weimarnetz&language=&tags=github&category=software)
 
-Important!
-----------
-
-> Don't forget to set the variables $REPONAME and $REPOURL as global variables (export VARIABLE=VALUE) before you start playing here. REPONAME is the directory where you checked out REPOURL.
-> E.g. REPONAME could be set to weimarnetz and REPOURL to git://github.com/weimarnetz/weimarnetz.git
-
 how to get a release for a specific hardware
 --------------------------------------------
 
-for building this firmware yourself please see our builder at https://github.com/weimarnetz/builder
+for building this firmware yourself please see our builder at https://github.com/weimarnetz/builder or use the new build code here: https://gitlab.bau-ha.us/weimarnetz/firmware
+
+Bleeding Edge Images with LEDE and the current master branch can be found here: http://weimarnetz.segfault.gq/firmwares/ 
 
 
 Cherry Picking Git commits from forked repositories
