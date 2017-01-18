@@ -2,44 +2,38 @@
 
 # we need a monotonic counter for both: SCHEDULER / SCHEDULER_IMPORTANT
 # with 8 digits -> max = 1157 days; note: var PID is the uptime
-PID= read -r PID _ </proc/uptime
+PID=;read -r PID _ </proc/uptime
 SCHEDULER=${SCHEDULER-/tmp/SCHEDULER/job_$(printf %08.0f ${PID%.*}; mkdir -p /tmp/SCHEDULER)}
 SCHEDULER_QUEUE='/tmp/SCHEDULER/*'
 SCHEDULER_IMPORTANT=${SCHEDULER_IMPORTANT-/tmp/SCHEDULER/important_$(printf %08.0f $$)}
 SCHEDULER_IMPORTANT_QUEUE='/tmp/SCHEDULER/important_*'
 
-_scheduler_vars ()
-{
-	FILE_SCHEDULER_TMP="/tmp/scheduler_queue_tmp_"		# scheduler_add() appends an counter to filename
-	FILE_SCHEDULER="/tmp/scheduler_queue"			# HINT: it is also possible to (scp-)upload a file
-	FILE_SCHEDULER_COPY="/tmp/scheduler_queue_copy"		#       called ${FILE_SCHEDULER_TMP}xyz for automatic
-}								#       execution on many devices...
+# TODO: start task @specific time (e.g. "in 32mins")
 
-_scheduler_queue_purge ()		# fixme! wait till running jobs have ended?
+_scheduler_queue_purge()
 {
 	_log it purge_queues daemon info "removing"
-	_scheduler vars
-	rm $FILE_SCHEDULER_TMP* $FILE_SCHEDULER $FILE_SCHEDULER_COPY 2>/dev/null
+	rm $SCHEDULER_QUEUE
+
+	return 0
 }
 
-_scheduler_queue_list ()
+_scheduler_queue_list()
 {
 	local funcname="scheduler_list_queue"
 	local option="$1"
 	local empty1 empty2
 
-	_scheduler vars
-
 	_log it $funcname daemon debug "working with option: '$option'"
 
-	echo "# actual,running queue:"
-	cat $FILE_SCHEDULER_COPY 2>/dev/null || {
+	echo "# actual,running queue: /tmp/scheduler.log"
+	cat '/tmp/scheduler.log' 2>/dev/null || {
 		echo -en "# empty!\n\n"
 		empty1="true"
 	}
 
-	echo -en "\n# waiting queue:\n"
-	cat ${FILE_SCHEDULER_TMP}* 2>/dev/null || {
+	echo -en "\n# waiting queue: (important + normal)\n"
+	cat $SCHEDULER_QUEUE 2>/dev/null || {
 		echo -en "# empty!\n\n"
 		empty2="true"
 	}
@@ -53,281 +47,184 @@ _scheduler_queue_list ()
 	}
 }
 
-_scheduler_print_usage ()
+_scheduler_print_usage()
 {
-	local FUNC="scheduler_print_usage"
-	
-	_log it $FUNC daemon info "working"
-
-	cat <<EOF
- 
-Sens:	 Adds program calls to a queue and executes all
-	 these calls step by step. This prevents high
-	 cpu-load and/or memory-consumption, but is not
-	 executed at an exact timestamp.
- 
-Usage:	 $0 -option1 -option2 -optionN
- 
-Options: -a "TASK"   adds an TASK to queue, where TASK can be keyword
-	 -A "TASK"   immediately runs TASK, does not respect cpu-load
-	 -r          runs the queue, step by step
-	 -l          lists running and waitung queue
-	 -p	     purge all queues
-	 -f	     overload check (last 5min)
-	 -P	     gateway ping-test
-	 -O	     fetch OLSR-table
-	 -o	     special: checks for incoming olsr-packets and
-		     restarts daemon with new conf if neccessary
-	 -u	     check syslog for kernel-oops, reboot if needed
-	 -w	     check mac80211_wifi for problems
-	 -H	     build overload check /tmp/WELCOME_HELPER for uhttpd
-	 -S "name"   load a set of scheduled services according to actual time
-
-Example: $0 -s3 -a do_this -a do_that -r -a do_another_thing -r
- 
-	 This invokes a sleep for 3 seconds,
-	 adds "do_this" to queue, then adds "do_that" to queue, then
-	 runs the queue, then adds an user-defined program call to
-	 queue, then runs the queue. Keywords must be defined in
-	 _scheduler(). Ofcourse you should only use the queue, if
-	 exact executing-time of your program does'nt really matter.
- 
-	 $0 -A "program1 arg1" -a "program2 arg1 arg2" -l
- 
-	 This immediately start "program1" with "arg1", than adds an
-	 user-defined programm call with args and then lists all queues.
- 
-EOF
+	:
 }
 
-_scheduler_task2command ()
+_scheduler_wait_till_cpuload_is_low()
 {
-	local FUNC="scheduler_task2command"
-	local TASK="$1"
-	local COMMAND
-	
-	case "$TASK" in
-		    upgrade_packages)	COMMAND="/usr/sbin/cron.upgrade_packages" ;;
-	       watch_hanging_command)	COMMAND=". /tmp/loader; for option in mv scp wget nc; do _watch hanging_command \$option; done" ;;
-		        restart_olsr) 	COMMAND=". /tmp/loader; _olsr daemon restart olsrd_restart_scheduler_controlled" ;;
-			    registrator)	COMMAND="/usr/sbin/cron.registrator_client.sh" ;;
-		           1h_checks)	COMMAND="/usr/sbin/cron.hourly"; >/tmp/SEND_ALIVE_FAILED ;;
-		       gateway_check)	COMMAND="/usr/sbin/cron.check_inet_gw_fff+" ;;	
-				   *)
+	local funcname='scheduler_wait_till_cpuload_is_low'
+	local task="$1"
+	local pause=23
 
-					extract_function_name ()
-					{
-						echo "$1" | cut -d'_' -f2 | cut -d' ' -f1	# "_sms_send bla" -> "sms"
-					}							# "_sms send bla" -> "sms"
+	bool_true 'system.@monitoring[0].ignore_load' && return 0
+	_weblogin authserver is_myself && return 0
+	[ -e '/tmp/cron.webcam' ] && return 0
 
-				   	is_function ()
-				   	{
-				   		type "_$( extract_function_name \"$1\" )" >/dev/null && return 0
-				   	}
-
-					case "$TASK" in
-						_*)
-							is_function "$TASK" && {
-								COMMAND=". /tmp/loader; _$( extract_function_name \"$TASK\" ) include; $TASK"
-								TASK=
-							}
-						;;
-						*)
-							COMMAND="$TASK"
-							TASK=
-						;;
-					esac	
-
-				        _log it $FUNC daemon debug "user defined: '$COMMAND'"
-				;;
-	esac
-	
-	echo "$COMMAND"
-}
-
-_scheduler_add ()
-{
-	_scheduler vars
-	
-	local TASK="$1"
-	local KEYWORD="$2"		# move2top|force
-	local COMMAND COUNTER
-	local FUNC="scheduler_add"
-	local logprio="debug"
-
-	COMMAND="$( _scheduler task2command "$TASK" )" || return 0
-
-	case "$KEYWORD" in
-		move2top)				# insert on top, if not already in waiting_queue
-
-			cat ${FILE_SCHEDULER_TMP}1000* 2>/dev/null | head -n1 | grep -q ^"$COMMAND" && {
-				_log it $FUNC daemon $logprio "$KEYWORD - PID: '$$' - '$TASK' - already in queue, ignoring"
-				return
-			}
-
-			COUNTER="$(( 1000000000 + $$ ))"
-		;;
-		force)
-			[ "$( fgrep -s "$COMMAND" ${FILE_SCHEDULER_TMP}* $FILE_SCHEDULER_COPY | wc -l )" -ge 2 ] && {
-				_log it $FUNC daemon info "not adding '$COMMAND', already more then 2 times in queue"
-				return
-			}
-		;;
-		*)
-			# fixme! better begin search at line_start
-			# but if we use regex, we have to escape special chars like * and .
-
-			fgrep -sq "$COMMAND" ${FILE_SCHEDULER_TMP}* $FILE_SCHEDULER_COPY && {
-				_log it $FUNC daemon $logprio "PID:'$$' - '$TASK' - already in queue, ignoring"
-				return
-			}
-		;;
-	esac
-
-	[ -z "$COUNTER" ] && {
-		COUNTER="$( _system date unixtime )"	# we need a monotonic + always_same_length-counter here, so better not use $$ (process-id)
-	}						# this is only true from 2001-Sep-10 ... 2038-Jan-19
-
-	_log it $FUNC daemon $logprio "PID:'$$' +'$TASK'"
-	echo "$COMMAND   # $TASK" >>${FILE_SCHEDULER_TMP}${COUNTER}
-}
-
-_scheduler_check_if_every_Nth_minute ()
-{
-	# some tasks should be repeated regulary, but NOT on the same
-	# time on every node in the mesh. so we need a way the schedule
-	# a script every X minutes based on uptime and not on daytime,so:
-	# check every min, if uptime is divisor of X (without a rest)
-
-	local UPTIME="$( _system uptime min )"	# e.g. uptime = 60 and
-	local CARRYOVER="$(( $UPTIME % $1 ))"	# e.g. every = 55 min : 60 % 55 = 5 
-	
-	[ "$CARRYOVER" -eq 0 ] && {
-		_log it scheduler_check_if_every_Nth_minute daemon debug "call '$2' for ${1}th minute, uptime: $UPTIME"
-		return 0
-	}
-
-	return 1
-}
-
-_scheduler_wait_till_cpuload_is_low ()
-{
-	[ -e "/tmp/CRON_IS_CAREFUL" ] && return 0
-
-	_system include
-
-	local WAITING_TASK="$1"
-	local FUNC="scheduler_wait_till_cpuload_is_low"
-	local CPU_LOAD="$( _system load 1min )"
-	local TARGET=60
-	local WAIT
-
-	while [ ${CPU_LOAD:=100} -gt $TARGET ]; do {
-		WAIT=$(( 5 + ($CPU_LOAD - $TARGET) / 2 ))
-		[ ${WAIT:=100} -gt 300 ] && WAIT=300
-		
-		_log it $FUNC daemon debug "PID:'$$' - load >=0.$TARGET ($CPU_LOAD) - waiting $WAIT sec (for '$WAITING_TASK')"
-		
-		TARGET=$(( $TARGET + 1 ))
-		sleep $WAIT
-		CPU_LOAD="$( _system load 1min )"
+	LOAD=
+	while _system load 1min quiet; test $LOAD -gt 80 ; do {
+		_log it $funcname daemon info "PID: $$ - load: $LOAD - waiting $pause sec for '$task'"
+		sleep $pause
+		[ $( _system uptime sec ) -lt 3600 ] && return 0
 	} done
 }
 
 _scheduler_allow_run()
 {
-	local funcname="scheduler_allow_run"
-	local lockfile="/tmp/lockfile_scheduler_is_running"
+	local funcname='scheduler_allow_run'
+	local lockfile="$1"
 
-	[ -e "/tmp/START_SYSUPGRADE" ] && return	# fixme! why?
+	[ -e "$lockfile" ] || return 0
+	[ -e "$TMPDIR/$funcname" -o -e "/tmp/$funcname" ] && return 0		# override: FIXME!
 
-	local load_border="3"		# means load of 0.03 // fixme! check dynamic lowest load ever and take this...
-	_scheduler vars
-
-	[ $( _system uptime min ) -lt 5 ] && {
-		return 1
-	}
-
-	if [ -e "$lockfile" ]; then
-
-		_watch counter "/tmp/scheduler_lockfile_counter" increment 1 max 60 || {
-			_log it $funcname daemon alert "removing lockfile, which seems to be left by accident"
-			rm "$lockfile"
-		}
-
-		return 1
-
-#		if [ "$( _system load 1min )" -lt $load_border ]; then
-#			_log it $funcname daemon info "lockfile exists, but allowing due to low system load < 0.${load_border}"
-#			return 0
-#		else
-#			_log it $funcname daemon info "already running, ignoring call (task: $( cat $lockfile ))"
-#			return 1
-#		fi
+	if [ $( _stopwatch stop "$lockfile.start" interim,nolog,seconds ) -gt 3600 ]; then
+		_log it $funcname daemon alert 'removing lockfile, which seems to be left by accident'
+		rm "$lockfile" "$lockfile.start"
+		return 0
 	else
-		_watch counter "/tmp/scheduler_lockfile_counter" set 1
+		_log it $funcname daemon info "will not allow, see lockfile '$lockfile'"
+		return 1
 	fi
-
-	return 0
 }
 
-_scheduler_run ()
+_scheduler_run()
 {
-	_scheduler vars
+	local funcname='scheduler_run'
+	local file line strong_debug lastpart without_first_underliner first_word without_first_underliner age length
+	local logfile='/tmp/scheduler.log'
+	local newline='
+'
+	_scheduler allow_run "$logfile" || return 1
+	touch "$logfile" '/tmp/scheduler.mark_starttime'
 
-	local FUNC="scheduler_run"
-	local FILE LINE
-	local LOCKFILE="/tmp/lockfile_scheduler_is_running"
+	case "$CONFIG_PROFILE" in
+		liszt28*)
+			[ -z "$LOWMEM" -a $OPENWRT_REV -gt 0 ] && strong_debug='true'
+#			[ -e '/tmp/LOG_FIRST_RUN' ] && { rm '/tmp/LOG_FIRST_RUN'; LOG_FIRST_RUN=1; }
+		;;
+	esac
 
-				# fixme! better use 'scheduler_run.sh' instead of lockfile
-	scheduler_cleanup ()	# fixme! respect DRY
-	{
-		rm "/tmp/lockfile_scheduler_is_running"
-		_log it scheduler_run daemon info "cleanup called during '$LINE'"
+	# SCHEDULER_QUEUE includes IMPORTANT (e.g. important_*) and
+	# NORMAL job-queue (e.g. job_*) - via globbing *i*mportant comes before *j*ob
+	for file in $SCHEDULER_QUEUE; do {
+		[ -e "$file" ] || continue	# empty queue, so globbing does not expand
 
-		exit 1		# fixme! use return?
-	}
+		while read -r line; do {
+#			[ -n "$LOG_FIRST_RUN" ] && echo "$(cat /proc/uptime): $line" >>/tmp/LOG_FIRST_RUN.txt
+			if grep -sq ^"$line"$ "$logfile"; then
+				# we only execute the LAST occurrence of a job,
+				# so we get more recent values/data
+				_log it $funcname daemon debug "ignoring twin '$line'"
+			else
+				case "$line" in
+					'_'*)   # seems like a kalua-function, e.g. _vpn_adduser argX
+						case "$line" in
+							*' '*' '*)
+								# e.g. '_sms_send bla blubb' = 2 spaces or more
+								without_first_underliner="${line#_}"		# sms_send bla blubb
+								first_word="${without_first_underliner%_*}"	# sms
 
-	_cron watchdog_is_running || _cron daemon_restart "watchdog missing"
+								if [ -e "/etc/kalua/$first_word" ]; then
+									_log it $funcname daemon info "2 spaces, needs rewrite: line: '$line'"
+									lastpart="${without_first_underliner#*_}"	# send bla blubb
+									line="_$first_word $lastpart"
+									_log it $funcname daemon info "2 spaces, rewrote: '$line'"
+								else
+									_log it $funcname daemon debug "rewrite unneeded: '$line'"
+								fi
+							;;
+							*' '*)
+								# OK: has a 'space' e.g. '_system load'
+							;;
+							*)
+								# e.g. '_netfilter_splash_autoadd' -> '_netfilter splash_autoadd'
 
-	if _scheduler allow_run ; then
-		trap "scheduler_cleanup" SIGINT	# SIGINT = CTRL+C, SIGHUP/SIGTERM?
-		touch "$LOCKFILE"
-	else
-		return 1
-	fi
+								# needs rewrite, replace second '_' with a 'space'
+								without_first_underliner="${line#_}"
+								line="_${without_first_underliner/_/ }"		# replace 1st occurrence
+							;;
+						esac
+					;;
+				esac
 
-	_cron watchdog_is_running || _cron daemon_restart "watchdog missing"
+				case "$line" in
+					*"$newline"*)
+						# likely an error
+						strong_debug='true'
+					;;
+				esac
 
-	local list_scheduler_file_parts="$( ls -1 ${FILE_SCHEDULER_TMP}* 2>/dev/null )"
-	if [ -n "$list_scheduler_file_parts" ]; then
+				# FIXME! how can it happen that we have invalid lines, e.g:
+				# _db user device add '83
+				# TODO: how to check if the line is valid?
+				case "$strong_debug" in
+					'true')
+						echo "$line" >"$logfile.debug"
+						sh -n "$logfile.debug" || {
+							_log it $funcname daemon alert "bad line: $line"
+							line='true'
+						}
+					;;
+				esac
 
-		for FILE in $list_scheduler_file_parts; do {	# this builds the running queue from temp_queue
-			while read LINE; do {
-				_log it $FUNC daemon debug "fetching '$LINE' from file '$FILE'"
-				echo "$LINE" >>$FILE_SCHEDULER
-			} done <$FILE
-			rm $FILE
-		} done
-		cp $FILE_SCHEDULER $FILE_SCHEDULER_COPY		# for checking of DUPs in running queue -> scheduler_add()
+				echo "$line" >>"$logfile"
+				_scheduler wait_till_cpuload_is_low "$line"
+				_stopwatch start "$logfile.start" global
+				_log it $funcname daemon debug "[START] '$line'"
+#				_stopwatch start '/tmp/PROFILER'
+				case "$line" in
+					# first 2 are: arguments in quotation marks
+					*" '"*|*' "'*|*'|'*|*'<'*|*'>'*|*';'*|*' && '*|*' || '*)
+						# TODO: debug mode also here?
+						eval $line
+					;;
+					*)
+						# TODO: if '$line' leads to a 'Segmentation fault' this breaks here
+						case "$strong_debug" in
+							'true')
+								set -x
+								$line 2>>"$logfile.debug"
+								set +x
+							;;
+							*)
+								$line
+							;;
+						esac
+					;;
+				esac
+#				local time=$( _stopwatch stop '/tmp/PROFILER' nolog )
+#				echo "$line - $time" >>'/tmp/PROFILER.data'
 
-		while read LINE; do {
+				_log it $funcname daemon debug "[READY] '$line'"
+				_watch coredump "after: $line"
 
-			_scheduler wait_till_cpuload_is_low "$LINE"
+				case "$line" in
+					'_firmware check_forced_upgrade'|'_firmware burn')
+						_log it $funcname daemon info "[OK] premature exit after '$line'"
+						break
+					;;
+				esac
+			fi
+		} done <"$file"
+		rm "$file" 2>/dev/null
 
-			_log it $FUNC daemon debug "running '$LINE'"
-			echo "$LINE" >$LOCKFILE
-			/bin/sh -c "$LINE"
-			_log it $FUNC daemon debug "ready '$LINE'"
+		_file age '/tmp/scheduler.mark_starttime' -gt 60 && {
+			# keep it running without pause till last init-scripts's job was done
+			[ -e "$TMPDIR/scheduler_keep_running" ] || {
+				length=0
+				for _ in $SCHEDULER_QUEUE; do test -e "$_" && length=$(( length + 1 )); done
 
-		} done <$FILE_SCHEDULER
-	else
-		_log it $FUNC daemon debug "empty queue - no action"
-	fi
+				# otherwise maybe 'IMPORTANT' jobs must wait too long
+				[ $length -gt 0 ] && {
+					age="$( _file age '/tmp/scheduler.mark_starttime' sec )"
+					_log it $funcname daemon info "[OK] aborting run, age: $age sec - $length jobs in queue"
+				}
 
-	rm $FILE_SCHEDULER $FILE_SCHEDULER_COPY $LOCKFILE 2>/dev/null
+				break
+			}
+		}
+	} done
 
-	_cron watchdog_is_running || _cron daemon_restart "watchdog missing"
-
-	return 0
+	rm "$logfile"
 }
