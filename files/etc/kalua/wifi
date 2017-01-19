@@ -1,24 +1,362 @@
-# iw phy phy0 interface add moni0 type monitor; horst -i moni0; iw dev moni0 del
+#!/bin/sh
 
-# cat /sys/kernel/debug/ieee80211/phy0/ath9k/wiphy
-
-# Idee, wie man mit mehreren wlan-karten klarkommt: 
+# Idee, wie man mit mehreren wlan-karten klarkommt:
 #    Erstes WIFI_DEV steht sowohl in normaler Variablenliste,
 #    als auch in /tmp/wifi_$DEV zum includen. So werden Operationen
 #    auf alle Elemente in der Liste gemacht:
 #    (es muss also nur was included werden, wenn es mehrere wireless-karten gibt)
-#    (bei einer wlan-karte gibt es kein $WIFI_DEV_NEXT)
+#    (bei einer wlan-karte oder der letzten gibt es kein $WIFI_DEV_NEXT)
 #
-# for WIFIDEV in $LIST_WIFIDEVS; do {
+# for WIFIDEV in $WIFI_DEVS; do {
 #	do_some_stuff_with_normal_vars
 #	[ -n "$WIFI_NEXT" ] && . $WIFI_NEXT	# inluding VAR-set for next WIFI_DEV
 # } done					# (last entry must point to first-device)
 
+_wifi_active_ap_devices()	# e.g. ' wlan0 wlan1-1 wlan1-2 '
+{
+	# build during hotplug
+	cat "$TMPDIR/WIFI_DEVS_AP" 2>/dev/null || {
+		grep ^'interface=' /var/run/hostapd-phy[0-3].conf | cut -d'=' -f2 | while read -r dev; do printf '%s' " $dev "; done
+	}
+}
+
+_wifi_phy_amp_predistortion()	# more effectiv txpower on higher rates
+{
+	local funcname='wifi_phy_amp_predistortion'
+	local phy="${1:-0}"	# e.g. 0
+	local mode="$2"		# on|off|<empty> = get
+	local file="/sys/kernel/debug/ieee80211/phy${phy}/ath9k/paprd"
+
+	case "$mode" in
+		on)
+			mode='Y'
+		;;
+		off)
+			mode='N'
+		;;
+		get|*)
+			mode='get'
+		;;
+	esac
+
+	if [ -e "$file" ]; then
+		_log it $funcname daemon info "phy: $phy mode: $mode"
+
+		if [ "$mode" = 'get' ]; then
+			cat "$file"
+		else
+			echo "$mode" >"$file"
+		fi
+	else
+		# but: /sys/kernel/debug/ieee80211/phy0/ath10k/...	// driver = ath10k_pci
+#		[ 'ath9k' = "$( _wifi driver_version )" ] || return 0
+		_log it $funcname daemon info "phy: $phy mode: $mode not_found: $file"
+	fi
+}
+
+_wifi_interface_adhoc2mesh()
+{
+	# TODO: check if capable / compiled in
+	local i="$1"	# interface-index
+	local bssid="$( uci -q get wireless.@wifi-iface[$i].bssid )" || return 1	# already done
+
+	uci set "wireless.@wifi-iface[$i].mesh_fwding=0"
+	uci set "wireless.@wifi-iface[$i].mode=mesh"
+	uci set "wireless.@wifi-iface[$i].mesh_id=$bssid"	# can be 32 bytes long
+	uci del "wireless.@wifi-iface[$i].bssid"
+}
+
+_wifi_interface_mesh2adhoc()
+{
+	local i="$1"	# interface-index
+	local bssid="$( uci -q get wireless.@wifi-iface[$i].mesh_id )" || return 1	# already done
+
+	uci del "wireless.@wifi-iface[$i].mesh_fwding"
+	uci set "wireless.@wifi-iface[$i].mode=adhoc"
+	uci set "wireless.@wifi-iface[$i].bssid=$bssid"
+	uci del "wireless.@wifi-iface[$i].mesh_id"
+}
+
+_wifi_led()	# TODO: no dev = all
+{
+	local action="$1"	# on|off
+	local device="$2"	# e.g. wlan1-1		# TODO: uci the led-triggers for that
+	local helper='/lib/functions/leds.sh'
+	local led file
+
+	if [ -e '/sys/class/leds/ath9k-phy0/brightness' ]; then
+		case "$device" in
+			'wlan0'*|'')
+				led='phy0'
+			;;
+			'wlan1'*)
+				led='phy1'
+			;;
+		esac
+		file="/sys/class/leds/ath9k-$led/brightness"
+
+		led_on()  { echo '255' >"$file"; }
+		led_off() { echo '0'   >"$file"; }
+	else
+		[ -e '/etc/diag.sh' ] || return 0
+		. /etc/diag.sh
+
+		status_led=
+		get_status_led		# e.g. status_led="ap132:green:status"
+		[ -z "$status_led" ] && return 0
+
+		led="$( echo "$status_led" | cut -d':' -f1 ):$( echo "$status_led" | cut -d':' -f2 ):wlan"
+
+		if [ -e "$helper" ]; then
+			. $helper
+		else
+			return 0
+		fi
+	fi
+
+	case "$action" in
+		'on')
+			led_on "$led"
+		;;
+		'off')
+			led_off "$led"
+		;;
+	esac
+}
+
+_wifi_mac_assoclist()
+{
+	local dev="$1"
+
+	iw dev "$dev" station dump | grep ^'Station ' | cut -d' ' -f2
+}
+
+_wifi_longrange_tweak_values()
+{
+	return 0
+
+	# TODO: convert ap-interfaces to adhoc if no 'adhoc' yet
+	_wifi set adhoc 2ghz mcast_rate '1000'
+	_wifi set adhoc 2ghz chanbw '5'
+	_wifi set adhoc 2ghz channel '1'
+	_wifi set adhoc 2ghz bssid '02:ca:ff:ee:05:05'
+
+	_wifi set adhoc 5ghz mcast_rate '6000'
+	_wifi set adhoc 5ghz chanbw '5'
+	_wifi set adhoc 5ghz channel '36'
+	_wifi set adhoc 5ghz bssid '0a:ca:ff:ee:05:36'
+}
+
+_wifi_nightly_longrange()
+{
+	local funcname='wifi_nightly_longrange'
+	local option="$1"			# set|unset
+	local markerfile="$TMPDIR/$funcname"
+	local backup_changes="$TMPDIR/$funcname.changes"
+	local hash_initial hash_after line
+
+	case "$option" in
+		set)
+			hash_initial="$( uci show wireless | md5sum )"
+			cp '/tmp/.uci/wireless' "$backup_changes"
+			_wifi longrange_tweak_values
+			hash_after="$( uci show wireless | md5sum )"
+
+			# only work if we changed something:
+			if [ "$hash_initial" = "$hash_after" ]; then
+				rm "$backup_changes"
+			else
+				uci export wireless >"$markerfile"
+				_wifi phy_restart "$WIFIDEV" "$funcname:set" 'info'
+			fi
+		;;
+		*)
+			[ -e "$markerfile" ] && {
+				uci revert wireless
+				uci import <"$markerfile"
+				mv "$backup_changes" '/tmp/.uci/wireless'
+
+				_olsr txtinfo >"$backup_changes"	# ugly
+				_wifi phy_restart "$WIFIDEV" "$funcname:unset" 'info'
+				rm "$markerfile"
+			}
+		;;
+	esac
+}
+
+_wifi_dev2freq()	# TODO: code duplication with wifi_channel()
+{			# TODO: on multiband cards this can be senseless
+	local dev="$1"
+	local freq=0
+	local channel basefreq
+
+	_net dev_is_wifi "$dev" && {
+		# old, e.g. r30823 / iw v3.3
+		# Interface wlan0 ifindex 6 type IBSS wiphy 1
+		#
+		# newstyle:
+		# Interface wlan1 ifindex 51 wdev 0x10000000e addr f8:1a:67:33:1b:be \
+		# ssid ffintern.5GHz type IBSS wiphy 1 channel 40 (5200 MHz), width: 20 MHz, center1: 5200 MHz
+		#						  ^^^^^^^^^^
+		explode $( iw dev "$dev" info )
+		case "$*" in
+			*' MHz'*)
+				freq="${*%% MHz*}"
+				freq="${freq#*(}"
+			;;
+			*)
+				# FIXME! do not hardcode 'radio0'
+				channel="$( uci -q get wireless.radio0.channel )" || channel=0
+
+				# https://en.wikipedia.org/wiki/List_of_WLAN_channels
+				if [ $channel -lt 15 ]; then
+					basefreq=2407	# 2.4ghz works for channel 1-13
+				else
+					basefreq=5000	# 5ghz - works for channel 7...165
+				fi			# TODO: fix channel 183...196
+
+				freq=$(( basefreq + (5 * channel) ))
+			;;
+		esac
+	}
+
+	echo "${freq:-0}"
+}
+
+_wifi_dev2chanbw()
+{
+	local dev="$1"
+	local chanbw=0
+	local phy
+
+	read -r phy 2>/dev/null <"/var/run/interfaces/dev2radio_$dev" && {
+		phy="${phy#*y}"		# phy1 -> 1
+		chanbw="$( uci -q get wireless.radio${phy}.chanbw )"
+		chanbw="${chanbw:-20}"
+	}
+
+	echo "$chanbw"
+}
+
+_wifi_kick()
+{
+	local funcname='wifi_kick'
+	local mac="$1"
+	local dev_list="${2:-$WIFI_DEVS}"
+	local reason="${3:-no_reason_given}"
+	local file="/tmp/$funcname"
+	local dev
+
+	for dev in $dev_list; do {
+		iw dev $dev station get "$mac" 1>&- 2>&- && {
+			command="ubus call hostapd.$dev del_client"
+			_log it $funcname daemon info "station: $mac reason: $reason executing: $command"
+			echo "$( date ) $funcname() $mac @ $dev (reason: $reason)" >>'/tmp/IWLOG'
+
+			# ban_time can be omitted
+			# http://resin.csoft.net/cgi-bin/man.cgi?section=5&topic=hostapd.conf
+			# and
+			# https://supportforums.cisco.com/document/141136/80211-association-status-80211-deauth-reason-codes
+			cat >"$file" <<EOF
+rm $file
+$command '{ "addr" : "$mac", "reason" : "assoc toomany", "ban_time" : 10000 }'
+EOF
+			. $file && return 0
+		}
+	} done
+
+	_log it $funcname daemon info "did not found mac '$mac' on dev '$dev' reason: $reason"
+}
+
+_wifi_change_essid_ap()
+{
+	local funcname='wifi_change_essid_ap'
+	local option="$1"	# e.g. <empty> OR 'original'
+	local file="$TMPDIR/$funcname"
+	local i essid age hash1 hash2	# TODO: find $i -> WIFIDEV and restart these via phy_restart()
+
+	if [ "$option" = 'original' ]; then
+		# do not work, when it was never changed
+		[ -e "$file" ] || return 0
+	else
+		# go into 'maintenance_mode', but do not set it twice
+		[ -e "$file" ] && return 0
+	fi
+
+	hash1="$( uci show wireless | md5sum )"
+	for i in $( _wifi get any mode ap ); do {
+		if [ "$option" = 'original' ]; then
+			essid="$( uci -q get "wireless.@wifi-iface[$i].ssid_old" )" || continue
+			uci delete "wireless.@wifi-iface[$i].ssid_old"
+			uci set "wireless.@wifi-iface[$i].ssid=${essid:-$CONFIG_PROFILE-$NODENUMBER}"
+
+			[ -e "$file.ap_forced_on.$i" ] && {
+				rm -f "$file"
+				_wifi set ap "$i" 'off'
+			}
+
+			[ -e "$file" ] && {
+				age="$( _file age "$file" humanreadable)"
+				echo >>$SCHEDULER "_weblogin authserver_message '$funcname() $HOSTNAME: ${option:-inet_broken} after $age'"
+				rm -f "$file"
+			}
+		else
+			touch "$file"
+			essid="$( uci get "wireless.@wifi-iface[$i].ssid" )"
+			uci set "wireless.@wifi-iface[$i].ssid_old=$essid"
+			uci set "wireless.@wifi-iface[$i].ssid=$( _i18n get "$LANG" maintenance_mode "$NODENUMBER/$i" )"
+
+			# FIXME! this should go to another function and switched back, if net is OK again
+			_wifi set anymode 2ghz txpower '20'
+			_wifi set anymode 5ghz txpower '20'
+
+			_wifi longshot_name >/dev/null && {
+				_wifi check_disabled "$i" && {
+					_wifi set ap "$i" 'on'
+					touch "$file.ap_forced_on.$i"
+				}
+			}
+		fi
+	} done
+
+	hash2="$( uci show wireless | md5sum )"
+	[ "$hash1" = "$hash2" ] || {
+		_wifi phy_restart "$WIFIDEV" "force: mode: '${option:-inet_broken}' $funcname"
+	}
+}
+
+_wifi_get_station_param()
+{
+	local mac="$1"
+	local param="$2"
+	local dev="$( _net mac2dev "$mac" )"
+	local line
+
+	iw dev "$dev" station get "$mac" 2>/dev/null | while read -r line; do {
+		case "$line" in
+			*"$param:"*)
+				explode $line
+				while [ -n "$1" ]; do {
+					case "$1" in
+						*":")
+							shift
+							echo "$1"
+						;;
+						*)
+							shift
+						;;
+					esac
+				} done
+				break
+			;;
+		esac
+	} done
+}
 
 _wifi_show_station_traffic()
 {
 	local mac="$1"
-	local wifidev="$2"
+	local dev="$2"
 	local rx_old="$3"
 	local tx_old="$4"
 	local uptime_old="$5"
@@ -27,23 +365,23 @@ _wifi_show_station_traffic()
 
 	# while :; do eval $( _wifi show_station_traffic "$mac" $WIFIDEV $rx $tx $up ); sleep 60; done
 
-	iw dev "$wifidev" station get "$mac" |
-	 while read line; do {
+	iw dev "$dev" station get "$mac" |
+	 while read -r line; do {
 		case "$line" in
 			*"rx bytes:"*)
-				set $line
+				explode $line
 				rx="$3"
 			;;
 			*"tx bytes:"*)
-				set $line
+				explode $line
 				tx="$3"
 
 				rx_human="$( _sanitizer run "$rx" number_humanreadable )"
 				tx_human="$( _sanitizer run "$tx" number_humanreadable )"
 
 				if [ -n "$rx_old" ]; then
-					rx_diff=$(( $rx - $rx_old ))
-					tx_diff=$(( $tx - $tx_old ))
+					rx_diff=$(( rx - rx_old ))
+					tx_diff=$(( tx - tx_old ))
 				else
 					rx_diff=0
 					tx_diff=0
@@ -51,10 +389,11 @@ _wifi_show_station_traffic()
 
 				if [ -n "$uptime_old" ]; then
 					unit="bytes/s"
-					uptime_diff=$(( $uptime - $uptime_old ))
+					uptime_diff=$(( uptime - uptime_old ))
 
-					rx_diff=$(( ($rx_diff * 100) / $uptime_diff ))
-					tx_diff=$(( ($tx_diff * 100) / $uptime_diff ))
+					divisor_valid "$uptime_diff" || uptime_diff=1
+					rx_diff=$(( (rx_diff * 100) / uptime_diff ))	# divisor_valid
+					tx_diff=$(( (tx_diff * 100) / uptime_diff ))	# divisor_valid
 				else
 					unit="bytes"
 				fi
@@ -66,8 +405,366 @@ _wifi_show_station_traffic()
 	} done
 }
 
-_wifi_tx_and_rx ()		# ARG1 = NETWORK_DEV e.g. WIFI_DEV
+_wifi_minstrel()		# TODO: support for enforcing 'dev'
+{				# FIXME: same mac on both bands -> choose the one with lowest "conntected time"
+	local mac="$1"
+	local option="$2"
+
+	_wifi minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate "$mac" "$option"
+}
+
+_wifi_minstrel_debugsfs_file()
 {
+	local funcname='wifi_minstrel_debugsfs_file'
+	local mac="$1"
+	local dev rc_type file phy
+	local dir='/sys/kernel/debug/ieee80211'
+
+	for dev in $WIFI_DEVS; do {		# e.g. wlan0 wlan0-1 wlan1-1
+		explode $( iw dev "$dev" info )
+		phy="$*"
+		phy="${phy#*wiphy }"
+		phy="${phy%% *}"
+
+		for rc_type in rc_stats rhapsody_stats; do {
+			file="$dir/phy$phy/netdev:$dev/stations/$mac/$rc_type"
+			[ -e "$file" ] && {
+				echo "$file"
+				return 0
+			}
+		} done
+	} done
+
+	_log it $funcname daemon debug 'no entry'
+	return 1
+}
+
+# FIXME! rename and rework for:
+# _wifi_minstrel_effective_throughput_rate_tupel_max
+_wifi_minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate()
+{
+	local mac="$1"		# or IP
+	local option="$2"	# debug
+	local ip line result targetline rate rate_calc throughput efficiency system file
+	local max=0
+
+	[ "$option" = 'debug' ] || {
+#		_log it minstrel_out daemon debug "FIXME - cleanup needed, use 'debug' for override"
+		echo "txrate=${rate:-0};txthroughput=${throughput:-0};efficiency=${efficiency:-0};system=${system};ip=$ip"
+		return 0
+	}
+
+	case "$mac" in
+		*':'*)
+			ip="$( _net mac2ip "$mac" )"
+		;;
+		*)
+			_sanitizer run "$mac" ip4 check && {
+				ip="$mac"
+				mac="$( _net ip2mac $mac )"
+			}
+		;;
+	esac
+
+	[ -e '/tmp/OLSR/LINKS.sh' ] && {
+		eval $( grep -F "REMOTE=${ip};" '/tmp/OLSR/LINKS.sh' )
+		printf '%s' "lq=$LQ;nlq=$NLQ;cost=$COST;"
+	}
+
+	file="$( _wifi_minstrel_debugsfs_file "$mac" )" || return 1
+
+	[ "$option" = "debug" ] && {
+		_log it minstrel_out daemon debug "output of $file"
+		cat "$file"
+		echo
+	}
+
+	percent()
+	{
+		if [ $1 -lt 100 ]; then
+			echo '0'
+		else
+			if divisor_valid "$2"; then
+				echo "$(( ( $1 * 100 ) / $2 ))"		# divisor_valid
+			else
+				echo '0'
+			fi
+		fi
+	}
+
+	while read -r line; do {
+		case "$line" in
+			Type*|type*)
+				continue
+			;;
+			T*|t*)			# only use lines with highest/2nd-highest rate
+				explode $line
+			;;
+			"HT20/LGI T"*|"HT20/SGI T"*|"HT40/LGI T"*|"HT40/SGI T"*)
+				system="n"
+				explode $line
+				shift
+			;;
+			"HT20/LGI  t"*|"HT20/SGI  t"*|"HT40/LGI  t"*|"HT40/SGI  t"*)
+				system="n"
+				explode $line
+				shift
+			;;
+			*)
+				continue
+			;;
+		esac
+
+# 		logger -s "interesting line: 1: $1 2: $2 3: $3 4:$3 5: $5 6: $6 7: $7 8: $8 9: $9 10: ${10}"
+
+		case "$2" in
+			1|2|5.5|11|6|9|12|18|24|36|48|54|*MCS*)
+
+				if [ -n "$9" ]; then
+					result="$( percent "$8" "$9" )"
+				else
+					result="$( percent "$7" "$8" )"
+				fi
+
+				[ $result -gt $max ] && {
+					max=$result
+					targetline="$line"
+				}
+			;;
+			*)
+				case "$3" in
+					ewma|count*)
+						:
+					;;
+					*)
+						if [ -n "${10}" ]; then
+							result="$( percent "$9" "${10}" )"
+						else
+							result="$( percent "$7" "$8" )"
+						fi
+
+						[ $result -gt $max ] && {
+							max=$result
+							targetline="$line"
+						}
+					;;
+				esac
+			;;
+		esac
+
+	} done <$file
+
+	[ -n "$targetline" ] && {
+		explode $targetline
+# 		logger -s "TL 1: $1 2: $2 3: $3 4:$3 5: $5 6: $6 7: $7 8: $8 9: $9"
+
+		case "$2" in
+			*MCS*)
+				system="n"
+				rate="$2"
+				throughput="$3"
+			;;
+			1|2|5.5|11|6|9|12|18|24|36|48|54)
+				system="g"
+				rate="$2"
+				throughput="$3"
+			;;
+			*)
+				rate="$3"
+				throughput="$4"
+			;;
+		esac
+
+		[ "$rate" = '0' ] || {
+#			logger -s "rate: $rate"
+
+			case "$rate" in
+				*'MCS'*)
+					system="n"
+					rate="$( _wifi math_mcs2rate "$1" "$1" "$rate" "$option" )"
+#					logger -s "rate: $rate"
+				;;
+				*)
+					system="g"
+				;;
+			esac
+
+			if [ "${throughput%.*}" = "0" ]; then
+				efficiency="${throughput#*.}"				# 0.9 -> 9
+			else
+				efficiency="${throughput%.*}${throughput#*.}"		# 42.6 -> 426
+			fi
+
+			# e.g. 5.5 or 11 -> efficiency in [percent]
+			case "$rate" in
+				*'.'*)
+					rate_calc="$( echo "$rate" | tr -d '.' )"
+					if divisor_valid "$rate_calc"; then
+						efficiency=$(( ( efficiency * 100 ) / rate_calc ))	# divisor_valid
+					else
+						efficiency=0
+					fi
+				;;
+				*)
+					divisor_valid "$rate" || rate=1
+					efficiency=$(( ( efficiency * 10 ) / rate ))	# divisor_valid
+				;;
+			esac
+		}
+	}
+
+	echo "txrate=${rate:-0};txthroughput=${throughput:-0};efficiency=${efficiency:-0};system=${system};ip=$ip"
+}
+
+_wifi_math_mcs2rate()			# fixme! output spatial streams, coding rate, modulation type?
+{					# TODO: should work for 0...31 (e.g. 4900er) + chanbw 5 + 10
+	local funcname='wifi_math_mcs2rate'	# doublecheck: http://mcsindex.com/
+	local channel_width="$1"		# e.g. HT20/HT40
+	local guard_interval_type="$2"		# e.g. LGI/SGI = 400/800ns
+	local mcs_index="$3"			# e.g. 0...31
+	local debug="$4"
+	local rate txt
+	local spatial_streams coding_rate modulation_type
+
+	case "$channel_width" in
+		*'20'*) channel_width=20 ;;
+		*'40'*) channel_width=40 ;;
+	esac
+
+	case "$guard_interval_type" in
+		*'SGI'*) guard_interval_type='short' ;;
+		*'LGI'*) guard_interval_type='long' ;;
+	esac
+
+	case "$mcs_index" in
+		*[0-9]) mcs_index="${mcs_index#*MCS}" ;;	# MCS12 -> 12
+	esac
+
+	[ -n "$debug" ] && {
+		case "$mcs_index" in
+				0|1|2|3|4|5|6|7) spatial_streams=1 ;;
+			  8|9|10|11|12|13|14|15) spatial_streams=2 ;;
+			16|17|18|19|20|21|22|23) spatial_streams=3 ;;
+			24|25|26|27|28|29|30|31) spatial_streams=4 ;;
+		esac
+
+		case "$mcs_index" in
+			  0|1|3|8|9|11|16|17|19|24|25|27) coding_rate='1/2' ;;
+					      5|13|21|29) coding_rate='2/3' ;;
+			2|4|6|10|12|14|18|20|22|26|28|30) coding_rate='3/4' ;;
+					      7|15|23|31) coding_rate='5/6' ;;
+		esac
+
+		case "$mcs_index" in
+						  0|8|16) modulation_type='BPSK' ;;
+				    1|2|9|10|17|18|24|25) modulation_type='QPSK' ;;
+				   3|4|11|12|19|20|27|28) modulation_type='16QAM' ;;
+			5|6|7|13|14|15|21|22|23|29|30|31) modulation_type='64QAM' ;;
+		esac
+
+		txt="channel_width: $channel_width guard_interval_type: $guard_interval_type"
+		txt="$txt mcs_index: $mcs_index spatial_streams: $spatial_streams coding_rate:"
+		txt="$txt $coding_rate modulation_type: $modulation_type"
+		_log it $funcname daemon debug "$txt"
+	}
+
+	case "$channel_width" in
+		20)
+			case "$guard_interval_type" in
+				long)
+					case "$mcs_index" in
+						0) rate="6.5" ;;
+						1) rate="13" ;;
+						2) rate="9.5" ;;
+						3) rate="26" ;;
+						4) rate="39" ;;
+						5) rate="52" ;;
+						6) rate="58.5" ;;
+						7) rate="65" ;;
+						8) rate="13" ;;
+						9) rate="26" ;;
+						10) rate="39" ;;
+						11) rate="52" ;;
+						12) rate="78" ;;
+						13) rate="104" ;;
+						14) rate="117" ;;
+						15) rate="130" ;;
+					esac
+				;;
+				short)
+					case "$mcs_index" in
+						0) rate="7.2" ;;
+						1) rate="14.4" ;;
+						2) rate="21.7" ;;
+						3) rate="28.9" ;;
+						4) rate="43.3" ;;
+						5) rate="57.8" ;;
+						6) rate="65" ;;
+						7) rate="72.2" ;;
+						8) rate="14.4" ;;
+						9) rate="28.9" ;;
+						10) rate="43.3" ;;
+						11) rate="57.8" ;;
+						12) rate="86.7" ;;
+						13) rate="115.6" ;;
+						14) rate="130" ;;
+						15) rate="144.4" ;;
+					esac
+				;;
+			esac
+		;;
+		40)
+			case "$guard_interval_type" in
+				long)
+					case "$mcs_index" in
+						0) rate="13.5" ;;
+						1) rate="27" ;;
+						2) rate="40.5" ;;
+						3) rate="54" ;;
+						4) rate="81" ;;
+						5) rate="108" ;;
+						6) rate="121.5" ;;
+						7) rate="135" ;;
+						8) rate="27" ;;
+						9) rate="54" ;;
+						10) rate="81" ;;
+						11) rate="108" ;;
+						12) rate="162" ;;
+						13) rate="216" ;;
+						14) rate="243" ;;
+						15) rate="270" ;;
+					esac
+				;;
+				short)
+					case "$mcs_index" in
+						0) rate=15 ;;
+						1) rate=30 ;;
+						2) rate=45 ;;
+						3) rate=60 ;;
+						4) rate=90 ;;
+						5) rate=120 ;;
+						6) rate=135 ;;
+						7) rate=150 ;;
+						8) rate=30 ;;
+						9) rate=60 ;;
+						10) rate=90 ;;
+						11) rate=120 ;;
+						12) rate=180 ;;
+						13) rate=240 ;;
+						14) rate=270 ;;
+						15) rate=300 ;;
+					esac
+				;;
+			esac
+		;;
+	esac
+
+	echo "$rate"
+}
+
+_wifi_tx_and_rx()
+{
+	local dev="${1:-does_not_exist}"	# NETWORK_DEV e.g. WIFI_DEV
 	# WIFI_RX_BYTES=1665694551
 	# WIFI_RX_PACKETS=22019893
 	# WIFI_RX_ERRORS=0
@@ -76,20 +773,22 @@ _wifi_tx_and_rx ()		# ARG1 = NETWORK_DEV e.g. WIFI_DEV
 	# WIFI_TX_PACKETS=22193801
 	# WIFI_TX_ERRORS=3
 
-	local FILE="/proc/net/dev"
+	local file='/proc/net/dev'
 
-	sed -n "s/^.*$1: *\([0-9]*\) *\([0-9]*\) *\([0-9]*\) *[0-9]* *[0-9]* *\([0-9]*\) *[0-9]* *[0-9]* *\([0-9]*\) *\([0-9]*\) *\([0-9]*\) .*/WIFI_RX_BYTES=\1\nWIFI_RX_PACKETS=\2\nWIFI_RX_ERRORS=\3\nWIFI_RX_FRAMES=\4\nWIFI_TX_BYTES=\5\nWIFI_TX_PACKETS=\6\nWIFI_TX_ERRORS=\7/p" "$FILE"
+	sed -n "s/^.*$dev: *\([0-9]*\) *\([0-9]*\) *\([0-9]*\) *[0-9]* *[0-9]* *\([0-9]*\) *[0-9]* *[0-9]* *\([0-9]*\) *\([0-9]*\) *\([0-9]*\) .*/WIFI_RX_BYTES=\1\nWIFI_RX_PACKETS=\2\nWIFI_RX_ERRORS=\3\nWIFI_RX_FRAMES=\4\nWIFI_TX_BYTES=\5\nWIFI_TX_PACKETS=\6\nWIFI_TX_ERRORS=\7/p" "$file"
 }
 
-_wifi_params_iwconfig_status ()		# ARG1 = WIFI_DEV
+_wifi_params_iwconfig_status()
 {
+	local dev="${1:-does_not_exist}"
+
 	# WIFI_DEV=eth1
 	# WIFI_UPTIME=0
 	# WIFI_ESSID='www.freifunk.net (Zugangspunkt)'  	# fixme! single quotes are not correct escaped!
 	# WIFI_MODE="Managed"
 	# WIFI_FREQ=2442					# in MHz ! -> convert to Channel?
 	# WIFI_CHANNEL="$( _wifi math_mhz2channel 2442 )"	# this is converted during 'eval'
-	# WIFI_BSSID=00:1D:73:05:0F:59  
+	# WIFI_BSSID=00:1D:73:05:0F:59
 	# WIFI_SENSITIVITY="0/3"
 	# WIFI_RETRY=off
 	# WIFI_RTS=256
@@ -100,14 +799,14 @@ _wifi_params_iwconfig_status ()		# ARG1 = WIFI_DEV
 	# WIFI_NOISE='-95'
 	# WIFI_TXPOWER=20	// only seen with atk9k/mac80211
 
-				# fixme! sometimes iwconfig-output is empty
-
-	/usr/sbin/iwconfig $1 2>/dev/null |
+	[ -e '/usr/sbin/iwconfig' ] || return 1
+							# FIXME! sometimes iwconfig-output is empty
+	/usr/sbin/iwconfig "$dev" 2>/dev/null |
 	 sed -ne "s/^.*ESSID:\"\(.*\)\"/WIFI_DEV=$1\nWIFI_UPTIME=0\nWIFI_ESSID='\1'/p" \
 	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Access Point: \(.*\)Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE=\1;WIFI_TXPOWER=\3;/p' \
 	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Access Point: \(..:..:..:..:..:..\)/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
 	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: \(..:..:..:..:..:..\)/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: Not-Associated/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
+	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: Not-Associated/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"/p' \
 	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_TXPOWER=\4/p' \
 	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE=\1;WIFI_TXPOWER=\2;/p' \
 	     -ne 's/^.*Bit Rate:.*Tx-Power:.*Sensitivity=\([0-9]*\)\/\([0-9]*\).*/WIFI_SENSITIVITY="\1\/\2"/p' \
@@ -115,69 +814,151 @@ _wifi_params_iwconfig_status ()		# ARG1 = WIFI_DEV
 	     -ne "s/^.*Link Quality[:=]\([0-9]*\)\/\([0-9]*\).*Signal level[:=]\([-0-9]*\) dBm.*Noise level[:=]\([-0-9]*\) dBm/WIFI_QUALITY=\1\nWIFI_QUALITY_MAX=\2\nWIFI_SIGNAL='\3'\nWIFI_NOISE='\4'/p"
 }
 
-_wifi_vendor_and_model ()		# fixme! build lookup-table WIFIDEV -> vendor|model
+_wifi_phy_probe_online()		# fixme! more abstraction
 {
-	local WIFI_DEV="$1"
-
-	_wifi vendor_and_model_pci
-
-	case "$HARDWARE" in
-		"Linksys WRT54G/GS/GL"|"Buffalo WHR-HP-G54"|"Dell TrueMobile 2300")
-		;;
-		*)
-			_wifi vendor_and_model_usb
-		;;
-	esac
+	bool_true 'wireless.radio0.disabled'
 }
 
-_wifi_vendor_and_model_pci ()			# output can be more than one, how to handle?
-{						# ARG1 = WIFI_DEV
-	local FILE="/proc/bus/pci/devices"	# evalable_output: WIFI_VENDOR=broadcom;WIFI_MODEL=4318;WIFI_BANDS='b g'
+_wifi_dev2driver()
+{
+	local dev="$1"
+	local file="/sys/class/net/$dev/device/driver"
 
-	# Atheros5413 = AR5006X-family = MikroTik RouterBOARD R5H (miniPCI)
-
-	if fgrep -q "0" "$FILE"; then		# dirty but works
-
-		sed	-ne "/168c001b/c\WIFI_VENDOR=atheros ;WIFI_MODEL=5413 ;WIFI_BANDS='a'" \
-			-ne "/14e44318/c\WIFI_VENDOR=broadcom;WIFI_MODEL=4318 ;WIFI_BANDS='b g'" \
-			-ne "/14e44320/c\WIFI_VENDOR=broadcom;WIFI_MODEL=4306 ;WIFI_BANDS='b g'" \
-			-ne "/14e44319/c\WIFI_VENDOR=broadcom;WIFI_MODEL=4319 ;WIFI_BANDS='b g a'" \
-			-ne "/168c0012/c\WIFI_VENDOR=atheros ;WIFI_MODEL=5211a;WIFI_BANDS='b g a'" \
-			-ne "/168c0013/c\WIFI_VENDOR=atheros ;WIFI_MODEL=5212a;WIFI_BANDS='b g a'" \
-			-ne "/168c002a/c\WIFI_VENDOR=atheros ;WIFI_MODEL=AR928X;WIFI_BANDS='a'" \
-			"$FILE"
+	if [ -e "$file" ]; then
+		basename "$( readlink "$file" )"	# e.g. ath10k_pci, iwlwifi
 	else
-		FILE="/tmp/WIFI_VENDOR_AND_MODEL"
-
-		[ -e "$FILE" ] || {
-			if   grep -q "Atheros AR9100 MAC/BB Rev:[0-9a-zA-Z]* AR2133" "/tmp/dmesg.boot"; then
-				echo "WIFI_VENDOR=atheros;WIFI_MODEL=2133;WIFI_BANDS='b g'" >"$FILE"
-			elif fgrep -q "b43-phy0: Broadcom 5352" "/tmp/dmesg.boot"; then
-				echo "WIFI_VENDOR=broadcom;WIFI_MODEL=5352;WIFI_BANDS='b g'" >"$FILE"
-			else
-				echo "WIFI_VENDOR=unknown;WIFI_MODEL=unknown;WIFI_BANDS='b g'" >"$FILE"
-			fi
-		}
-
-		cat "$FILE"
+		echo "nowifi_${dev:-empty}"
 	fi
 }
 
-_wifi_vendor_and_model_usb ()
+_wifi_speed()
 {
-	# WIFI_VENDOR=ralink;WIFI_MODEL=rt73usb
+	local funcname='wifi_speed'
+	local option="$1"	# e.g. 'force', 'check' or 'cached'
+	local nexthop="$2"	# e.g <IP> or 'verbose'
+	local speed nexthop_interface verbose
 
-	sed -ne "/Vendor=148f ProdID=2573/cWIFI_VENDOR=ralink;WIFI_MODEL=rt73usb;WIFI_BANDS='b g'" /proc/bus/usb/devices 2>/dev/null
-}
+	# all used calls:
+	# _wifi speed cached verbose	// only output speed if already done, otherwise '?'
+	# _wifi speed check $IP		// use cached value if possible, lookup $IP - e.g. when new OLSR-gateway
+	# _wifi speed force $IP		// alway do speedtest on $IP
+	# _wifi speed $DEV		// use cached value if possible, uses default-gw from 'ip route' (invalid call, but works)
+	# _wifi speed			// use cached value if possible, uses default-gw from '/tmp/OLSR/DEFGW_NOW'
 
-_wifi_driver_version()
-{
-	local WIFI_DEV="$1"		# fixme! howto connect DEV -> PHY  (DEV -> DRIVER is no problem)
-	local VERSION
+	[ "$nexthop" = 'verbose' ] && {
+		verbose='true'
+		nexthop=
+	}
 
-	VERSION="kmod-ath9k_v$( _software package_version kmod-ath9k )"
+	[ -z "$nexthop" ] && {
+		if nexthop="$( uci -q get system.@monitoring[0].speedcheck_fakeip )"; then
+			_log it $funcname daemon debug "fake/override: $nexthop"
+		elif [ -e '/tmp/GATEWAY_CHECK_RECENT.batman' ]; then
+			nexthop="$( cut -d'=' -f3 /tmp/GATEWAY_CHECK_RECENT.batman 2>/dev/null | cut -d';' -f1 )"
+		else
+			read -r nexthop 2>/dev/null <'/tmp/OLSR/DEFGW_NOW'
+		fi
+	}
 
-	echo "$VERSION"
+	# refuse to test neighbours which are not mesh
+	if _net ip4_is_private "$nexthop" ; then
+		# ignore private over WAN, e.g. fritzbox
+		_net local_inet_offer cached >/dev/null && {
+			[ -n "$( ip route list exact '0.0.0.0/0' via "$nexthop" )" ] && return 1
+		}
+	else
+		# do not test public IP
+		return 1
+	fi
+
+	get_speed()
+	{
+		# batman
+		nexthop_interface="$( grep -s ^'NEXTHOP_INTERFACE=' "/tmp/BATCTL_TRACEROUTE" | cut -d'=' -f2 )"
+
+		# olsr
+		[ -z "$nexthop_interface" ] && {
+			# we must make sure, that we use the same var during speedtest, otherwise it will run again and again...
+			[ -z "$nexthop" ] && nexthop="$( _sanitizer run "$( head -n1 '/tmp/OLSR/ROUTING_TABLE_MAIN' )" ip4 )"
+
+			[ -n "$nexthop" ] && {
+				# TODO: if nexthop is wired, it can still be a wireless link!
+				nexthop_interface="$( _net ip2dev "$nexthop" )"		# e.g. eth0.1
+
+				case "$nexthop_interface" in
+					"${LANDEV:-nolan}")   nexthop_interface='LAN' ;;
+					"${WANDEV:-nowan}")   nexthop_interface='WAN' ;;
+					"${WIFIDEV:-nowifi}") nexthop_interface='WIFI' ;;
+							    *) nexthop_interface='WIFI2' ;;
+				esac
+			}
+		}
+
+		# ignore SPEED_MAX=0 (enforce new measurement)
+		#
+		# SAMPLES=2
+		# SPEED_AVG=4695
+		# SPEED_MIN=3566
+		# SPEED_MAX=5825
+		# SPEED_SUM=9391
+
+		local pattern
+		if [ "$option" = 'force' ]; then
+			pattern='SPEED_RECENT='
+		else
+			pattern='SPEED_MAX='
+		fi
+
+		really_test_speed()
+		{
+			case "$nexthop_interface" in
+				'LAN'|'WAN')
+					# normally it does not make sense to test ethernet.
+					# only switch this on if this is e.g. a wireless-bridge/point2point-link
+					bool_true 'system.@monitoring[0].speedcheck_wired' || return 1
+				;;
+				*)
+					return 0
+				;;
+			esac
+		}
+
+		if really_test_speed; then
+			speed="$( _speedtest stats here "$nexthop" poormens_tcpdownload |
+				grep -F "$pattern" |
+				 grep -Fv '=0' |
+				  cut -d'=' -f2 )"
+		else
+			speed=8888
+			_log it $funcname daemon debug "[OK] fake-value: $speed - seems to be ethernet. option: $option nexthop: $nexthop"
+		fi
+
+		[ -n "$speed" ] && {
+			[ $speed -gt 20 ] && {
+				if [ -n "$verbose" ]; then
+					echo "$nexthop $nexthop_interface $speed"
+				else
+					echo "$nexthop_interface-$speed"
+				fi
+			}
+		}
+	}
+
+	if [ -n "$nexthop" ]; then
+		_log it $funcname daemon debug "IP: $nexthop"
+		speed="$( get_speed "$@" )"	# SC2119/SC2120
+
+		[ -z "$speed" -a "$option" = 'cached' ] && speed='?'
+
+		if [ -z "$speed" -o "$option" = 'force' ]; then
+			_speedtest run here "$nexthop" poormens_tcpdownload
+			get_speed "$@"
+		else
+			echo "$speed"
+		fi
+	else
+		return 0
+	fi
 }
 
 _wifi_phy_uptime()
@@ -188,36 +969,278 @@ _wifi_phy_uptime()
 	local file="/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
 
 	[ -e "$file" ] && {
-		read last_restart <"$file"
+		read -r last_restart <"$file"
 	}
 
-	echo $(( $uptime_now - $last_restart ))
+	echo $(( uptime_now - last_restart ))
+}
+
+_wifi_watch_phy_problems()	# RETURN: 0 = ok ; 1 = problems! - SENSE: reboot if possible
+{
+	local option="$1"	# e.g. 'notify' or 'sysupgrade'
+	local dev error=
+
+	[ "$option" = 'notify' ] && {
+		touch "/tmp/WIFI_ERROR.$WIFIDEV"	# FIXME! we must give $dev in ARGS
+		return 0
+	}
+
+	for dev in $WIFI_DEVS; do {
+		[ -e "/tmp/WIFI_ERROR.$dev" ] && error='true'
+	} done
+
+	if [ -z "$error" ]; then
+		:
+	else
+		# if any error, forbid sysupgrade
+		[ "$option" = 'sysupgrade' ] && return 1
+	fi
+
+	return 0
+}
+
+_wifi_forwarding_still_active()
+{
+	local funcname='wifi_forwarding_still_active'
+	local duration=${1:-30}
+	local bytes=0
+
+	# FIXME! do not count tap -> eth+ or lo -> eth+
+	# measure forwarding of wired -> wifi or wifi -> wired
+	$IPT -I FORWARD   -i eth+ ! -o eth+
+	$IPT -I FORWARD ! -i eth+   -o eth+
+
+	unroll()
+	{
+		$IPT -D FORWARD ! -i eth+   -o eth+
+		$IPT -D FORWARD   -i eth+ ! -o eth+
+	}
+
+	while [ $bytes -eq 0 ]; do {
+		duration=$(( duration - 1 ))
+		[ $duration -eq 0 ] || break
+		sleep 1
+
+		explode $( $IPT -nxvL FORWARD 1 )
+		bytes=$2
+		explode $( $IPT -nxvL FORWARD 2 )
+		bytes=$(( bytes + $2 ))
+
+		_log it $funcname daemon debug "forwarded bytes: $bytes"
+		[ $bytes -gt 0 ] && {
+			unroll
+			return 0
+		}
+	} done
+
+	unroll
+	return 1	# no forwarding
+}
+
+_wifi_toggle()
+{
+	local funcname='wifi_toggle'
+	local mode="$1"		# on|off
+
+	case "$mode" in
+		'off')
+			if [ -n "$WIFIDEV" ]; then
+				_log it $funcname daemon info "working: $mode"
+				_wifi set anymode anyfreq off
+				wifi
+				_netparam check
+			else
+				_log it $funcname daemon debug "already $mode"
+			fi
+		;;
+		'on')
+			if [ -z "$WIFIDEV" ]; then
+				_log it $funcname daemon info "working: $mode"
+				_wifi set anymode anyfreq on
+
+				# TODO: name guessed - WIFIDEV is empty here
+				_wifi phy_restart 'wlan0' "force:$funcname"
+				_netparam check
+			else
+				_log it $funcname daemon debug "already $mode"
+			fi
+		;;
+	esac
 }
 
 _wifi_phy_restart()
 {
-	local funcname="wifi_phy_restart"
-	local wifi_dev="$1"
-	local reason="${2:-no_reason_given}"
+	local funcname='wifi_phy_restart'
+	local wifi_dev="${1:-$WIFIDEV}"		# FIXME! ATM we restart all interfaces
+	local reason="${2:-no_reason_given}"	# special, when begins with 'force' - or e.g. 'cleanup after last client'
 	local prio="${3:-alert}"
 
-	local uptime="up $( _wifi phy_uptime "$wifi_dev" ) sec"
-	_watch counter "/tmp/STATS_WIFI_RESTARTS.$wifi_dev" increment 1
-	_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
+	local pids="$( pidof wifi )"
+	local file pid
 
-	eval $( _wifi tx_and_rx $wifi_dev )
-	local vals_rx="rx:bytes/packets/errors/frames $WIFI_RX_BYTES/$WIFI_RX_PACKETS/$WIFI_RX_ERRORS/$WIFI_RX_FRAMES"
-	local vals_tx="tx_bytes/packets/errors: $WIFI_TX_BYTES/$WIFI_TX_PACKETS/$WIFI_TX_ERRORS"
+	[ -z "$wifi_dev" ] && {
+		_log it $funcname daemon info "empty dev, call-reason: $reason pids: '$pids'"
+		return 1
+	}
 
-	echo "$reason: $uptime $vals_rx $vals_tx" >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.reason"
-	_log it $funcname daemon $prio "working on '$wifi_dev' ($reason) $uptime $vals_rx $vals_tx"
+	[ -n "$pids" ] && {
+		_log it $funcname daemon alert "no action during another wifi-action, pids: '$pids', reason: '$reason', dev: $wifi_dev"
+		return 1
+	}
+
+	bool_true 'system.@monitoring[0].no_wiphy_restart' && return 0
+
+	case "$( _wifi dev2driver "$wifi_dev" )" in
+		*'ath5k'*)
+			_log it $funcname daemon alert "no action for ath5k"
+			return 0
+		;;
+	esac
+
+	case "$reason" in
+		'changing chanbw from'*)
+			prio='info'
+		;;
+		'cleanup after last client'|'no_reason_given')
+			_wifi forwarding_still_active '30' && {
+				_log it $funcname daemon info "active forwarding over wireless - rescheduling"
+				echo "$reason" >"/tmp/REQUESTED_PHY_RESTART-$wifi_dev"
+				return 1
+			}
+
+			prio='info'
+			[ -e "/tmp/REQUESTED_PHY_RESTART-$wifi_dev" ] && rm "/tmp/REQUESTED_PHY_RESTART-$wifi_dev"
+		;;
+	esac
+
+	_net roaming_eventlistener 'stop' "$funcname: $reason"
+
+	[ $OPENWRT_REV -ge 38988 ] && {
+		touch "$TMPDIR/PHYRESTART"
+		_log it $funcname daemon $prio "doing newstyle wifi-up, because '$reason'"
+		wifi up		# PHYRESTART
+
+		wifi_is_not_ready_yet()
+		{
+			# TODO: this does not work, when disabled via uci
+
+			test -e "$TMPDIR/PHYRESTART" && return 0
+
+			test -e "$TMPDIR/DAEMON_hostapd_seen" && {
+				pidof hostapd >/dev/null || return 0
+			}
+
+			test -z "$( _net dev2ip "$wifi_dev" debug )"
+		}
+
+		local i=40	# ~3 mins
+		while wifi_is_not_ready_yet; do {
+			_log it $funcname daemon info "waiting for IP on $wifi_dev - round $(( 41 - i ))/40"
+			sleep 5
+
+			i=$(( i - 1 ))
+			[ $i -eq 0 ] && {
+				_log it $funcname daemon alert "no IPv4 on $wifi_dev"
+				ps >>$PERMLOG
+				_system crashreboot 'hanging_wifi'
+			}
+		} done
+
+		_watch counter "/tmp/STATS_WIFI_RESTARTS.$wifi_dev" increment 1
+		_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
+
+		[ -e "/tmp/WIFI_SPECIALS.sh" ] && {
+			sleep 10
+			. "/tmp/WIFI_SPECIALS.sh"
+		}
+
+		# autoadd netfilter?
+		_log it $funcname daemon info 'READY'
+		return 0
+	}
+
+	case "$reason" in
+		force*)
+			_log it $funcname daemon $prio "working on '$wifi_dev' ($reason)"
+		;;
+		*)
+			local uptime="$( _wifi phy_uptime "$wifi_dev" )"
+
+			if [ $uptime -lt 240 ]; then
+				_log it $funcname daemon info "no action during low uptime: $uptime sec"
+				return 1
+			else
+				uptime="up $uptime sec"
+			fi
+
+			_wifi watch_phy_problems notify
+			_wifi watch_phy_problems || {
+				_log it $funcname daemon info "no action, watch_phy_problems() does not allow"
+				return 1
+			}
+
+			_watch counter "/tmp/STATS_WIFI_RESTARTS.$wifi_dev" increment 1
+			_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
+
+			eval $( _wifi tx_and_rx $wifi_dev )
+			local vals_rx="rx:bytes/packets/errors/frames $WIFI_RX_BYTES/$WIFI_RX_PACKETS/$WIFI_RX_ERRORS/$WIFI_RX_FRAMES"
+			local vals_tx="tx_bytes/packets/errors: $WIFI_TX_BYTES/$WIFI_TX_PACKETS/$WIFI_TX_ERRORS"
+
+			echo "$reason: $uptime $vals_rx $vals_tx" >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.reason"
+			_log it $funcname daemon $prio "working on '$wifi_dev' ($reason) $uptime $vals_rx $vals_tx"
+
+			file="/sys/kernel/debug/ieee80211/phy0/ath9k/diag"
+			[ -e "$file" ] && {
+				case "$CONFIG_PROFILE" in
+					*ap)
+						# use 'reset' method only with adhoc-mode
+						pidof hostapd >/dev/null || touch "/tmp/ATH9K_hwreseted"
+					;;
+				esac
+
+				if [ -e "/tmp/ATH9K_hwreseted" ]; then
+					rm "/tmp/ATH9K_hwreseted"
+				else
+					touch "/tmp/ATH9K_hwreseted"
+					_log it $funcname daemon alert "resetting HW via: echo 4 >$file"
+					echo 4 >"$file"
+					return 0
+				fi
+			}
+
+			case "$CONFIG_PROFILE" in
+				*ap)
+					if pidof hostapd >/dev/null; then
+						if [ $OPENWRT_REV -ge 36083 ]; then
+							_log it $funcname daemon info "no restart for this openwrt-revision"
+							return 0
+						else
+							_net local_inet_offer >/dev/null && {
+								_log it $funcname daemon info "no restart for AP with inet_offer"
+								return 0
+							}
+						fi
+					else
+						_log it $funcname daemon info "hostapd missing"
+					fi
+				;;
+			esac
+		;;
+	esac
+
+	# for lowmem-devices, we do not run netifd - so we loose state of all interfaces
+	[ -e "/sbin/netifd" ] && {
+		pidof netifd >/dev/null || {
+			_system crashreboot 'wifi_no_netifd'
+		}
+	}
 
 	local line mac adduser
 	local userlist="$( _netfilter user_list )"
-	while read line; do {
+	while read -r line; do {
 		case "$line" in
 			*"$wifi_dev")
-				set -- $line
+				explode $line
 				mac="$4"
 
 				case "$userlist" in
@@ -230,47 +1253,120 @@ _wifi_phy_restart()
 	} done <"/proc/net/arp"
 
 	# fixme! how to restart a specific interface?
-	/sbin/wifi down
-	_log sleep $funcname 10 step 1
+	# PHYRESTART
+	( /sbin/wifi down ) &
+	pid=$!
+	_log sleep "${funcname}_pid:$pid" 10 step 1
+	[ -e "/proc/${pid:-empty}/cmdline" ] && {
+		_system crashreboot 'hanging_wifi'
+		return 1
+	}
+
+	_watch coredump 'hostapd' ignore	# known crash during shutdown, at least with r37011
+
 	_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
+	# PHYRESTART
 	/sbin/wifi up | grep -q "PHY for wifi device radio. not found" && {
 		_log it $funcname daemon alert "message: PHY for wifi device radioX not found"
 		return 1
 	}
 
-	grep -q ^"b43 " "/proc/modules" && {
-		[ "$( uci -q get wireless.@wifi-iface[0].mode )" = "adhoc" ] || {
-			iw dev $wifi_dev set bitrates legacy-2.4 6 9 12 18 24 36 48 54
-		}
-	}
-
 	local ip
 	for mac in $adduser; do {
-		read ip <"/tmp/NETFILTER/MAC2IP/$mac"
-		_netfilter make_arp_permanent "$mac" "$ip" "$wifi_dev"
+		read -r ip <"/tmp/NETFILTER/MAC2IP/$mac"
+		_netfilter set_arp permanent "$mac" "$ip" "$wifi_dev"
 	} done
 
 	local users
 	local file="/tmp/TRAFFIC_CONTROL_UP_${wifi_dev}"
 	[ -e "$file" ] && {
-		read users <"$file"
+		read -r users <"$file"
 		_netfilter traffic_control_stop
 
 		for mac in $users; do {
-			read ip <"/tmp/NETFILTER/MAC2IP/$mac"
+			read -r ip <"/tmp/NETFILTER/MAC2IP/$mac"
 			_netfilter traffic_control_user_add "$ip"
 		} done
 	}
 
 	_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
+
+	[ -e "/tmp/WIFI_SPECIALS.sh" ] && . "/tmp/WIFI_SPECIALS.sh"
+
+	good_ip()
+	{
+		local i=30
+
+		while [ $i -gt 0 ]; do {
+			if ip address show dev $wifi_dev | grep -Fq "inet "; then
+				_log it $funcname daemon info "good ip after $(( 30 - i )) sec"
+				return 0
+			else
+				i=$(( i - 1 ))
+				sleep 1
+			fi
+		} done
+
+		return 1
+	}
+
+	good_ip || {
+		_log it $funcname daemon alert "no ip on dev $wifi_dev, rebooting"
+		_system crashreboot 'hanging_wifi'
+		sleep 10
+	}
+
 	return 0
 }
 
+_wifi_dev2txpower()		# output in [mW]
+{
+	local funcname='wifi_phy_txpower'
+	local dev="$1"		# e.g. wlan0-1
+	local devname phy txpower=
+
+	_net dev_is_wifi "$dev" || return 1
+
+	command -v 'iwinfo' >/dev/null && {
+		# * 23 dBm ( 199 mW)
+		# or:
+		# No TX power information available
+		explode $( iwinfo "$dev" txpowerlist | grep ^'\* ' )
+		txpower="$2"
+	}
+
+	isnumber "$txpower" || {
+		_log it $funcname daemon debug "fallback to debugfs (dev: $dev)"
+		read -r phy <"/var/run/interfaces/dev2radio_$dev" || phy='phy0'
+		read -r txpower <"/sys/kernel/debug/ieee80211/$phy/netdev:$dev/user_power_level"	# [dBm]
+
+		[ ${txpower:-99} -gt 0 -a ${txpower:-99} -lt 30 ] || {
+			_log it $funcname daemon debug "fallback to debugfs 'txpower' (max) - (dev: $dev)"
+			read -r txpower <"/sys/kernel/debug/ieee80211/$phy/netdev:$dev/txpower"
+		}
+	}
+
+	isnumber "$txpower" || {
+		_log it $funcname daemon debug "fallback to uci (dev: $dev)"
+		devname="$( _net dev2name "$dev" )"
+		txpower="$( _wifi get "$devname" txpower )"
+	}
+
+	case "$HARDWARE" in
+		'Ubiquiti Bullet M')
+			txpower=$(( txpower + 12 ))
+		;;
+	esac
+
+	_wifi math_dbm2mw "$txpower"
+}
+
+					# TODO: rename: freq2channel
 _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 {
 	local o				# idea: add to each freq regdomain/countrycode
 					#       and choose corresponding countrycode, which fits channel 8-)
-	case $1 in
+	case "$1" in
 		2412) o=1 ;;  # 276	# block of 802.11b/g/n-freqs
 		2417) o=2 ;;  # 276
 		2422) o=3 ;;  # 276
@@ -284,19 +1380,20 @@ _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 		2462) o=11 ;; # 276
 		2467) o=12 ;; # 276
 		2472) o=13 ;; # 276
-		2484) o=14 ;;
+#		2477) o='13.5' ;;
+		2484) o=14 ;;		# in theory: 2482, but +2 MHz
 
-					# block of 802.11y ommited
+					# block of 802.11y omitted
 
 		5035) o=7 ;;		# block of 802.11a/h/j/n
-            504|5040) o=8 ;;
+            504|5040) o=8 ;;		# ath5k / r32060
 		5045) o=9 ;;		# fixme! mark 'outdoor'-channels
 		5055) o=11 ;;
-	    506|5060) o=12 ;;
-            508|5080) o=13 ;;
+	    506|5060) o=12 ;;		# ath5k / r32060
+            508|5080) o=16 ;;		# ath5k / r32060
 
 	    517|5170) o=34 ;;
-	    518|5180) o=36 ;; # 608 
+	    518|5180) o=36 ;; # 608
 	    519|5190) o=38 ;;
 	     52|5200) o=40 ;; # 608
 	    521|5210) o=42 ;; #	608	# TURBO.only	# for TURBO, see http://madwifi-project.org/wiki/UserDocs/802.11a_channels
@@ -325,6 +1422,7 @@ _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 	    566|5660) o=132 ;; # 276
 	    568|5680) o=136 ;; # 276
 	     57|5700) o=140 ;; # 276
+	    572|5720) o=144 ;;	# ac-only
 		5745) o=149 ;;
 	    576|5760) o=152 ;;	# TURBO.only	# not listed in wikipedia?	# BFWA
 		5765) o=153 ;;							# BFWA
@@ -342,7 +1440,7 @@ _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 		5865) o=173 ;;							# BFWA
 	    587|5870) o=174 ;;							# BFWA
 		5875) o=175 ;;							# BFWA
-		
+
 		4915) o=183 ;;
 	    492|4920) o=184 ;;
 		4925) o=185 ;;
@@ -353,152 +1451,830 @@ _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 	    498|4980) o=196 ;;
 					# wl also knows: 200, 204, 208, 212, 216
 					# oswave.com -> 220/6100mhz, 234...250 (4920...5000mhz), 1...6 (5005....5030)
-					
+
 		   *) o=0 ;;		# fixme! till we inserted all freqs
 	esac
 
-	echo -n "$o"
+	printf '%s' "$o"
 }
 
-_wifi_assoclist ()		# OUT1: list of associated mac_adresses
+_wifi_antenna_rx()
+{
+	# FIXME! make it phy agnostic
+	local rx="$( uci get wireless.radio0.diversity )"
+
+	case "$rx" in
+		0) echo '0' ;;
+		1) echo '1' ;;
+		*) echo 'auto' ;;
+	esac
+}
+
+_wifi_antenna_tx()
+{
+	# FIXME! make it phy agnostic
+	local tx="$( uci get wireless.radio0.txantenna )"
+
+	case "$tx" in
+		0|1)
+			echo "$tx"
+		;;
+		*)
+			echo 'auto'
+		;;
+	esac
+}
+
+_wifi_timing_distance()
+{
+	# FIXME! make it phy agnostic
+
+	uci -q get wireless.radio0.distance
+}
+
+_wifi_bssid()				# BSSID = cell in adhoc, ap-wifimac in ap, wifimac of associated ap in client-mode
+{
+	local funcname='wifi_bssid'
+	local dev="$1"
+	local option="$2"		# can be 'config'
+	local bssid mode
+
+	if [ "$option" = 'config' ]; then
+		mode="$( _wifi mode "$dev" )"
+
+		case "$mode" in
+			*'adhoc'*)
+				_sanitizer run "$( uci -q get wireless.@wifi-iface[0].bssid )" lowercase
+			;;
+			'ap')
+				_net dev2mac "$dev"
+			;;
+			'client'|*)
+				_log it $funcname daemon info "fixme - mode: $mode"
+				# return real bssid, because we do not enforce specific AP to connect to
+				echo 'unknown'
+			;;
+		esac
+	else
+		# FIXME! implement this in 'iw'
+
+		command -v iwinfo >/dev/null && {
+			# Access Point: 02:CA:FF:EE:BA:BE
+			explode $( iwinfo "$WIFIDEV" info | grep -F 'Access Point:' )
+			bssid="$3"
+		}
+
+		command -v iwconfig >/dev/null && test -z "$bssid" && {
+			# Mode:Ad-Hoc  Frequency:2.432 GHz  Cell: 02:CA:FF:EE:BA:BE
+			explode $( iwconfig "$WIFIDEV" | grep -F 'Cell:' )
+
+			while [ -n "$1" ]; do {
+				shift
+
+				case "$1" in
+					'Cell:')
+						bssid="$2"
+						break
+					;;
+				esac
+			} done
+		}
+
+		_sanitizer run "$bssid" lowercase
+	fi
+}
+
+_wifi_frag()
+{
+	local dev="$1"
+
+	eval $( _wifi params_iwconfig_status "$dev" | grep ^'WIFI_FRAG' )
+	echo "$WIFI_FRAG"
+}
+
+_wifi_rts()
+{
+	local dev="$1"
+
+	eval $( _wifi params_iwconfig_status "$dev" | grep ^'WIFI_RTS' )
+	echo "$WIFI_RTS"
+}
+
+_wifi_mcastrate()
+{
+	# FIXME! make it phy agnostic
+	local line
+
+	line="$( uci get wireless.@wifi-iface[0].mcast_rate )"
+	if [ -n "$line" ]; then
+		case "$line" in
+			5500000) echo '5.5' ;;
+			      *) echo $(( line / 1000 )) ;;
+		esac
+	else
+		echo 'auto'
+	fi
+}
+
+_wifi_noise()			# OUT1: e.g. '-93' = signed Integer in [dBm]
+{
+	local dev="$1"
+
+	# FIXME! do not read the first 'noise', only after
+	#        line 'frequency:   2432 MHz [in use]'
+	iw dev "$dev" survey dump |
+	 sed -n '/noise:/{s/^.*noise:.*\(-[0-9]*\).*/\1/p;q}'
+}
+
+_wifi_signal_best()			# OUT1: signed Integer, -70 [dBm] or list of $MAC+RSSI of all stations
+{
+	local dev="$1"
+	local mac_or_ip="$2"
+	local option='dump'
+	local line mac
+
+	[ -z "$dev" ] && return 0
+
+	case "$mac_or_ip" in
+		'')
+			mac=
+		;;
+		*':'*)
+			mac="$mac_or_ip"
+		;;
+		*)
+			mac="$( _net ip2mac "$mac_or_ip" )" || return 1
+		;;
+	esac
+
+	[ -n "$mac" ] && option="get $mac"
+
+	iw dev $dev station $option |
+	 while read -r line; do {
+		case "$line" in
+			*'signal avg:'*)
+				explode $line
+				echo "$3"
+				[ "$option" = 'dump' ] || break
+			;;
+		esac
+	} done | sort -n | tail -n1
+}
+
+_wifi_signal_get()
+{
+	local funcname='wifi_signal_get'
+	local dev="$1"
+	local mac="$2"
+	local option="$3"	# e.g. 'debug'
+	local line age try=0 try_max=15 signal=0 valid_values=0 file=
+
+	while [ $signal -eq 0 -a -z "$file" -a $try -lt $try_max ]; do {
+		try=$(( try + 1 ))
+		[ $try -gt 5 ] && sleep 1
+
+		line="$( iw dev "$dev" station get "$mac" 2>/dev/null )" || {
+			file="$TMPDIR/stations_ap.txt-full-$dev"	# see watch_roaming()
+
+			if grep -qs ^"Station ${mac:-empty}" "$file"; then
+				age="$( _file age "$file" 'sec' )"
+				line="$( sed -n "/^Station $mac/,/^Station/p" "$file" )"
+				_log it $funcname daemon info "using $age sec old stats for '$mac' from '$file'"
+			else
+				_log it $funcname daemon info "no data for '$mac'"	# e.g. older 60 sec?
+				line='signal: -1 dBm'
+			fi
+		}
+
+		explode $line
+		line="$*"			# signal:    0 dBm
+		signal="${line#*signal: }"	# signal:  -50 [-60, -54, -53] dBm
+		signal="${signal%% *}"		# -50
+
+		isnumber "$signal" && {
+			# ok = -10...-95
+			[ $signal -le -10 -a $signal -ge -95 ] && {
+				valid_values=$(( valid_values + 1 ))
+				[ $valid_values -ge 3 ] && break
+			}
+		}
+
+		signal=0
+	} done
+
+	[ "$option" = 'debug' ] && _log it $funcname daemon info "dev: $dev mac: $mac try: $try signal: $signal file: '$file'"
+	echo "$signal"		# TODO: allow '0'?
+}
+
+_wifi_dev2mode()		# OUT: e.g. adhoc|ap|sta|mesh (like uci names)
+{
+	local dev="$1"
+	local line mode
+
+	explode $( iw dev "$dev" info )
+	line="$*"
+	mode="${line#*type }"
+	mode="${mode%% *}"	# side effect: 'type mesh point' -> 'mesh'
+
+	case "$mode" in
+		'AP')
+			mode='ap'
+		;;
+		'IBSS')
+			mode='adhoc'
+		;;
+		'managed')
+			mode='sta'
+		;;
+		'mesh'|*)
+			:
+		;;
+	esac
+
+	echo "$mode"
+}
+
+_wifi_channel()
+{
+	local funcname='wifi_channel'
+	local dev="$1"
+	local channel line freq
+
+	# e.g. 'Interface wlan0 ifindex 6 wdev 0x2 addr 10:6f:3f:0e:31:8e type IBSS wiphy 0 channel 11 (2462 MHz) NO HT'
+	command -v iw >/dev/null && {
+		explode $( iw dev "$dev" info )
+		line="$*"
+		channel="${line#*channel }"
+	}
+
+	# http://stackoverflow.com/questions/13761802/catch-word-after-specific-word-in-a-string-with-ash
+	case "$channel" in
+		[0-9]*)
+			echo "${channel%% *}"
+		;;
+		*)
+			pidof wpa_supplicant >/dev/null && {
+				freq="$( wpa_cli 'signal_poll' | grep ^'FREQUENCY=' | cut -d'=' -f2 )"
+				[ -n "$freq" ] && {
+					_wifi math_mhz2channel "$freq"
+					return 0
+				}
+			}
+
+			_log it $funcname daemon info "fallback to uci-var for dev: '$dev'"
+			uci get wireless.radio0.channel		# FIXME! do not hardcode radio0
+		;;
+	esac
+}
+
+_wifi_protection_gmode()	# OUT1: integer, 0 | 1
+{
+	local dev="$1"
+
+	iwpriv 2>/dev/null "$dev" get_protmode | sed -n 's/^.*:\([01]\).*/\1/p'
+}
+
+_wifi_assoclist ()		# OUT1: list of associated mac_addresses
 {
 	return 0
 }
 
-_wifi_probe_mode_infrastructure ()		# fixme! respect WIFI_DEV
+_wifi_mode()			# OUT1: string, ap | client | adhoc | adhocap             // rename: wifi_get_mode_conn?
 {
-	local WIFI_DEV="$1"
-	local SWITCH="$2"	# 'config' or <empty>
-	local WIFI_MODE
+	local funcname='wifi_mode'
+	local dev="$1"		# we check the whole phy, e.g. wlan0 + wlan0-1
+	local option="$2"	# can be 'config' or <empty>
+	local file name phy i phy_other dev_other list_dev='' mode=''
 
-	if [ "$SWITCH" = "config" ]; then
-
-		case "$( uci -q get wireless.@wifi-iface[0].mode )" in
-			adhoc)
-				return 1
-			;;
-			sta)
-				return 1	# fixme! workaround for uci-wrapper
-			;;
-			*)
-				return 0
-			;;
-		esac
-	else
-		eval "$( _wifi params_iwconfig_status $WIFI_DEV | grep ^WIFI_MODE= )"
-
-		case $WIFI_MODE in
-			Managed|managed|Master|master) return 0 ;;
-						    *) return 1 ;;
-		esac
-	fi
-}
-
-_wifi_probe_mode_ap ()				# fixme! respect WIFI_DEV
-{
-	local funcname="wifi_probe_mode_ap"
-	local WIFI_DEV="$1"
-	local SWITCH="$2"	# 'config' or <empty>
-	local WIFI_MODE
-
-	if [ "$SWITCH" = "config" ]; then
-
-		if [ "$( uci -q get wireless.@wifi-iface[0].mode )" = "ap" ]; then
-			return 0
-		else
-			return 1
-		fi
-	else
-		eval "$( _wifi params_iwconfig_status $WIFI_DEV | grep ^WIFI_MODE= )"
-
-		case $WIFI_MODE in
-			Master|master)
-				return 0
-			;;
-			Managed|managed)
-				return 1
-			;;
-			Ad-Hoc)
-				return 1
-			;;
-			*)
-				_log it $funcname daemon info "unknown mode '$WIFI_MODE'"
-				return 1
-			;;
-		esac
-	fi
-}
-
-_wifi_mode ()			# OUT1: string, ap | client | adhoc             // rename: wifi_get_mode_conn?
-{
-	local funcname="wifi_mode"
-	local WIFI_DEV="$1"	# fixme! some calls can't provide wifidev - till now we only check nvram, so it does'nt matter
-	local SWITCH="$2"	# can be 'config' or <empty>
-
-	fgrep -q "${WIFI_DEV:-no_wifi}:" /proc/net/dev || {
-		_log it $funcname daemon debug "wifidev ${WIFI_DEV:-no_wifi} not found"
+	_net dev_is_valid "$dev" || {
+		_log it $funcname daemon debug "wifidev '$dev' not found"
 		return 1
 	}
 
-	local mode1="$( uci -q get wireless.@wifi-iface[0].mode )"
-	local mode2="$( uci -q get wireless.@wifi-iface[1].mode )"
+	read -r phy <"/var/run/interfaces/dev2radio_$dev" || return 1
 
-	case "$mode1" in
-		ap|adhoc)
-			case "$mode2" in
-				ap|adhoc)
-					echo "${mode1}${mode2}"		# fixme! we dont diff between config/real
-					return				# fixes e.g. compare_config_and_real_wifi_mode() in watch()
-				;;
-			esac
+	for file in '/var/run/interfaces/dev2radio_'*; do {
+		read -r phy_other <"$file"
+		[ "$phy_other" = "$phy" ] && {
+			dev_other="$( echo "$file" | cut -d'_' -f2 )"
+			list_dev="$list_dev $dev_other"
+		}
+	} done
+	_log it $funcname daemon debug "dev: '$dev' checking: '$list_dev' switch: '$option'"
+
+	for dev_other in $list_dev; do {
+		read -r name <"/var/run/interfaces/dev2name_$dev_other" || return 1
+		i="$( _wifi get "$name" index )"
+
+		_wifi check_disabled "$i" || {
+			if [ "$option" = 'config' ]; then
+				mode="$mode $( uci get "wireless.@wifi-iface[$i].mode" )"
+			else
+				mode="$mode $( _wifi dev2mode "$dev_other" )"
+			fi
+		}
+	} done
+
+	echo "$mode" | tr -d ' '
+}
+
+_wifi_math_mw2mbm()
+{
+	local milliwatt="$1"	# dBm = 10 x log10(mW)
+	local mbm		# dBm * 100 = mBm -> e.g. 100mW -> 20 dBm = 2000 mBm
+
+	# for I in $(seq 0 100); do echo $I; done |
+	# awk 'function log10(number){return log(number)/log(10.0)}; {printf "%d)mbm=%1.0f;;\n",$1,100*10*log10($1)}'
+	case "$milliwatt" in
+		0)mbm=0;;	# not correct
+		1)mbm=0;;
+		2)mbm=301;;
+		3)mbm=477;;
+		4)mbm=602;;
+		5)mbm=699;;
+		6)mbm=778;;
+		7)mbm=845;;
+		8)mbm=903;;
+		9)mbm=954;;
+		10)mbm=1000;;
+		11)mbm=1041;;
+		12)mbm=1079;;
+		13)mbm=1114;;
+		14)mbm=1146;;
+		15)mbm=1176;;
+		16)mbm=1204;;
+		17)mbm=1230;;
+		18)mbm=1255;;
+		19)mbm=1279;;
+		20)mbm=1301;;
+		21)mbm=1322;;
+		22)mbm=1342;;
+		23)mbm=1362;;
+		24)mbm=1380;;
+		25)mbm=1398;;
+		26)mbm=1415;;
+		27)mbm=1431;;
+		28)mbm=1447;;
+		29)mbm=1462;;
+		30)mbm=1477;;
+		31)mbm=1491;;
+		32)mbm=1505;;
+		33)mbm=1519;;
+		34)mbm=1531;;
+		35)mbm=1544;;
+		36)mbm=1556;;
+		37)mbm=1568;;
+		38)mbm=1580;;
+		39)mbm=1591;;
+		40)mbm=1602;;
+		41)mbm=1613;;
+		42)mbm=1623;;
+		43)mbm=1633;;
+		44)mbm=1643;;
+		45)mbm=1653;;
+		46)mbm=1663;;
+		47)mbm=1672;;
+		48)mbm=1681;;
+		49)mbm=1690;;
+		50)mbm=1699;;
+		51)mbm=1708;;
+		52)mbm=1716;;
+		53)mbm=1724;;
+		54)mbm=1732;;
+		55)mbm=1740;;
+		56)mbm=1748;;
+		57)mbm=1756;;
+		58)mbm=1763;;
+		59)mbm=1771;;
+		60)mbm=1778;;
+		61)mbm=1785;;
+		62)mbm=1792;;
+		63)mbm=1799;;
+		64)mbm=1806;;
+		65)mbm=1813;;
+		66)mbm=1820;;
+		67)mbm=1826;;
+		68)mbm=1833;;
+		69)mbm=1839;;
+		70)mbm=1845;;
+		71)mbm=1851;;
+		72)mbm=1857;;
+		73)mbm=1863;;
+		74)mbm=1869;;
+		75)mbm=1875;;
+		76)mbm=1881;;
+		77)mbm=1886;;
+		78)mbm=1892;;
+		79)mbm=1898;;
+		80)mbm=1903;;
+		81)mbm=1908;;
+		82)mbm=1914;;
+		83)mbm=1919;;
+		84)mbm=1924;;
+		85)mbm=1929;;
+		86)mbm=1934;;
+		87)mbm=1940;;
+		88)mbm=1944;;
+		89)mbm=1949;;
+		90)mbm=1954;;
+		91)mbm=1959;;
+		92)mbm=1964;;
+		93)mbm=1968;;
+		94)mbm=1973;;
+		95)mbm=1978;;
+		96)mbm=1982;;
+		97)mbm=1987;;
+		98)mbm=1991;;
+		99)mbm=1996;;
+		*)mbm=2000;;
+	esac
+
+	[ $(( mbm % 100 )) -ge 50 ] && mbm=$(( mbm + 50 ))	# e.g. 1950 -> 2000
+	echo $(( mbm / 100 * 100 ))				# iw needs rounded to multiple of 100
+}
+
+_wifi_reduce_txpower_if_compatible_roaming_nodes_are_near()
+{
+	local funcname='wifi_reduce_txpower_if_compatible_roaming_nodes_are_near'
+	local ifindex="$1"			# e.g. 3 or '5ghz'
+	local txpower_milliwatt="${2:-5}"	# e.g. 10 or e.g. -1
+	local ssid="$3"				# e.g. <empty> or SSID
+	#
+	local txpower_border=-65		# scan-signal must be better or egal for any action
+	local txpower_min=5
+	local txpower_milliwatt_result signal dev devname txpower_mBm debug
+
+	isnumber "$ifindex" || ifindex="$( _wifi get "$ifindex" mode ap )"
+
+	devname="$( uci get "wireless.@wifi-iface[$ifindex].network" )"	# e.g. wlanRADIO1
+	read -r dev <"/var/run/interfaces/name2dev_$devname"		# e.g. wlan1-1
+
+	[ -z "$ssid" ] && ssid="$( _wifi get "$devname" ssid )"
+
+	if [ $txpower_milliwatt -lt 0 ]; then
+		# FIXME! it does not make sense to reduce power
+		# and scan the others - the values will keep the same...
+		txpower_milliwatt_result="$( _wifi get "$devname" txpower )"
+		txpower_milliwatt_result="${txpower_milliwatt_result:-20}"			# sane fallback
+		txpower_milliwatt_result=$(( txpower_milliwatt_result + txpower_milliwatt ))	# e.g. 10 + -1 = 9
+	else
+		txpower_milliwatt_result="$txpower_milliwatt"
+	fi
+
+	[ $txpower_milliwatt_result -le $txpower_min ] && {
+		echo "# ready: tx_result: $txpower_milliwatt_result txpower_min: $txpower_min" >>"$TMPDIR/$funcname"
+		return 0
+	}
+
+	txpower_mBm="$( _wifi math_mw2mbm "$txpower_milliwatt_result" )"
+	signal="$( _wifi scan_best_signal_myssid "$dev" "$ssid" )"
+	_log it $funcname daemon info "signal: ${signal:-empty} for ssid '$ssid' (border: $txpower_border)"
+
+	if [ $txpower_border -le ${signal:--100} ]; then
+		_log it $funcname daemon info "reducing to: $txpower_milliwatt_result/$txpower_mBm [mW/mBm] to dev $dev index $ifindex"
+		_wifi set ap "$ifindex" txpower "$txpower_milliwatt_result"	# being consistent (e.g. wifi up)
+		iw dev "$dev" set txpower fixed "$txpower_mBm"			# and hot-apply
+
+		if [ $txpower_milliwatt -lt 0 ]; then
+			_log it $funcname daemon info "[RESCHEDULE] reduced to: $txpower_milliwatt_result mW"
+			echo >>$SCHEDULER_NEXTRUN "_wifi reduce_txpower_if_compatible_roaming_nodes_are_near $ifindex $txpower_milliwatt $ssid"
+		else
+			_log remote "[READY] txpower: $txpower_milliwatt_result mW (signal: $signal ssid: $ssid)"
+			debug="ready: txpower_fixed: $txpower_milliwatt"
+		fi
+	else
+		debug="ready: border <= signal: $txpower_border <= $signal"
+	fi
+
+	{
+		date
+		uptime
+		echo "# debuginfo: $debug"
+		echo "border: $txpower_border signal: $signal"
+		echo "ifindex: '$ifindex' dev: '$dev' devname: '$devname'"
+		echo "txpower_milliwatt/result: '$txpower_milliwatt'/'$txpower_milliwatt_result'"
+		echo "txpower_mBm: '$txpower_mBm'"
+		echo "ssid: '$ssid'"
+		echo '#'
+	} >>"$TMPDIR/$funcname"
+}
+
+_wifi_scan_best_signal_myssid()		# e.g. for next_node/roaming
+{
+	local dev="${1:-$WIFIDEV}"
+	local ssid="$2"
+	local i=5
+	local line=
+
+	while [ $i -gt 0 -a -z "$line" ]; do {
+		line="$( _wifi scan "$dev" "$ssid" | sort -n | tail -n1 | cut -d',' -f1 )"
+		i=$(( i - 1 ))
+	} done
+
+	# 66:70:02:d3:24:0b-2432-51-weimar.freifunk.net
+	echo "$line"
+}
+
+_wifi_scan_geolocation()
+{
+	local funcname='wifi_scan_geolocation'
+	local file="$TMPDIR/scan.json"
+	local marker="$TMPDIR/$funcname"	# e.g. 50.972;11.328
+	local lat='' lon='' latlon=''
+
+	[ $OPENWRT_REV -gt 0 -a -e "$marker" ] && {
+		_file age "$marker" -lt 43200 && {
+			read -r latlon <"$marker"
+			_log it $funcname daemon debug "lat/lon from '$marker': $latlon - http://www.openstreetmap.org/#map=18/${latlon%;*}/${latlon#*;}"
+			return 0
+		}
+	}
+
+	# we need SSL and --postdata during api_query() - TODO: add curl
+	[ -e '/bin/uclient-fetch' ] || {
+		wget --version | grep -q ^'GNU' || return 0
+	}
+
+	# TODO: reverse geocoding:
+	# http://nominatim.openstreetmap.org/reverse?lat=51.287763&lon=10.7412933&addressdetails=1&format=json
+	_wifi scan_geolocation_api_build_json >"$file" && {
+		eval $( _wifi scan_geolocation_api_query "$file" )
+
+		[ -n "$lat" -a -n "$lon" ] && {
+			_log it $funcname daemon info "http://www.openstreetmap.org/#map=18/$lat/$lon"
+			echo "$lat;$lon" >"$marker"
+			uci set "system.@admin[0].latlon=$lat;$lon"
+		}
+	}
+
+	rm -f "$file"
+}
+
+_wifi_scan_geolocation_api_build_json()
+{
+	local funcname='wifi_scan_geolocation_api_build_json'
+	local signal freq bssid dev line dev_list=
+	local i=0
+	local file="$TMPDIR/$funcname"
+
+	# use all devs (e.g. 2+5GHz) - TODO: wwan/3G
+	for dev in $WIFI_DEVS; do {
+		case "$dev" in
+			*'-'*)
+				# ignore e.g. 'wlan1-1' but work on base_dev 'wlan1'
+			;;
+			*)
+				dev_list="$dev_list $dev"
+				_wifi scan "$dev" mozilla
+			;;
+		esac
+	} done >"$file"
+
+	[ -s "$file" ] || {
+		[ -e "$file" ] && rm -f "$file"
+		_log it $funcname daemon debug "[ERROR] empty or no scan for devs: '$dev_list'"
+
+		test -z "$WIFI_DEVS"	# do not complain on servers (use public-IP for location)
+		return $?
+	}
+
+	echo '{'
+	echo '  "wifiAccessPoints": ['
+	echo '  {'
+
+	# e.g. -39 2432 ca:d3:a3:57:f7:6a
+	while read -r line; do {
+		explode $line
+		signal="$1"
+		freq="$2"
+		bssid="$3"
+		[ -n "$bssid" ] && i=$(( i + 1 ))
+
+		echo "    \"macAddress\": \"$bssid\","
+		echo "    \"signalStrength\": $signal,"
+		echo "    \"frequency\": $freq,"
+		echo "    \"age\": $i"
+		echo '  }, {'
+	} done <"$file"
+	rm -f "$file"
+
+	# just for valid json:
+	echo "    \"macAddress\": \"$( _net dev2mac "$WIFIDEV" )\""
+	echo '  }]'
+	echo '}'
+
+	test $i -gt 0
+}
+
+_wifi_scan_geolocation_api_query()
+{
+	local funcname='wifi_scan_geolocation_api_query'
+	local file="$1"
+	local answer api_key k1 k2 k3 api_url lat lon
+
+	# https://location.services.mozilla.com/
+	# https://mozilla.github.io/ichnaea/api/geolocate.html#api-geolocate-latest
+	k1='3b4ee1fe'			# official freifunk-key
+	k2='b1a5-4293-bdc5'		# hide from badboys
+	k3='154b50f11b8a'		# (can also be 'test')
+
+	api_key="$k1-$k2-$k3"
+	api_url="https://location.services.mozilla.com/v1/geolocate?key=$api_key"
+#	answer="$( curl --insecure -H "Content-Type: application/json" -X POST --data @"$file" "$api_url" )"
+	answer="$( wget --no-check-certificate --post-data="$( cat "$file" )" -qO - "$api_url" )"
+	_log it $funcname daemon debug "answer: $answer"
+
+	# e.g.:
+	# {"location": {"lat": 50.9881901, "lng": 11.334436}, "accuracy": 212.0650219}
+	# {"location": {"lat": 50.988505, "lng": 11.3352539}, "accuracy": 146.3677526}
+	# {"fallback": "ipf", "location": {"lat": 50.9945, "lng": 11.0528}, "accuracy": 25000.0}
+	explode $answer
+	if [ "$1" = '{"fallback":' ]; then
+		lat="$( echo "$5" | cut -d',' -f1 )"
+		lon="$( echo "$7" | cut -d'}' -f1 )"
+	else
+		lat="$( echo "$3" | cut -d',' -f1 )"
+		lon="$( echo "$5" | cut -d'}' -f1 )"
+	fi
+
+	if [ -z "$lat" -o -z "$lon" ]; then
+		echo "lat=;lon="
+		_log it $funcname daemon info "[ERROR] answer: $answer"
+	else
+		echo "lat=$lat;lon=$lon"	# use via 'eval'
+	fi
+}
+
+_wifi_scan()
+{
+	local funcname='wifi_scan'
+	local dev="${1:-$WIFIDEV}"		# e.g. wlan0
+	local option="$2"			# e.g. <my-special-ssid> or 'mozilla' or <empty>
+	local line value remote signal bssid mhz ssid capability
+	local devindex devname chanbw
+	local freq="$( _wifi dev2freq "$dev" )"
+	local temp="$TMPDIR/$funcname.$$"
+	local i=0
+	local try=1
+
+	devname="$( _net dev2name "$dev" )"		# wlan0 -> wlanadhoc
+	chanbw="$( _wifi get "$devname" chanbw )"
+	devindex="$( _wifi get "$devname" index )"
+	case "$chanbw" in
+		5|10)
+			_wifi set anymode "$devindex" chanbw 20
+			_wifi phy_restart "$dev" "$funcname() changing chanbw from $chanbw to 20"
+
+			restore_chanbw()
+			{
+				_wifi set anymode "$devindex" chanbw "$chanbw"
+				_wifi phy_restart "$dev" "$funcname() changing chanbw from 20 to $chanbw"
+			}
+		;;
+		*)
+			restore_chanbw() { :; }
 		;;
 	esac
 
-	if _wifi probe_mode_infrastructure $WIFI_DEV "$SWITCH" ; then
-	
-		if _wifi probe_mode_ap $WIFI_DEV "$SWITCH" ; then
-			echo 'ap'
-		else
-			echo 'client'	# fixme! output 'sta' or 'station' ?
-		fi
+	while [ $try -le 3 ]; do {
+		_log it $funcname daemon info "[START] on dev '$dev' freq: $freq MHz option: $option try: $try"
+		try=$(( try + 1 ))
+		iw dev "$dev" scan >"$temp" && break
+		sleep 2
+	} done
+
+	if [ $? -eq 0 ]; then
+		restore_chanbw
 	else
-		if _wifi probe_mode_ap $WIFI_DEV "$SWITCH" ; then
-			echo 'unknown'	
-		else
-			echo 'adhoc'
-		fi
+		_log it $funcname daemon info "[ERROR] scan failed: dev '$dev' freq: $freq MHz"
+		rm -f "$temp"
+		restore_chanbw
+		return 1
 	fi
+
+	while read -r line; do {
+		case "$line" in
+			'BSS '*)			# BSS 02:00:ca:fe:02:22(on wlan0)
+				explode $line
+				bssid="${2%(*}"
+				remote="$bssid"
+			;;
+			*'capability:'*)		# capability: IBSS
+				explode $line
+				capability="$2"		# e.g. ESS
+			;;
+			*'freq: '*)			# freq: 2462
+				explode $line
+				mhz="$2"
+				remote="${remote}-$mhz"
+			;;
+			*'signal: '*)			# signal: -52.00 dBm
+				explode $line		# signal: 1.00 dBm
+				value="${2%.*}"		# signal: 0.00 dBm
+				case "$value" in
+					'-'*)
+						# OK - no change needed
+					;;
+					'0')
+						value='-256'		# mimic 'iwinfo'
+					;;
+					*)
+						value="-$value"
+					;;
+				esac
+
+				signal="$value"
+				remote="${remote}${value}"
+			;;
+			*'SSID: '*)			# SSID: Schlachtfest 123
+				explode $line
+				shift
+				ssid="$*"
+
+				case "$option" in
+					'')
+						echo "${remote}-${ssid}"
+						i=$(( i + 1 ))
+					;;
+					*)
+						# scan | sort -n | tail -n1 | cut -d',' -f1 -> strongest signal (e.g. -46)
+						if [ "$ssid" = "$option" ]; then
+							echo "${signal},${remote}-${ssid}"
+							i=$(( i + 1 ))
+						elif [ "$option" = 'mozilla' ]; then
+							# adhoc/ibss is covering the whole city and does not help
+							[ "$capability" = 'IBSS' ] || {
+								echo "$signal $mhz $bssid"
+								i=$(( i + 1 ))
+							}
+						fi
+					;;
+				esac
+			;;
+		esac
+	} done <"$temp"
+
+	rm -f "$temp"
+	_log it $funcname daemon info "[READY] on dev '$dev' - found: $i (option: ${option:--})"
+}
+
+_wifi_scan_summary()
+{
+	:
+}
+
+_wifi_math_dbm2mw()	# e.g. 20 dBm -> 100 mW
+{
+	local dbm="$1"	# [mW] = 10 ^ (dBm/10)
+
+	explode 1 1 2 2 3 3 4 5 6 8 10 13 16 20 25 32 40 50 63 79 100 126 158 200 251 316 398 501 631 794 1000
+	dbm=$(( dbm + 1 ))	# 0 dBm = $1 = 1 mW and
+	eval echo "\${$dbm}"	# 6 dBm = $7 = 4 mW
 }
 
 _wifi_check_each_client()
 {
-	local mac ip list_macs exitcode list_already_known_macs local up1 up2 up_diff
-	local funcname="wifi_check_each_client"
-	local max_arping="10"
+	local mac ip exitcode list_already_known_macs
+	local up1 up2 up_diff
+	local funcname='wifi_check_each_client'
 	local statsdir="/tmp/$funcname"
+	local max_arping=3	# FIXME! we should start fast and if it fails loop again more and more slow
+	local inactive_time txt
 
 	mkdir -p "$statsdir"
 	_net include
 
-	list_macs="$( iw dev $WIFIDEV station dump | grep ^Station | cut -d' ' -f2 )"
+	for mac in $( _wifi mac_assoclist "$WIFIDEV" ); do {
+		# TODO: more values?
+		explode $( iw dev "$WIFIDEV" station get "$mac" | grep -F 'inactive time:' )
+		inactive_time="$3"
 
-	for mac in $list_macs; do {		# fixme! only check client with low inactivity time
-		[ "$exitcode" = "0" ] || {
+		[ -z "$inactive_time" -o $inactive_time -ge 120000 ] && {
+			txt="ignoring station '$mac' with inactive_time '${inactive_time:-empty}' ms"
+			_log it $funcname daemon debug "$txt"
+			exitcode=0
+		}
+
+		# it's ok, if at least 1 mac is reachable
+		[ "$exitcode" = '0' ] || {
 			ip="$( _net mac2ip $mac )" && {
-				if arping -q -f -c $max_arping -I $WIFIDEV $ip ; then
-					_log it $funcname daemon debug "[OK] arping - mac: $mac ip: $ip"
-					exitcode="0"
+				if _net ip_reachable "$ip" "$max_arping"; then
+					txt="[OK] arping - mac: $mac ip: $ip inactive_time: $inactive_time ms"
+					_log it $funcname daemon debug "$txt"
+					exitcode=0
 				else
-					_log it $funcname daemon info "[ERR] arping - mac: $mac ip: $ip (no success for $max_arping probes)"
+					txt="[ERR] arping - mac: $mac ip: $ip inactive_time:"
+					txt="$txt $inactive_time ms (no success for $max_arping probes)"
+					_log it $funcname daemon info "$txt"
 					# iw dev "$WIFIDEV" station del "$mac"
-					exitcode="1"
+					exitcode=1
 				fi
 			}
 		}
 
 		[ -e "$statsdir/$mac" ] || {
 			_log it $funcname daemon info "[OK] detected new station $mac"
-			_system uptime >"$statsdir/$mac"
+			_system uptime sec >"$statsdir/$mac"
 		}
 	} done
 
@@ -509,16 +2285,730 @@ _wifi_check_each_client()
 
 	list_already_known_macs="$( ls -1 "$statsdir" 2>/dev/null )"
 
-	for mac in $list_already_known_macs; do {		# fixme! writeout traffic_counter
+	for mac in $list_already_known_macs; do {		# FIXME! writeout traffic_counter
 		station_is_valid "$mac" || {
-			up2="$( _system uptime )"
-			read up1 <"$statsdir/$mac"
+			up2="$( _system uptime sec )"
+			read -r up1 <"$statsdir/$mac"
 			rm "$statsdir/$mac"
-			up_diff="$(( $up2 - $up1 ))"
+			up_diff=$(( up2 - up1 ))
 
-			_log it $funcname daemon alert "[OK] station $mac left network $WIFIDEV, ($( _stopwatch seconds2humanreadable $up_diff ))"
+			txt="[OK] station $mac left network $WIFIDEV,"
+			txt="$txt ($( _stopwatch seconds2humanreadable $up_diff ))"
+			_log it $funcname daemon info "$txt"
 		}
 	} done
 
 	return ${exitcode:-0}
+}
+
+_wifi_bugreport_create()
+{
+	local dev="${1:-no_wifidev_given}"
+	local reason="${2:-no_reason_given}"
+	local file="${3:-/tmp/bugreport}"
+	local line
+
+	[ -d "/sys/kernel/debug/ieee80211/phy0/ath9k" ] && {
+		(
+			echo "### host: $HOSTNAME @ $( date ) - up: $( uptime ) - hw: $HARDWARE - $( grep "(" "/etc/banner" )"
+			echo
+			echo "### reason:"
+			echo "$reason"
+			echo
+
+			echo "### xmit:"
+			cat "/sys/kernel/debug/ieee80211/phy0/ath9k/xmit"
+			echo
+
+			echo "### base_eeprom:"
+			cat "/sys/kernel/debug/ieee80211/phy0/ath9k/base_eeprom"
+			echo
+
+			echo "### reset:"
+			cat "/sys/kernel/debug/ieee80211/phy0/ath9k/reset"
+			echo
+
+			echo "iw dev $dev info"
+			iw dev "$dev" info
+
+			echo "### uci show wireless"
+			uci show wireless
+			echo
+
+			echo "### dmesg"
+			while read -r line; do {
+				case "$line" in
+					*ath*|*wireless*|*wlan*)
+						echo "$line"
+					;;
+				esac
+			} done <"/tmp/dmesg.log"
+			echo
+
+			cat /tmp/OLSR/LINKS
+			echo
+
+			free
+			echo
+
+			df
+		) >"$file"
+	}
+}
+
+_wifi_check_disabled()
+{
+	local index="$1"
+	local radio
+
+	# check if underlying radio or vif is disabled:
+	bool_true "wireless.@wifi-iface[$index].disabled" && return 0
+
+	radio="$( uci -q get "wireless.@wifi-iface[$index].device" )"
+	bool_true "wireless.$radio.disabled"
+
+	# TODO: nonexistent indexes return 'false'
+}
+
+_wifi_get()			# e.g. '_wifi get wlanadhoc ssid'
+{				# e.g. '_wifi get anyfreq mode ap' or '_wifi get 5ghz mode ap'
+				# e.g. '_wifi get wlanadhoc index'
+
+	local network="$1"	# e.g. 'wlanadhoc' or 'any'
+	local value="$2"	# e.g. 'channel'/'ssid'/'mode' or 'check' or 'index'
+	local option="$3"	# e.g. 'ap'
+	local i radio out
+
+	interesting()
+	{
+		local condition="$1"
+		local index="$2"
+		local uci_value
+
+		uci_value="$( uci -q get "wireless.@wifi-iface[$index].network" )" || {
+			value='no_more_interfaces'
+			return 0
+		}
+
+		case "$condition" in
+			'any'|'anyfreq')
+				return 0
+			;;
+			'2ghz')
+				_wifi is2ghz "$index" && return 0
+			;;
+			'5ghz')
+				_wifi is2ghz "$index" || return 0
+			;;
+		esac
+
+		test "$uci_value" = "$condition"
+	}
+
+	for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do {
+		interesting "$network" "$i" && {
+			case "$value" in
+				'no_more_interfaces')
+					return 1
+				;;
+				'index')
+					echo "$i"
+				;;
+				'channel'|'hwmode'|'htmode'|'chanbw'|'txpower')
+					radio="$( uci -q get "wireless.@wifi-iface[$i].device" )" && {
+						case "$network" in
+							'any'|'anyfreq'|'2ghz'|'5ghz')
+								echo "$i"
+							;;
+							*)
+								uci get wireless.$radio.$value
+							;;
+						esac
+					}
+				;;
+				'ssid'|'mode'|'bssid')
+					out="$( uci -q get "wireless.@wifi-iface[$i].$value" )" && {
+						case "$network" in
+							'any'|'anyfreq'|'2ghz'|'5ghz')
+								[ "$out" = "$option" ] && echo "$i"
+							;;
+							*)
+								echo "$out"
+							;;
+						esac
+					}
+				;;
+				'check'|*)
+				;;
+			esac
+
+			case "$network" in
+				'any'|'anyfreq'|'2ghz'|'5ghz')
+				;;
+				*)
+					return 0
+				;;
+			esac
+		}
+	} done
+
+	return 1
+}
+
+_wifi_is2ghz()
+{
+	local wifi_iface="$1"		# e.g. 6
+	local varname="wireless.@wifi-iface[$wifi_iface].device"	# radio0
+	local radio="$( uci -q get "$varname" )"
+	local hwmode="$( uci -q get wireless.$radio.hwmode )"
+
+	case "$hwmode" in
+		*'a'*)
+			return 1
+		;;
+		*)
+			return 0
+		;;
+	esac
+}
+
+_wifi_set()			# e.g. _wifi set ap "$ifindex" txpower
+{
+	local funcname='wifi_set'
+	local wifimode="$1"	# e.g. 'ap' (all ap-interface) or any/anymode or 'adhoc' or 'ap2' (only the 2nd one)
+	local band="$2"		# e.g. '5ghz' or 'any' or 'anyfreq' or 'index'
+	local var="$3"		# e.g. 'ssid' or 'disabled' or 'off'/'on' -> disabled 1/0
+	local value="$4"	# e.g. 'myssid' or '1'
+	local option="$5"
+	local radio='' bssid='' chanbw='' carry='' i=''
+
+	case "$var" in
+		'off')
+			var='disabled'
+			value='1'
+		;;
+		'on')
+			var='disabled'
+			value='0'
+		;;
+	esac
+
+	case "$wifimode" in
+		*[0-9])
+			# e.g. ap2
+#			local specific_interface=${wifimode//[a-z]/}
+		;;
+	esac
+
+	# _wifi set ap      5ghz     ssid 'Appartementhaus'
+	# _wifi set ap      5ghz     off
+	# _wifi set anymode anyfreq  disabled kmod_unload
+
+	for i in $( seq 0 15 ); do {
+		[ "$( uci -q get "wireless.@wifi-iface[$i].mode" )" = "$wifimode" -o "$wifimode" = 'any' -o "$wifimode" = 'anymode' ] && {
+			radio=
+
+			if   isnumber "$band"; then
+				[ "$i" = "$band" ] || continue
+			elif [ "$band" = 'any' -o "$band" = 'anyfreq' ]; then
+				:
+			elif [ "$band" = '2ghz' ]; then
+				_wifi is2ghz "$i" || continue
+			else 	# wish: 5ghz
+				_wifi is2ghz "$i" && continue
+			fi
+
+			case "$var" in
+				'txpower'|'htmode'|'distance'|'beacon_int')
+					# http://opus4.kobv.de/opus4-tuberlin/files/3939/huehn_thomas.pdf
+					# get the corresponding radio till minstrel-blues/power control is not active
+					radio="$( uci -q get "wireless.@wifi-iface[$i].device" )" && {
+						uci set wireless.$radio.$var="$value"
+					}
+				;;
+				'channel'|'chanbw'|'disabled')
+					[ "$var" = 'chanbw' ] && chanbw="$value"
+
+					radio="$( uci -q get "wireless.@wifi-iface[$i].device" )" && {
+						if [ "$var" = 'disabled' ]; then
+							case "$value" in
+								'kmod_unload')
+									# switch on radio's if needed
+									carry="$( uci -q get wireless.$radio.disabled )"
+									if [ "$carry" = '0' ]; then
+										# radio already on
+										carry=
+									else
+										_wifi set anymode anyfreq 'on'
+									fi
+
+									# this works globally (every radio)
+									grep -q ^'mac80211 ' '/proc/modules' && {
+										wifi down
+
+										# switch off (old state, see above)
+										[ -n "$carry" ] && {
+											_wifi set anymode anyfreq 'off'
+										}
+
+										for _ in $( seq 10 -1 1 ); do {
+											# grep for 'nl80211 not found'?
+											iw dev wlan0 info >/dev/null || break
+											sleep 1
+										} done
+
+										_firmware remove_kmodules wifi
+									}
+								;;
+								'kmod_load')
+									# TODO
+								;;
+								'disabled'|*)
+									# TODO: wifi down?
+									if [ "$wifimode" = 'any' -o "$wifimode" = 'anymode' ]; then
+										# set RADIO
+										uci set wireless.$radio.$var="$value"
+									else
+										# set vIF
+										[ "$( uci -q get "wireless.@wifi-iface[$i].mode" )" = "$wifimode" ] && {
+											uci set "wireless.@wifi-iface[$i].$var=$value"
+										}
+									fi
+								;;
+							esac
+						else
+							uci set wireless.$radio.$var="$value"
+						fi
+					}
+
+					[ -n "$radio" -a "$var" = 'channel' ] && {
+						if   [ "$value" = 'auto' ]; then
+							uci set wireless.$radio.country='FM'
+						elif [ ${value:-0} -ge 1 -a ${value:-0} -le 11 ]; then
+							uci set wireless.$radio.country='US'
+						fi
+
+						[ "$option" = 'bssid_wellformed' ] && {
+							# e.g.
+							# channel:  36 chanbw: 10 -> 02:be:ef:10:00:36
+							# channel: 149 chanbw: 20 -> 02:be:ef:20:01:49
+							# channel:   1 chanbw:  5 -> 02:be:ef:05:00:01
+
+							# TODO: hardcoded magic - how to separate different networks in the same area?
+							bssid='02:be:ef'
+
+							# TODO: chanbw can be 7.5?
+							[ -z "$chanbw" ] && chanbw="$( uci -q get wireless.${radio}.chanbw || echo '20' )"
+
+							# channel-bandwidth in bssid:
+							if [ $chanbw -lt 10 ]; then
+								bssid="$bssid:0$chanbw"
+							else
+								bssid="$bssid:$chanbw"
+							fi
+
+							if [ $chanbw -ge 40 ]; then
+								uci set wireless.${radio}.noscan='1'
+							else
+								uci del wireless.${radio}.noscan
+							fi
+
+							if [ $value -lt 100 ]; then
+								if [ $value -lt 10 ]; then
+									bssid="${bssid}:00:0${value}"
+								else
+									bssid="${bssid}:00:${value}"
+								fi
+							else
+								bssid="${bssid}:0$( echo "$value" | cut -b 1 ):$( echo "$value" | cut -b 2-3 )"
+							fi
+
+							_log it $funcname daemon info "bssid_wellformed: $bssid"
+							uci set "wireless.@wifi-iface[$i].bssid=$bssid"
+						}
+					}
+				;;
+				*)
+					# e.g. mcast_rate | ssid | bssid
+					bool_true "wireless.@wifi-iface[$i].${var}_donttouch" || {
+						uci set "wireless.@wifi-iface[$i].$var=$value"
+					}
+				;;
+			esac
+		}
+	} done
+}
+
+_wifi_longshot_test()		# only works with single-radio devices
+{
+	local funcname='wifi_longshot_test'
+	local starttime="$1"	# e.g. '23:45' or '01:09' or 'now'
+	local channels="$2"	# 36...165 or minimal: 36...40
+	local node_list="$3"	# 100 101  or minimal: 100
+
+	local channel_start channel_ready channel chanbw mac ip node node2 file bssid quality
+	local channel_initial chanbw_initial bssid_initial
+
+	e()
+	{
+		echo "# $( date ) | ch:$channel bw:$chanbw bssid:$bssid q:$quality | $1"
+	}
+
+	wait_till_time()
+	{
+		local time="$1"		# e.g. :00 or :07 or :59 or 10:45:00
+		local date
+
+		# TODO: better algo: get initial value and count down
+		while date="$( date "+%H:%M:%S" )"; do {
+			case "$date" in
+				*"$time")
+					return 0
+				;;
+				*)
+					sleep 1
+				;;
+			esac
+		} done
+	}
+
+	show_uci_wireless()
+	{
+		uci show wireless | grep -F '.chan'
+		uci show wireless | grep -F '.bssid'
+	}
+
+	e "waiting till $starttime"
+	[ "$starttime" = 'now' ] || wait_till_time "$starttime"
+
+	e 'uci/iwconfig'
+	show_uci_wireless
+	command -v iwconfig && iwconfig
+	e 'now'
+
+	### get real data! ###
+	channel_initial="$( _wifi channel $WIFIDEV )"
+#	channel_initial="$( uci -q get wireless.radio0.channel )"
+
+	# e.g. 0x00000014 or 0x00000005
+	chanbw_initial="$( cat /sys/kernel/debug/ieee80211/phy0/ath9k/chanbw )"
+	[ -z "$chanbw_initial" ] && chanbw_initial="$( cat /sys/kernel/debug/ieee80211/phy0/ath5k/bwmode )"
+	[ -z "$chanbw_initial" ] && chanbw_initial='0x14'
+	[ -n "$chanbw_initial" ] && chanbw_initial=$(( chanbw_initial ))	# hex2dec
+
+#	chanbw_initial="$( uci -q get wireless.radio0.chanbw || echo '20' )"
+
+	bssid_initial="$( _wifi bssid $WIFIDEV )"
+#	bssid_initial="$( uci show wireless | grep -F '.bssid=' | head -n1 | cut -d'=' -f2 )"
+
+
+	# TODO: initial sync via http? needed
+	# TODO: generate mail/pdf
+
+	channels="$( echo "$channels" | tr '.' ' ' )"	# e.g. 36...44
+	explode $channels
+	channel_start="$1"
+	channel_ready="$2"
+
+	e "initial channel $channel_initial chanbw $chanbw_initial bssid $bssid_initial"
+	_stopwatch start $funcname
+
+	for channel in $( seq "$channel_start" "$channel_ready" ); do {
+		iw phy phy0 info | grep -Fq " MHz [$channel]" || continue	# invalid/unusable channel
+
+		for chanbw in 5 10 20; do {
+			# TODO: test different txpower levels
+###
+			wait_till_time ':05'
+			bssid=;quality=
+			e "[TIME] test start: channel $channel chanbw $chanbw nodes $NODENUMBER"
+			_wifi longshot channel $channel chanbw $chanbw nodes $NODENUMBER
+			show_uci_wireless
+			_wifi phy_restart "$WIFIDEV" "$funcname" 'info'		# execution time depends and can change...
+			e "waiting for link"
+			wait_till_time ':20'	# till wifi has settled and link is useable
+###
+			bssid="$( _wifi bssid $WIFIDEV )"
+			explode $( iwinfo "$WIFIDEV" info | grep -F 'Link Quality:' )
+			quality="$6"
+
+			for node in $node_list; do {
+				ip="$( _ipsystem getvar 'WIFIADR' $node )"
+				mac="$( _net ip2mac "$ip" )"
+
+				e "[TIME] LINKed? - ip: $ip mac: $mac"
+				if [ $node -eq $NODENUMBER ]; then
+					# we download now from the X others
+					for node2 in $node_list; do {
+						[ $node2 -eq $NODENUMBER ] && continue
+
+						ip="$( _ipsystem getvar 'WIFIADR' "$node2" )"
+
+						if ping -q -c1 $ip; then
+							e "ping to $ip ok"
+						else
+							e "error ping to $ip"
+						fi
+
+						e "we/$NODENUMBER downloading from $node2/$ip : $( _wifi speed force $ip )"
+					} done
+				else
+					# the others download from me:
+					for node2 in $node_list; do {
+						e "waiting, node $node2 should downloads now"
+
+						if ping -q -c1 $ip; then
+							e "ping to $ip ok"
+						else
+							e "error ping to $ip"
+						fi
+					} done
+
+					wait_till_time ':50'
+					e "[TIME] looking for downloads/minstrel"
+
+					for node2 in $node_list; do {
+						ip="$( _ipsystem getvar 'WIFIADR' "$node2" )"
+						mac="$( _net ip2mac "$ip" )"
+
+						# is generated during www/cgi-bin-tool.sh
+						file="$( ls -1 /tmp/STATS/minstrel_*_$mac )"
+						e "node: $node2 ip: $ip mac: $mac file: '$( ls -l "$file" )'"
+
+						if [ -e "$file" ]; then
+							e "station dump: $mac fage: $( _file age "$file" ) fage2: $( _file age "$file" )"
+							iw dev "$WIFIDEV" station get $mac
+							e "minstrel-table: $file"
+							cat "$file" && rm "$file"
+						else
+							e "no new '$file' - nobody downloaded from me"
+						fi
+					} done
+				fi
+			} done
+		} done
+	} done
+
+	# go back to initial values:
+	e "READY: switching back: _wifi longshot channel $channel_initial chanbw $chanbw_initial bssid $bssid_initial nodes $NODENUMBER"
+	_wifi longshot channel $channel_initial chanbw $chanbw_initial bssid $bssid_initial nodes $NODENUMBER
+	show_uci_wireless
+	_wifi phy_restart "$WIFIDEV" "$funcname" 'info'
+	_stopwatch stop $funcname
+}
+
+_wifi_longshot_name()
+{
+	local band="${1:-anyfreq}"
+	local index radio
+
+	for index in $( _wifi get "$band" mode 'adhoc' ) $( _wifi get "$band" mode 'mesh' ); do {
+		radio="$( uci -q get "wireless.@wifi-iface[$index].device" )"
+
+		# returns the 'name' and empty + error if 'no_longshot'
+		uci -q get wireless.${radio}.longshot && return 0
+	} done
+
+	return 1
+}
+
+_wifi_longshot()	# this works only for all radios on some band in adhoc-mode
+{
+	# TODO: txpower
+
+	# e.g. _wifi longshot channel 36 chanbw 10 mhz mcast 12000 distance 800 name 'j2-reithaus' nodes '100 101'
+	# e.g. _wifi longshot channel 36 chanbw 10 mhz mcast 12000 distance 800 name 'j2-reithaus' nodes '100 101' pingcheck|pingcheck_lazy
+	# e.g. _wifi longshot channel 36 chanbw 10 mhz mcast 12000 distance 800 name 'j2-reithaus' nodes '100 101' testtime '04:32' testchannel '36...165'
+
+	# option: chantest? chanbwtest? -> testtime 3:50
+	local channel='' chanbw='' node='' mcast_rate='' name='' bssid='' distance='' index='' radio='' nodelist='' ip=''
+	local band='anyfreq'
+
+	# in 802.11n-mode we need the beacons from our neighs for HT-capabilities
+	# https://dev.openwrt.org/ticket/18297
+	local beacon_interval=1000
+
+	while [ -n "$1" ]; do {
+		case "$1" in
+			'channel')
+				channel="$2"	# must be 1st arg!
+				shift
+
+				if [ $channel -ge 36 ]; then
+					band='5ghz'
+				else
+					band='2ghz'
+				fi
+			;;
+			'distance')
+				# http://jumk.de/pythagoras/
+				distance="$2"
+				shift
+			;;
+			'bssid')
+				bssid="$2"
+				shift
+			;;
+			'name')
+				name="$2"
+				shift
+			;;
+			'mcast')
+				mcast_rate="$2"
+				shift
+			;;
+			'chanbw')
+				chanbw="$2"
+				shift
+			;;
+			'pingcheck'|'pingcheck_lazy')
+				[ "$( _list count_elements "$nodelist" )" -eq 2 ] && {
+					for node in $nodelist; do {
+						[ "$NODENUMBER" = "$node" ] || {
+							ip="$( _ipsystem getvar 'WIFIADR' "$node" )"
+							uci set system.@monitoring[0].pingcheck="$ip"
+							[ "$1" = 'pingcheck_lazy' ] && uci set system.@monitoring[0].pingcheck_lazy='1'
+						}
+					} done
+				}
+			;;
+			'nodes')
+				for node in $2; do {
+					nodelist="$nodelist $node"
+
+					[ "$NODENUMBER" = "$node" ] && {
+						[ -n "$mcast_rate" ] && {
+							_wifi set adhoc $band mcast_rate "$mcast_rate"
+						}
+
+						[ -n "$name" ] && {
+							_wifi set adhoc $band ssid "$name"
+						}
+
+						[ -n "$chanbw" ] && {
+							_wifi set adhoc $band chanbw "$chanbw"
+						}
+
+						[ -n "$distance" ] && {
+							# use the longest range for point-2-multipoint in [meters] and do not forget the height-diff
+							# and better use 'auto' (dynack/dynamic ack) only for p2p with same slottiming
+							_wifi set adhoc $band distance "$distance"
+						}
+
+						[ -n "$channel" ] && {
+							if [ -n "$bssid" ]; then
+								_wifi set adhoc $band channel "$channel"
+								_wifi set adhoc $band bssid "$bssid"
+							else
+								_wifi set adhoc $band channel "$channel" bssid_wellformed
+							fi
+
+							if [ $channel -ge 36 ]; then
+								_wifi set ap      5ghz 'off'
+								_wifi set anymode 5ghz txpower '19'
+							else
+								_wifi set ap      2ghz 'off'
+								_wifi set anymode 2ghz txpower '25'
+							fi
+						}
+
+						# TODO: enforce 802.11n only if possible - same like in override_uci_vars
+						if [ "$chanbw" = '40' ]; then
+							_wifi set adhoc "$band" htmode 'HT40'
+						else
+							_wifi set adhoc "$band" htmode 'HT20'
+						fi
+
+						_wifi set anymode $band beacon_int $beacon_interval
+
+						# band -> radio (1st)
+						for index in $( _wifi get "$band" mode 'adhoc' ); do break; done	# FIXME! mesh?
+						radio="$( uci -q get "wireless.@wifi-iface[$index].device" )"
+						uci set wireless.${radio}.longshot="${name:-true}"
+
+						case "$CONFIG_PROFILE" in
+							'rehungen'*)
+								uci set system.@weblogin[0].blocked='true'
+								uci set dhcp.lan.ignore='1'
+								uci set dhcp.wlan.ignore='1'
+							;;
+						esac
+					}
+				} done
+			;;
+		esac
+
+		shift
+	} done
+
+# useable with reghack:
+# 5180 MHz [36]
+# 5200 MHz [40]
+# 5220 MHz [44]
+# 5240 MHz [48]
+# 5260 MHz [52]
+# 5280 MHz [56]
+# 5300 MHz [60]
+# 5320 MHz [64]
+# 5500 MHz [100]
+# 5520 MHz [104]
+# 5540 MHz [108]
+# 5560 MHz [112]
+# 5580 MHz [116]
+# 5600 MHz [120]
+# 5620 MHz [124]
+# 5640 MHz [128]
+# 5660 MHz [132]
+# 5680 MHz [136]
+# 5700 MHz [140]
+# 5745 MHz [149]
+# 5765 MHz [153]
+# 5785 MHz [157]
+# 5805 MHz [161]
+# 5825 MHz [165]
+}
+
+_wifi_longshot_report()
+{
+	local funcname='wifi_longshot_report'
+	local dev="${1:-$WIFIDEV}"
+	local ip phy_up message name
+	local report=
+
+	if name="$( _wifi longshot_name )"; then
+		report='true'
+	else
+		iw dev "$dev" info | grep -q 'type IBSS'$ && {
+			# exactly 1 neigh
+			[ "$( iw dev "$dev" station dump | grep -c ^'Station ' )" = '1' ] && report='true'
+		}
+	fi
+
+	[ "$report" = 'true' ] && {
+		# we only need IPv4
+		# fe80::f6ec:38ff:fefd:74b4 dev wlan0 lladdr f4:ec:38:fd:74:b4 STALE
+		# 10.63.23.69 dev wlan0 lladdr f8:1a:67:5a:a1:6b PERMANENT
+		ip="$( ip neigh | grep -F "dev $dev lladdr" | grep -v ':....:' | head -n1 | cut -d' ' -f1 )"
+
+		[ -n "$ip" ] && {
+			DONT_WORK='true' . /usr/sbin/cron.pingchecker		# gives us pingstat()
+
+			name="${name:-no_longshot ($HOSTNAME)}"
+			phy_up="$( _wifi phy_uptime "$dev" )"
+			phy_up="$( _stopwatch seconds2humanreadable "$phy_up" )"
+			case "$phy_up" in
+				'23h 3'*|'23h 4'*|'23h 5'*)
+					phy_up='~1day'
+				;;
+			esac
+
+			speed="$( _wifi speed check "$ip" )"	# e.g. WIFI-2345
+			speed="${speed:-WIFI-0}"
+
+			message="name: $name PHYup: $phy_up NEIGH: $ip RX-Speed: ${speed#*-} TX-$( pingstat "$ip" )"
+
+			_log it $funcname daemon alert "$message"
+			_weblogin authserver_message "$message"
+		}
+	}
 }
