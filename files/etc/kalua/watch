@@ -1,365 +1,1271 @@
 #!/bin/sh
-#
-# check a random neighbour for ssh/httpd || {
-# 	udhcpc -i wlan0 -r 10.10.52.2 -n -q -r retter -S;reboot
-# }
-#
 
-_watch_space_tmpfs()
+_watch_roaming()	# called every 60 secs
 {
-	local funcname="watch_space_tmpfs"
-	local border_percent="20"
-	local file success list_logs list_vdsfiles list_orphaned
-	local nothing_deleted="true"
+	local funcname='watch_roaming'
+	local option="$1"				# e.g. 'debug'
+	local station_list="$TMPDIR/stations_ap.txt"	# see 'cron.wireless_events'
+	local bridgedev='mastergate'
+	local file ip ip_list ip_escaped word radio ap dev mac mac_list error message i parameter route_get signal list=
+	local inet_offer="$( _net local_inet_offer cached )"
 
-	success=
-	list_logs="$( ls 2>/dev/null -S1 /var/log/* )"
-	list_vdsfiles="$( ls 2>/dev/null -S1 /tmp/user-* | head -n1 )"
-	list_list_orphaned="$( ls 2>/dev/null -S1 /tmp/db_backup.tgz.temp.* )"
-	list_debug="$( ls 2>/dev/null -S1 /tmp/WIFI_INCOMING_FRAME_COUNTER_wlan0.error_debug.* )"
+	_net dev_is_valid "br-$bridgedev" || return 0
 
-	for file in $list_logs $list_vdsfiles $list_list_orphaned $list_debug; do {
-		[ -e "$file" ] && {
-			success="true"
-			rm "$file"
-			_log it $funcname daemon info "removed: '$file'"
+	pidof iw >/dev/null || {
+		_log it $funcname daemon alert 'iw missing, restarting eventlistener'
+		_net roaming_eventlistener 'restart' "$funcname: iw missing"
+		return 1
+	}
+
+	# TODO: maybe 'wifi up' helps?
+	for dev in $( uci -q get "network.${bridgedev}.ifname" ); do {
+		case "$dev" in
+			*'lan'|*'wan')
+				list="$list $dev"	# e.g. roaminglan
+			;;
+		esac
+	} done
+
+	# do not check disabled or USB-devices
+	for ap in $( _wifi get any mode ap ); do {
+		_wifi check_disabled "$ap" || {
+			radio="$( uci -q get wireless.@wifi-iface[$ap].device )"
+			case "$( uci -q get wireless.${radio}.path )" in
+				''|*'platform/usb'*)
+					# TODO: workaround fuer r44150
+					_log it $funcname daemon info "[OK] is USB/empty: will not check ap $ap / radio $radio"
+				;;
+				*)
+					# # e.g. roaming3
+					list="$list roaming$ap"
+				;;
+			esac
 		}
 	} done
 
-	if [ "$success" = "true" ]; then
-		[ "$nothing_deleted" = "true" ] && {
-		nothing_deleted=
-		_log it $funcname daemon alert "success"
+	for dev in $list; do {
+		_net dev_is_valid "$dev" || {
+			_log it $funcname daemon alert "missing bridge '$dev', restarting '$bridgedev'"
+			# ifup $bridgedev		# does not work
+			# 25: br-mastergate: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000
+			#     link/ether 56:81:4b:ca:48:e8 brd ff:ff:ff:ff:ff:ff
+			_wifi phy_restart
+			return 1
+		}
+	} done
+
+	# iterate up to 5 times for avoiding a race
+	# check if we have a real station which is NOT
+	# in our roaming-list (so slipped through the 'iw event'-detector)
+	error=0
+	for i in 1 2 3 4 5; do {
+		for dev in $( _wifi active_ap_devices ); do {
+			file="$station_list-full-$dev"
+			iw dev "$dev" station dump >"$file"	# so we have a recent dataset (~450 bytes/station)
+
+			# Station 60:5b:b4:9a:e4:8b (on wlan0-1)
+			mac_list="$( sed -n 's/^Station \(.*\) (on.*/\1/p' "$file" )"
+
+			for mac in $mac_list; do {
+				if [ "$option" = 'debug' ]; then
+					signal="$( _wifi signal_get "$dev" "$mac" )"
+					_log it $funcname daemon debug "loop: $i ap-dev: $dev mac: $mac signal: $signal"
+				else
+					_log it $funcname daemon debug "loop: $i ap-dev: $dev mac: $mac"
+				fi
+
+				if grep -Fq "$mac" "$station_list"; then
+					# root@box:~ grep 00:1e:65:94:22:52 /proc/net/arp
+					# 100.66.3.186    0x1  0x6   00:1e:65:94:22:52  *  br-mastergate
+					# 100.67.190.252  0x1  0x2   00:1e:65:94:22:52  *  br-mastergate
+
+					ip_list=
+					explode $( grep "$mac" '/proc/net/arp' )
+					for word in "$@"; do {
+						_net ip4_is_private "$word" && ip_list="$ip_list $word"
+					} done
+
+					# TODO: code duplication, see wireless_events.sh
+					for ip in $ip_list; do {
+						route_get="$( ip -oneline route get "$ip/32" | grep -F " dev br-$bridgedev " )" || {
+							_log it $funcname daemon info "ip $ip (of $ip_list) not added yet - changed IP? - $route_get"
+
+							if [ "$inet_offer" = 'true' ]; then
+								# FIXME! e.g. giancarlo
+								parameter="NAT_ALIEN_ROAMERS -s $ip -j MASQUERADE"
+							else
+								parameter="NAT_ALIEN_ROAMERS -s $ip -j SNAT --to-source $ANYADR"
+							fi
+
+							$IPT -t nat -I $parameter
+							ip route add "$ip/32" dev br-$bridgedev
+
+							# TODO: log_remote
+							ip_escaped="$( _sanitizer run "$ip" escape_dots )"
+							grep -sq "del $ip_escaped/32 dev" "$TMPDIR/ROAMING_remove_host_route_$mac" || {
+								# this file is sourced/executed after 'station del'
+								{
+									echo "$IPT -t nat -D $parameter"
+									echo "ip route del $ip/32 dev br-$bridgedev"
+								} >>"$TMPDIR/ROAMING_remove_host_route_$mac"
+							}
+						}
+					} done
+				else
+					message="$message $i/$mac/$dev"
+					error=$(( error + 1 ))
+
+					{
+						echo "[START] $funcname() message=$message error=$error"
+						iw dev "$dev" station get "$mac"
+						echo "[READY] $funcname()"
+					} >>'/tmp/IWLOG'
+				fi
+			} done
+		} done
+
+		# abort if errorcount has not raised
+		[ $error -lt $i ] && return 0
+	} done
+
+	_net roaming_eventlistener 'restart' "$funcname: station mismatch: $message"
+	return 1
+}
+
+_watch_db_ticketrequest()
+{
+	local file file_counter profile_id
+
+	for file in '/www/ticketcheck-requested_'*; do {
+		[ -e "$file" ] && {
+			profile_id="${file#*_}"
+			file_counter="$DIR_DATABASE/USER/profile/id${profile_id}_counterA"
+			[ -e "$file_counter" ] && rm "$file_counter"
+
+			_db ticketcheck
+			rm $file
+		}
+	} done
+}
+
+_watch_configchange()
+{
+	local funcname='watch_configchange'
+	local hashfile='/etc/openwrt_confighash'
+	local old_hash new_hash server_path server_file identity server
+
+	bool_true 'system.@monitoring[0].autoupload_config' || return 0
+
+	# we do not take temporary changes into account ("uci show"/"uci changes")
+	new_hash="$( cat /etc/config/* $HOME/.ssh/dropbear_*_key | md5sum )"
+	[ -e "$hashfile" ] && read -r old_hash <"$hashfile"
+
+	[ "$new_hash" = "$old_hash" ] || {
+		server='intercity-vpn.de'	# user 'root'
+		server_path="/var/www/networks/${CONFIG_PROFILE%_*}/settings"
+		server_file="config-$NODENUMBER-$( date +%s ).tar.gz"
+		identity="$( _ssh key_public_fingerprint_get keyfilename )"
+
+		# otherwise 'scp' will prompt for accepting fingerprint
+		grep -q ^"$server " "$HOME/.ssh/known_hosts" || return 1
+
+		_log it $funcname daemon alert "[OK] detected change"
+
+		# ~5 kilobytes
+		tar -czf "$TMPDIR/config.tar.gz" '/etc/config' $HOME/.ssh/dropbear_*_key
+
+		pidof scp && return 1
+		if scp -i "$identity" "$TMPDIR/config.tar.gz" "$server:$server_path/$server_file"; then
+			_log it $funcname daemon alert "[OK] upload to $server$server_path/$server_file"
+			echo "$new_hash" >"$hashfile"
+		else
+			_log it $funcname daemon info '[ERR] upload failed'
+		fi
+
+		rm "$TMPDIR/config.tar.gz"
 	}
+}
+
+_watch_wifi_cronactive()
+{
+#	local hour="$1"		# given from taskplanner
+#	local minute="$2"
+#	local cron_timeslot cron_start cron_end
+#	local now_minutes_of_day start_minutes_of_day end_minutes_of_day
+
+return 0
+
+	# e.g. 18:00 - 08:00
+#	cron_timeslot="$( uci -q get wireless.radio0.cronactive )" || return 0
+#	explode $timeslot
+#	cron_start="$1"
+#	cron_end="$2"
+
+	# TODO: we cannot calc with 08:00!
+#	start_minutes_of_day=$(( $( echo "$cron_start" | cut -d':' -f1 ) * 60 ) + $( echo "$cron_start" | cut -d':' -f2 ) ))
+#	end_minutes_of_day=$((   $( echo "$cron_end"   | cut -d':' -f1 ) * 60 ) + $( echo "$cron_end"   | cut -d':' -f2 ) ))
+#	now_minutes_of_day=$((   ( $hour * 60 )                                +   minute                              ))
+
+	# e.g. 18:03 = after 18:00
+
+	# build a list of
+}
+
+_watch_reanimate_dead_neighbour()
+{
+	local dev ifname
+	local dev_list='lan wan'
+	local inet_offer="$( _net local_inet_offer )"
+	local pid
+
+	case "$inet_offer" in
+		*'ppp'*)
+			inet_offer='wan'
+		;;
+	esac
+
+	for dev in $dev_list; do {
+		[ "$inet_offer" = "$dev" ] && continue
+		[ "$( uci -q get network.$dev.proto )" = 'static' ] || continue
+
+		ifname="$( uci get network.$dev.ifname )"
+		# --request $LAN_IP_OF_MY_NEIGH+1
+#		udhcpc --syslog --interface "$ifname" --retries 3 --release --foreground --quit --now --hostname 'reanimate'
+		udhcpc --syslog --interface "$ifname" --retries 3 --quit --now --hostname 'reanimateV2' &
+
+		pid=$!
+		sleep 60
+		kill $pid
+		ifup "$dev"
+	} done
+}
+
+_watch_autorun()	# can be helpful to make changes on many nodes
+{
+	local funcname='watch_autorun'
+	local file="$TMPDIR/.autorun"
+
+	[ -e '/tmp/.autorun' ] && mv '/tmp/.autorun' "$file"	# oldstyle
+	[ -e "$file" ] || return 0
+
+	# insert shebang/selfdelete ontop if needed
+	grep -q ^'rm $0'     "$file" || sed -i '1i rm $0' "$file"
+	grep -q ^'#!/bin/sh' "$file" || sed -i '1i #!/bin/sh' "$file"
+	chmod +x "$file"
+
+	_log it $funcname daemon info "[START] $file"
+	$file
+	_log it $funcname daemon info "[READY] $file - rc: $?"
+}
+
+_watch_monitoring()
+{
+	local funcname='watch_monitoring'
+	local option="$1"	# e.g. 'force'
+
+	case "$option" in
+		'force')
+		;;
+		*)
+			_file age "$TMPDIR/ARCHIV_MONITORING" -gt 900 || {
+				grep -q ^'# alive-message was send' "$TMPDIR/ARCHIV_MONITORING" || {
+					echo >>$SCHEDULER_IMPORTANT 'cron.monitoring send_alive_message'
+				}
+
+				_log it $funcname daemon debug "last send <900 sec, use 'force'"
+				return 1
+			}
+
+			_net inet_seems_stable || {
+				_log it $funcname daemon debug "inet unstable, use 'force'"
+				return 1
+			}
+		;;
+	esac
+
+	_monitoring heartbeat_minimal_send
+
+	if bool_true 'system.@monitoring[0].send_mapapi'; then
+		_monitoring heartbeat_mapapi
 	else
-		# if there are no files to remove, give up
-		return 0
+		true
 	fi
+}
+
+_watch_cgminer()
+{
+	local funcname='watch_cgminer'
+
+	command -v cgminer >/dev/null && {
+		/etc/init.d/cgminer enabled && {
+			pidof cgminer >/dev/null || {
+				_log it $funcname daemon alert "no pid found, restart daemon"
+				/etc/init.d/cgminer start
+			}
+		}
+	}
+}
+
+_watch_coredump()
+{
+	local funcname='watch_coredump'
+	local ignore_pattern="${1:-we_will_not_ignore_anything}"	# e.g. 'hostapd' or <infotext with spaces> (for logging)
+
+	local file dump file_list overall storage checkolsr
+	local exitcode=1	# means: no crash found
+	local count=0
+
+	# enforce a crash with: kill -SIGSEGV $PID
+	#
+	# filename/format defined in /etc/init.d/network and later in _system_adjust_coredump()
+	# echo '/tmp/%e.%p.%s.%t.core' > /proc/sys/kernel/core_pattern
+	# means: filename + pid + signal + unixtime
+	# e.g. /tmp/olsrd.5403.11.1389960024.core
+	#
+	# test func via: dd if=/dev/zero of=/coredumps/olsrd.5403.11.1389960024.core bs=100k count=15
+	#
+	# how to analyze stacktrace on buildserver, e.g. for 'olsrd2'
+	# find build_dir/target-* -type f -iname olsrd2		// -> get correct binary
+	# scripts/remote-gdb $corefile $binaryfile
+	#
+	# https://dev.openwrt.org/ticket/17584#comment:1
+	# or: http://stackoverflow.com/questions/5115613/core-dump-file-analysis
+
+	file_list="$( ls -1t /coredumps/*.core /tmp/*.core 2>/dev/null )"
+	while [ -n "$file_list" -a $count -le ${overall:-$count} ]; do {
+		# reverse order / work on oldest (=last) first
+		for dump in $file_list; do count=$(( count + 1 )); done
+
+		[ $exitcode -eq 0 ] || {
+			exitcode=0		# only during first iteration
+			overall=$count
+
+			[ $( _stopwatch stop '/tmp/CRON_LASTCALL' interim,nolog,seconds ) -gt 300 ] && {
+				_log it $funcname daemon alert 'cron hangs, restarting'
+				/etc/init.d/S51crond_fff+ start
+			}
+
+			# include infotext into log-messages
+			case "$ignore_pattern" in
+				*' '*)
+					# spaces to _ - e.g. watch_coredump.after:__watch_wifistuff()
+					funcname="$funcname.$( echo "$ignore_pattern" | tr ' ' '_' )"
+				;;
+			esac
+		}
+
+		case "$dump" in
+			*'/crond.'*)
+				pidof crond || {
+					_log it $funcname daemon alert 'cron died, restarting'
+					_stopwatch start '/tmp/CRON_LASTCALL' global
+					/etc/init.d/S51crond_fff+ start
+				}
+			;;
+			*'/iptables.'*)
+				_log it $funcname daemon alert 'stopping netfilter'
+				_netfilter stop
+				_net local_inet_offer >/dev/null && _netfilter masquerade_start
+			;;
+			*'/sh.'*)
+				# TODO: can also be e.g. 'mac80211.sh'
+				_log it $funcname daemon alert "segfault in script, removing lockfiles"
+				rm '/tmp/CRON_LOCK'
+				rm '/tmp/scheduler.log'
+			;;
+			*'/olsrd.'*)
+				# have seen a lot of restarts at once, so only try once at the end
+				checkolsr='true'
+			;;
+		esac
+
+		case "$dump" in
+			*"$ignore_pattern"*|'testdump')
+				_log it $funcname daemon info "$count/$overall: found '$dump', but ignoring it"
+			;;
+			*)
+				# coredump = 2mb and free = 1mb -> OK (is good compressable)
+				storage="$PERMDIR/coredumps"
+				mkdir -p "$storage"
+				# r37513.ar71xx.6relayd.1599.10.1374552373.core
+				file="r${OPENWRT_REV}.$( _system architecture ).$( basename "$dump" )"
+
+				flash_enough_free()
+				{
+					local file_to_store="$1"
+					local coredump_size="$( _file size "$file_to_store" 'bytes' )"
+					local free="$( _system flash_free 'bytes' )"
+					local border=$(( 200 * 1024 ))
+
+					test $free -gt $border || return 1
+					test $(( coredump_size / 2 )) -lt $free		# _system flash_free enough "$file"?
+					# dumps are good compressable, hence /2		# BLA TODO!
+
+					# e.g. file = 300k
+					# free=100k
+					# coredump_size / 2 = 150 -lt 100 -> no, not enough free
+
+					# e.g. file = 50
+					# free=100k
+					# coredump_size / 2 = 25 -lt 100 -> yes, enough free
+				}
+
+				if ! flash_enough_free "$dump"; then
+					touch "$storage/$file"		# TODO: do not write if <100k free flash?
+
+					storage='/dev'
+					file="null (low storage: was: $dump)"
+				else
+					# https://dev.openwrt.org/ticket/19564
+					if _system version '44942...45790'; then
+						storage='/dev'
+						file="null (bad version, was: $dump)"
+					elif _weblogin authserver is_myself; then
+						storage='/dev'
+						file="null (do not on authserver, was: $dump)"
+					fi
+				fi
+
+				mv -f "$dump" "$storage/${file% (*}" || {	# cut comment after 'null' (if there)
+					rm -f "$dump"
+					touch "$storage/$file"
+				}
+
+				_log it $funcname daemon alert "$count/$overall: wrote: $storage/$file"
+			;;
+		esac
+
+		[ -e "$dump" ] && rm "$dump"
+
+		# TODO: only remove last entry?
+		file_list="$( ls -1t /coredumps/*.core /tmp/*.core 2>/dev/null )"
+	} done
+
+	[ -n "$checkolsr" ] && {
+		pidof olsrd >/dev/null || _olsr daemon start 'has_crashed'
+	}
+
+	return $exitcode
+}
+
+_watch_user_list()
+{
+	local option="$1"
+	local file
+	local keep="$PERMDIR/vds_user_list.tar.gz"
+	local keep_temp="$TMPDIR/vds_user_list.tar.gz"
+	local dhcplease_12h='43200'
+
+	case "$option" in
+		'load_keep')
+			[ -e "$keep" ] && tar -C / -xzf "$keep"
+		;;
+	esac
+
+	if bool_true 'system.@weblogin[0].forget_clients'; then
+		for file in '/tmp/vds_user_'*; do {
+			[ -e "$file" ] && {
+				_file age "$file" -gt $dhcplease_12h && rm "$file"
+			}
+		} done
+	else
+		_weblogin authserver is_myself && {
+			# also remember filedates:
+			tar czf "$keep_temp" '/tmp/vds_user_'* 2>/dev/null
+		}
+	fi
+
+	[ -e "$keep_temp" ] && {
+		if  cmp -s "$keep_temp" "$keep"; then
+			rm "$keep_temp"
+		else
+			mv "$keep_temp" "$keep"
+		fi
+	}
+
+	true
+}
+
+_watch_space_tmpfs()
+{
+	local funcname='watch_space_tmpfs'
+	local file success list_logs list_vdsfiles list_orphaned list_debug
+	local list_curl list_klog list_coredump list_scheduler list
+	local nothing_deleted='true'
+
+	cleanup_needed()
+	{
+		local temp="$TMPDIR/$funcname.$$"
+
+		# write a write - even if there is enough space free
+		# this can fail if too many files in dir
+		if cp /tmp/loader "$temp"; then
+			rm -f "$temp"
+		else
+			rm -f "$temp"
+			return 0
+		fi
+
+		# check if comfortable
+		test $( _system disc_free "$TMPDIR" percent ) -lt 20
+	}
+
+	# TODO: ls -1 $SCHEDULER_QUEUE
+	# TODO: break if >1M free?
+	while cleanup_needed; do {
+		pidof ulogd >/dev/null && {
+			/etc/init.d/ulogd stop
+			_watch hanging_command ulogd
+			_watch hanging_command ulogd
+		}
+
+		success=
+		list_logs="$(      ls 2>/dev/null -S1 /var/log/* $PERMLOG )"	# FIXME! permlog?
+		list_vdsfiles="$(  ls 2>/dev/null -S1 /tmp/user-* )"
+		for list_vdsfiles in $list_vdsfiles; do break; done
+		list_orphaned="$(  ls 2>/dev/null -S1 /tmp/db_backup.tgz.temp.* )"
+		list_debug="$(     ls 2>/dev/null -S1 /tmp/WIFI_INCOMING_FRAME_COUNTER_wlan0.error_debug.* )"
+		list_klog="$(      ls 2>/dev/null -S1 /tmp/dmesg.* )"
+		list_coredump="$(  ls 2>/dev/null -S1 /tmp/*.core )"
+		list_scheduler="$( ls 2>/dev/null -S1 /tmp/scheduler.log.debug.* )"
+		list_curl="$( ls 2>/dev/null -S1 $TMPDIR/curl_it_* )"
+		list="$list_logs $list_vdsfiles $list_orphaned $list_debug $list_klog $list_coredump $list_scheduler $list_curl"
+
+		for file in $list; do {
+			[ -e "$file" ] && {
+				success='true'
+				rm "$file"
+				_log it $funcname daemon info "removed: '$file'"
+			}
+		} done
+
+		if [ "$success" = 'true' ]; then
+			[ "$nothing_deleted" = 'true' ] && {
+				nothing_deleted=
+				_log it $funcname daemon alert 'success'
+			}
+		else
+			# if there are no files to remove, give up
+			return 0
+		fi
+	} done
 }
 
 _watch_dhcp_space()
 {
-	local funcname="watch_dhcp_space"
+	local funcname='watch_dhcp_space'
 	local line
-	local file="/tmp/dhcp.leases"
-	local max_lan="$( uci -q get dhcp.lan.limit )"
-	local max_wifi="$( uci -q get dhcp.wlan.limit )"
+	local file='/tmp/dhcp.leases'
+	local max_lan="$( uci get dhcp.lan.limit )"
+	local max_wifi="$( uci get dhcp.wlan.limit )"
 	local clients_lan=0
 	local clients_wifi=0
-	local logprio="debug"
-	local percent_border="80"
+	local logprio='debug'
+	local percent_border=80
 
-	while read line; do {
-		set $line
-		if fgrep -q "$3" "/tmp/CLIENTS_LAN"; then
-			clients_lan=$(( $clients_lan + 1 ))
+	while read -r line; do {
+		case "$line" in
+			*' 00:00:00:00:00:00 127.0.0.2 lo-alias '*)
+				continue
+			;;
+		esac
+
+		explode $line
+		if grep -Fq "$3" "/tmp/CLIENTS_LAN"; then
+			clients_lan=$(( clients_lan + 1 ))
 		else
-			clients_wifi=$(( $clients_wifi + 1 ))
+			clients_wifi=$(( clients_wifi + 1 ))
 		fi
 	} done <"$file"
 
-	[ "$( uci -q get dhcp.lan.ignore )" = "1" ] || {
-		[ $clients_lan -gt $(( (${max_lan:=0} * $percent_border) / 100 )) ] && {
-			logprio="alert"
+	[ ${max_lan:=0} -eq 0 ] || {
+		[ "$( uci get dhcp.lan.ignore )" = "1" ] || {
+			[ $clients_lan -gt $(( (max_lan * percent_border) / 100 )) ] && {
+				logprio="alert"
+			}
 		}
 	}
 
-	[ "$( uci -q get dhcp.wifi.ignore )" = "1" ] || {
-		[ $clients_wifi -gt $(( (${max_wifi:=0} * $percent_border) / 100 )) ] && {
-			logprio="alert"
+	[ ${max_wifi:=0} -eq 0 ] || {
+		[ "$( uci get dhcp.wifi.ignore )" = "1" ] || {
+			[ $clients_wifi -gt $(( (max_wifi * percent_border) / 100 )) ] && {
+				logprio="alert"
+			}
 		}
 	}
 
 	_log it $funcname daemon $logprio "clients: lan: $clients_lan/$max_lan wifi: $clients_wifi/$max_wifi"
 }
 
-_watch_vpn()
+_watch_local_proxy()
 {
-	local func="watch_vpn"
-	local ip_server="$( _ipsystem getvar 'WIFIVPNSERVERADR' )"
+	local funcname='watch_local_proxy'
+	local pidfile="/var/run/polipo.pid"
 
-	if pidof vtund >/dev/null; then
-	        _log it $func daemon debug "daemon running"
-	        grep -sq ^"Interface .*tap0" /etc/olsrd.conf /var/etc/olsrd.conf || {   # fixme! more abstraction: tun/tapXY + conf-filename
-			_log it $FUNC daemon info "daemon running but tunnel-device not used by olsr"
-	        	return 1
-		}
-	        _log it $func daemon debug "tunnel-device is in olsr.conf"
+	[ -e /usr/sbin/polipo ] || {
+		return 0
+	}
 
-	        ps | grep vtund | grep -q connecting && {
-			_log it $func daemon info "daemon running but connection seems broken"
-	                return 1
-	        }
-	        _log it $func daemon debug "connection seems active"
+	[ "$( uci get polipo.general.enabled )" = "1" ] || {
+		return 0
+	}
 
-		vpn_server_is_neigh()
-		{
-			local file='/tmp/OLSR/LINKS'
-			local ip_other_side="$( _sanitizer run "$ip_server" escape_dots )"
-
-			_log it $func daemon debug "checking '$file' for ip: $ip_server"
-			grep -q "$ip_other_side" "$file"
-		}
-
-		if vpn_server_is_neigh; then
-			_log it $func daemon debug "tunnel-olsr neigh available"
-
-			_net ping_getlatency "$ip_server" 2>/dev/null || {
-				_log do $func daemon info "ping failed: $ip_server"
-				return 1
-			}
-	        else
-			_log it $func daemon info "no tunnel-olsr neigh available?!"
-	        	return 1
-	        fi
+	local cache_path="$( uci get polipo.cache.diskCacheRoot )"
+	if [ -z "$cache_path" ]; then
+		return 0
 	else
-		_log it $func daemon info "daemon NOT running"
-		return 1
+		# polipo.general.logFile=/tmp/usb0/polipo.log
+		# this should try to read from disk-cache-device
+
+		ls -1 "$cache_path/polipo.log" >/dev/null 2>/dev/null || {
+			return 0
+		}
+	fi
+
+	daemon_restart()
+	{
+		local reason="$1"
+
+		[ -e "$pidfile" ] && {
+			rm "$pidfile"
+		}
+
+		_log it $funcname daemon alert "$reason, restarting"
+
+		pidof polipo >/dev/null && {
+			_watch hanging_command polipo
+			_watch hanging_command polipo
+		}
+
+		pidof polipo >/dev/null || {
+			/etc/init.d/polipo start
+		}
+	}
+
+	pidof polipo >/dev/null || {
+		daemon_restart "polipo is not running"
+		return 0
+	}
+
+	_curl it "http://127.0.0.1:8123/polipo/status?" 5 >"$TMPDIR/${funcname}_$$"
+	grep -Fq "Polipo status report" "$TMPDIR/${funcname}_$$" || {
+		daemon_restart "cannot fetch local status-page"
+	}
+	rm "$TMPDIR/${funcname}_$$"
+
+	# testdownload:
+	# export http_proxy=http://127.0.0.1:8123
+	# _curl it "http://bla"
+}
+
+_watch_archivsize()	# e.g. if a file exceeds 300 lines it will be truncated to the last 250 lines
+{
+	local funcname='watch_archivsize'
+	local file="$1"
+	local lines_max="${2:-100}"		# e.g. 250
+	local lines_tolerate="${3:-$lines_max}"	# e.g. 300 - if empty then be strict
+	local lines=0
+
+	[ -e "$file" ] || return 0
+
+	lines="$( _file lines "$file" )"
+	isnumber "$lines_tolerate" || lines_tolerate="$lines_max"
+
+	if [ $lines -gt $lines_tolerate ]; then
+		if tail -n $lines_max "$file" >"$TMPDIR/$funcname.$$"; then
+			mv "$TMPDIR/$funcname.$$" "$file" || {
+				_log it $funcname daemon alert "moving tempfile '$TMPDIR/$funcname.$$' to '$file' failed"
+			}
+		else
+			rm "$TMPDIR/$funcname.$$"
+			_log it $funcname daemon alert "tail into tempfile failed with '$file' = $lines lines"
+		fi
+	else
+		return 0
 	fi
 }
 
-_watch_archivsize ()
+_watch_system_time()
 {
-       local FILE="$1"
-       local MAX_LINES="$2"
-       local TEMP="/tmp/watch_archivsize_temp_$$"
-       
-       tail -n $MAX_LINES "$FILE" >"$TEMP"
-       mv "$TEMP"  "$FILE"
+	local funcname='watch_system_time'
+	local unixtime="$( _system date unixtime )"
+	local ntp_ok ip
 
-}
+	# clock older than buildtime OR
+	# buildtime is newer than clock?
+	[ $((  FFF_PLUS_VERSION * 3600 ))		-gt $unixtime ] && ntp_ok='false'
 
+	# buildtime much older (4 years) than clock
+	# (yes, i have seen _many_ routers with date 2020/2037!)
+	[ $(( (FFF_PLUS_VERSION * 3600) + 135000000 ))	-lt $unixtime ] && ntp_ok='false'
 
-_watch_system_time ()		# firmware-build-date is newer than unixtime?
-{				# firmware-build-date + 1 year is older than date? (yes, i have seen _many_ routers with date 2020/2037!) -> set time
-	local NTP_TIME_OK=	# fallback 347681 = 2009'aug-30                         
+	_ntp set is_unset && ntp_ok='false'
 
-	local UNIXTIME="$( _system date unixtime )"
-	      UNIXTIME="${UNIXTIME:=0}"
-
-	[ $(( ${FFF_PLUS_VERSION:=347681} * 3600 ))            -gt $UNIXTIME ] && NTP_TIME_OK="false"
-	[ $(( ${FFF_PLUS_VERSION:=347681} * 3600 + 135000000)) -lt $UNIXTIME ] && NTP_TIME_OK="false"
-
-	_ntp set is_unset && NTP_TIME_OK="false"
-	
-	[ "$NTP_TIME_OK" = "false" ] && {
+	[ "$ntp_ok" = 'false' ] && {
 		_ntp set force
 
-		[ "$(( ${FFF_PLUS_VERSION:=347681} * 3600 ))" -gt "$( _system date unixtime )" ] && {
-			_log it set_time daemon info "could'nt set time - trying poor mens timeserver - fixme!"
+		[ $(( FFF_PLUS_VERSION * 3600 )) -gt $( _system date unixtime ) ] && {
+			ip="$( _olsr neigh_random_get )"
+			_log it $funcname daemon info "could'nt set time - trying poor mens timeserver: $ip"
+			unixtime="$( _tool remote "$ip" unixtime )"
+			_ntp set "$unixtime"	# TODO: plausicheck?
 		}
 	}
 }
 
-_watch_wifi_mode ()		# check e.g. adhoc in config but managed in real?
+_watch_wifi_mode()		# check e.g. adhoc in config but managed in real?
 {
-	local MODE_REAL="$( _wifi mode $WIFIDEV config )"
-	local MODE_CONF="$( _wifi mode $WIFIDEV )"
+	local funcname='watch_wifi_mode'
+	local mode_real mode_conf
 
-	if [ "$MODE_REAL" != "$MODE_CONF" ]; then
-		_wifi phy_restart $WIFIDEV "compare_config_and_real_wifi_mode: diff, real/conf: '$MODE_REAL/$MODE_CONF'" alert
-		return 1
+	[ -z "$WIFIDEV" ] && return 0
+
+	mode_real="$( _wifi mode "$WIFIDEV" )"
+	mode_conf="$( _wifi mode "$WIFIDEV" config )"
+
+	if [ "$mode_real" = "$mode_conf" ]; then
+		:
 	else
-		return 0
+		_wifi phy_restart "$WIFIDEV" "$funcname() real/conf: '$mode_real/$mode_conf'" alert
+		_log sleep $funcname 60 step 5
 	fi
 }
 
-_watch_hanging_command ()
+_watch_hanging_command()
 {
-	local FUNC="watch_hanging_command"
+	local funcname='watch_hanging_command'
 	local COMMAND="$1"						# e.g. wget|scp|mv|nc|olsrd|own_keyword
 	local COMMAND_PID="$2"						# e.g. direct PID or autoget if empty
-	local COMMAND_CMD
+	local COMMAND_CMD foundpid
+	local prio='alert'
 
-	pid2taskname()
-	{
-		_sanitizer run "$( cut -d: -f2 /proc/${1:-unset}/status )" firstword
-	}
+	[ "$COMMAND" = 'usual_suspects' ] && {
+		_$funcname mv
+		_firmware get_usecase 'NAS' || _$funcname scp	# FIXME! why is scp (on NAS to other server) killed?
+		_$funcname wget
+		_$funcname nc
 
-	if [ -z "$COMMAND_PID" ]; then
-		COMMAND_PID="$( _system get_first_pid $COMMAND )"
-	else
-		COMMAND="$( pid2taskname $COMMAND_PID )"
-	fi
-
-	[ -z "$COMMAND_PID" ] && {
-		_log it $FUNC daemon debug "no running '$COMMAND'-process"
 		return 0
 	}
 
-	read COMMAND_CMD </proc/$COMMAND_PID/cmdline			# remember exact commandline
+	_system maintenance_window_active 'pppoe_reconnect' && prio='info'
+
+	if [ -z "$COMMAND_PID" ]; then
+		for COMMAND_PID in $( pidof "$COMMAND" ); do {
+			read -r COMMAND_CMD <"/proc/${COMMAND_PID:-empty_pid}/cmdline"
+			case "$COMMAND_CMD" in
+				*'user-agentAUDIOPLAYER-'*)
+					# see /etc/hotplug.d/button/events.sh
+				;;
+				'scp-t/tmp/storage/sd'*|'scp/tmp/storage/sdb'*|"scp-t/$TMPDIR/storage/sd"*|"scp/$TMPDIR/storage/sdb"*)
+					# if somebody copies via scp on/from this node,
+					# this is not an error - see mount_storage()
+				;;
+				*)
+					foundpid='true'
+					break
+				;;
+			esac
+		} done
+
+		[ -n "$foundpid" ] || return 0
+	else
+		pid2taskname()
+		{
+			_sanitizer run "$( cut -d: -f2 /proc/${1:-unset}/status )" firstword
+		}
+
+		COMMAND="$( pid2taskname "$COMMAND_PID" )"
+	fi
+
+	read -r COMMAND_CMD <"/proc/${COMMAND_PID:-empty_pid}/cmdline"		# remember exact commandline
 
 	local OLD_PID OLD_CMD FILE1 FILE2
-	FILE1="/tmp/maybe_hanging_${COMMAND}_process_id"
-	FILE2="/tmp/maybe_hanging_${COMMAND}_process_cmd"
+	FILE1="$TMPDIR/maybe_hanging_${COMMAND}_process_id"
+	FILE2="$TMPDIR/maybe_hanging_${COMMAND}_process_cmd"
 
-	[ -e "$FILE1" ] && read OLD_PID <$FILE1
-	[ -e "$FILE2" ] && read OLD_CMD <$FILE2
+	[ -e "$FILE1" ] && read -r OLD_PID <$FILE1
+	[ -e "$FILE2" ] && read -r OLD_CMD <$FILE2
 
-	_log it $FUNC daemon debug "found '$COMMAND'-process pid:'$COMMAND_PID' / cmdline:'$COMMAND_CMD'"
+	_log it $funcname daemon debug "found '$COMMAND'-process pid: '$COMMAND_PID' / cmdline: '$COMMAND_CMD'"
 
-	if [ "$OLD_PID" = "$COMMAND_PID" ] && [ "$OLD_CMD" = "${COMMAND_CMD:=empty_cmd_line}" ]; then
+	case "$COMMAND" in
+		cron|crond)
+			# seen on vpn-server
+			_log it $funcname daemon info "ignoring COMMAND '$COMMAND'-process pid: '$COMMAND_PID' / cmdline: '$COMMAND_CMD'"
+			return
+		;;
+	esac
 
+	if [ "$OLD_PID" = "$COMMAND_PID" ] && [ "$OLD_CMD" = "${COMMAND_CMD:-empty_cmd_line}" ]; then
 		if [ -e "/etc/init.d/$COMMAND" ]; then
-			_log it $FUNC daemon info "executing /etc/init.d/$COMMAND stop"
+			_log it $funcname daemon info "executing /etc/init.d/$COMMAND stop"
 			/etc/init.d/$COMMAND stop
 		else
-			_log it $FUNC daemon info "killing '$COMMAND_CMD'"
+			_log it $funcname daemon info "killing '$COMMAND_CMD'"
 			kill $COMMAND_PID
 		fi
 
 		sleep 3
 
 		if [ -e "/proc/$COMMAND_PID" ]; then
-			_log it $FUNC daemon crit "still hanging, killing hard ($COMMAND/$COMMAND_CMD)"
+			_log it $funcname daemon $prio "still hanging, killing hard ('$COMMAND'/'$COMMAND_CMD')"
 			kill -9 $COMMAND_PID
 			sleep 3
 
 			if [ -e "/proc/$COMMAND_PID" ]; then
-				_system reboot_safe "$FUNC() still hanging '$COMMAND'"
+				_system crashreboot 'task_hangs'
 				return 1
 			else
-				_$FUNC $COMMAND
+				_$funcname $COMMAND
 			fi
 		else
-			_$FUNC $COMMAND		# recheck
+			_$funcname $COMMAND		# recheck
 		fi
 
-		_log it $FUNC daemon info "successfully killed '$COMMAND'-process"
+		_log it $funcname daemon info "successfully killed '$COMMAND'-process"
 		return 0
 	fi
 
-	_log it $FUNC daemon debug "remember for next check pid '$COMMAND_PID' / '$COMMAND_CMD'"
-	echo >$FILE1 "$COMMAND_PID"
-	echo >$FILE2 "$COMMAND_CMD"
+	_log it $funcname daemon debug "remember for next check pid '$COMMAND_PID' / '$COMMAND_CMD'"
+	[ -n "$COMMAND_PID" ] && echo >$FILE1 "$COMMAND_PID"
+	[ -n "$COMMAND_CMD" ] && echo >$FILE2 "$COMMAND_CMD"
 }
 
-_watch_flash_free_space ()
+_watch_flash_free_space()	# find / -xdev | while read L; do echo "$( _file size "$L" ) $L"; done | sort -n
 {
-	local funcname="watch_flash_free_space"
-	local border="150"
-	local statfile="/tmp/$funcname.boottime"
-	local file flash_free
+	local funcname='watch_flash_free_space'
+	local border="${1:-200}"
+	local topposition=1
+	local file size flash_free
 
-	[ -e "$statfile" ] || {
-		_system flash_free >"$statfile"		# is filled during early boot
-	}
-
-	read flash_free <"$statfile"
-	[ $flash_free -lt $border ] && border="$flash_free"
+	# this works also with full tempdir
+	_watch counter "$TMPDIR/$funcname" increment 1 max 100 || return 0
 
 	list_files_removeable()
 	{
-		ls -1 /www/cgi-bin/user-* /usr/lib/*pkg/lists/* /www/backup_nvram_* /www/safed_syslog_fff+ 2>/dev/null
+		ls -1	/usr/lib/opkg/info/*.postinst \
+			/www/PINGCHECK \
+			/www/cgi-bin/user-* \
+			/usr/lib/*pkg/lists/* \
+			/www/backup_nvram_* \
+			/www/safed_syslog_fff+ \
+			/www/logread_* \
+			/www/NETFILTER_AUTOADD.* \
+			/etc/variables_software_fff+ \
+			/www/coredumps/*.core \
+			/www/backup_archiv_node_data \
+			"$PERMDIR/coredumps/"*
 
-		[ -e /tmp/SEND_ALIVE_FAILED ] || {		# means, that content is likely already send by monitoring to server
-			ls -1 /www/everlasting_syslog.txt 2>/dev/null
-		}
+		# content is likely already send to monitoring server
+		[ -e "$TMPDIR/SEND_ALIVE_FAILED" ] || ls -1 $PERMLOG
 	}
 
-	echo "0" >"/tmp/$funcname"
-	while [ -n "$( list_files_removeable )" ]; do {
-
-		[ $( _system flash_free ) -ge $border ] && break
-
-		_watch counter "/tmp/$funcname" increment 1 max 100 || {
-			_log it $funcname daemon info "[ERR] rebooting, in an ultralow jffs2-situation, this is the only chance to survive"
-			reboot
+	list_files_removeable 2>/dev/null | while read -r file; do {
+		if [ $( _system flash_free ) -ge $border ]; then
+			_watch counter "$TMPDIR/$funcname" remove
 			break
-		}
+		else
+			_watch counter "$TMPDIR/$funcname" increment 1 max 100 || break
+		fi
 
-		file="$( list_files_removeable | head -n1 )"
-		_log it $funcname daemon info "only $( _system flash_free ) kb free - removing '$file' with $( _file size "$file" ) bytes"
-		rm "$file"
+		[ -e "$file" ] && {
+			size="$( _file size "$file" )"
+			flash_free="$( _system flash_free )"
+
+			# sometimes deleting is not possible when JFFS2 is really full
+			if rm "$file"; then
+				:
+			else
+				# if this fails, exclude this file from next try
+				>"$file" || topposition=$(( topposition + 1 ))
+			fi
+
+			_log it $funcname daemon info "only $flash_free kb free - removed '$file' with $size bytes"
+		}
 	} done
 }
 
 _watch_dns_resolution()		# only with existing dnsmasq and reachable internet-gateway
 {
-	local DNS_TESTSERVER="intercity-vpn.de"		# old was 'weimarnetz.de' -> take from fff_server_vpn_ip4 = 87.118.106.19 ?
-	local FUNC="watch_dns_resolution"
-	local ip
+	local funcname='watch_dns_resolution'
+	local testserver='intercity-vpn.de'	# FIXME! use a fallback list
+	local ip line pid pid_fakedns pid_parent pid_main script leases cmdline testdomain dump_core ip_nexthop
+	local marker_watchdog_ok="$PERMDIR/netifd_dhcp_watchdog_ok"
+
+	_system maintenance_window_active 'pppoe_reconnect' && return 0
+
+	[ -e "$TMPDIR/FAKEDNS.pid" ] && {
+		read -r pid_fakedns <"$TMPDIR/FAKEDNS.pid"
+		read -r line        <"$TMPDIR/FAKEDNS.cmdline"
+		read -r cmdline     <"/proc/$pid_fakedns/cmdline"
+
+		[ "$line" = "$cmdline" ] || {
+			_log it $funcname daemon alert "fakedns missing"
+			_netfilter fakedns_start
+		}
+	}
 
 	# oldstyle: ln -s /var/etc/dnsmasq.conf /etc/dnsmasq.conf
 	# dnsmasq -p 5353 -A /#/192.168.1.251 -C /dev/null
 
-	[ ! -x /etc/init.d/*dnsmasq ]		&& return 0
+	[ -x '/etc/init.d/dnsmasq' ] || return 0
 
-	fgrep -q "nameserver 127.0.0.1" /etc/resolv.conf || {
-		read ip <"/etc/resolv.conf"
-		ip="$( _sanitizer run "$ip" ip4 )"
-		_sanitizer run "$ip" ip4 check && {
-			return 0			# real server configured, working without local daemon
-		}
+	/etc/init.d/dnsmasq enabled || {
+		ip="$( uci -q get dhcp.@dnsmasq[0].server )"
+		line="nameserver ${ip:-8.8.8.8}"
+		grep -Fq "$line" '/etc/resolv.conf' || echo "$line" >'/etc/resolv.conf'
+
+		return 0
 	}
 
-	_net inet_seems_stable			|| return 0
+	pid_good()
+	{
+		if [ -n "$script" -a -e "$script" ]; then
+			case "$pid" in
+				*' '*)
+					touch "$TMPDIR/DNSMASQ_DOUBLEPID"
+					# 2 tasks must run
+					return 0
+				;;
+				'')
+					return 1
+				;;
+				*)
+					if [ -e "$TMPDIR/DNSMASQ_DOUBLEPID" ]; then
+						return 1
+					else
+						return 0
+					fi
+				;;
+			esac
+		else
+			[ -n "$pid" ] && return 0
+		fi
 
-	pidof dnsmasq >/dev/null || {
-
-		_log it $FUNC daemon error "restarting dnsmasq"
-
-		pidof udhcpd >/dev/null && {			# otherwise the server-port cannot bound to new daemon
-
-			_log it $FUNC daemon error "killing old DNS-server 'udhcpd'"	
-			killall udhcpd
-		}
-		
-		/etc/init.d/*dnsmasq start
-		/etc/init.d/*fake_dns_server_fff+ remove_fake_dnsserver
-		sleep 3
-
-		_log it $FUNC daemon error "restarted dnsmasq, PID now '$( pidof dnsmasq )'"
+		return 1
 	}
 
-	nslookup "$( _system date unixtime ).$DNS_TESTSERVER" 2>/dev/null >/dev/null || {		# can we resolv a random address?
+	leases="$( uci -q get dhcp.@dnsmasq[0].leasefile )" && {
+		# e.g.: (first word is validity/unixtime)
+		# 1417698583 00:00:00:00:00:00 127.0.0.2 lo-alias *
+		if line="$( grep ' 00:00:00:00:00:00 127.0.0.2 lo-alias ' "$leases" )"; then
+			[ -e "$marker_watchdog_ok" ] || touch "$marker_watchdog_ok"
+			explode $line
 
-		_log it $FUNC daemon error "error in dns-resolution, sending SIGHUP to DNSmasq"
-		kill -SIGHUP $( _system get_first_pid dnsmasq )
-		sleep 5
-	
-		nslookup "$( _system date unixtime ).$DNS_TESTSERVER" 2>/dev/null >/dev/null || {	# again: can we resolv a random address?
+			if   _ntp set is_unset; then
+				:
+			elif [ $1 -lt $( _system date unixtime ) ]; then
+				_log it $funcname daemon alert "loopback-alias/dhcp-lease too old: $1"
+				/etc/init.d/dnsmasq restart
+				ifup loopback
+			else
+				case "$( pidof udhcpc )" in
+					*' '*' '*' '*' '*' '*' '*)
+						# 7 instances are too much 8-)
+						_log it $funcname daemon alert "too much udhcpc: $( pidof udhcpc )"
+						ifdown loopback
+						killall udhcpc
+						ifup loopback
+						_log it $funcname daemon alert "too much udhcpc: now: $( pidof udhcpc )"
+					;;
+				esac
+			fi
+		else
+			# a lot of: 'no address range available for DHCP request via lo'
+			# when this file exists, we already have seen a working 'lo-alias'-lease
+			[ -e "$marker_watchdog_ok" ] && {
+				rm "$marker_watchdog_ok"
 
-			_log it $FUNC daemon error "error in dns-resolution, restarting DNSmasq"
-			kill -SIGUSR1 $( _system get_first_pid dnsmasq )	# logging stats
-			/etc/init.d/*dnsmasq restart
+				_log it $funcname daemon alert 'loopback-alias/cron-watchdog seems down'
+				/etc/init.d/dnsmasq restart
+				ifup loopback
+			}
+		fi
+	}
+
+	pid="$( pidof dnsmasq )"
+	pid="$( _list remove_element "$pid" "$pid_fakedns" 'string' )"
+	pid="$( _sanitizer run "$pid" newlines2spaces )"
+	script="$( uci -q get dhcp.@dnsmasq[0].dhcpscript )"
+
+	pid_good "$pid" "$script" || {
+		if grep -Fq 'nameserver 127.0.0.1' '/etc/resolv.conf'; then
+			_log it $funcname daemon info "restarting dnsmasq"
+
+			pidof udhcpd >/dev/null && {			# otherwise the server-port cannot bound to new daemon
+				_log it $funcname daemon info "killing old DNS-server 'udhcpd'"
+				killall udhcpd
+			}
+
+			_net local_inet_offer && {
+				ip_nexthop="$( ip route list exact '0.0.0.0/0' table main | head -n1 | cut -d' ' -f3 )"
+
+				_net ip4_is_private "$ip_nexthop" && {
+					# do not use local dnsmasq, but nexthop for resolving
+					# TODO: why is this needed? e.g. sven/frenze
+					{
+						echo "search $( uci get dhcp.@dnsmasq[0].domain || echo 'local' )"
+						echo "nameserver $ip_nexthop"
+					} >'/etc/resolv.conf'
+
+					_log it $funcname daemon info "hard switch to ip '$ip_nexthop' in /etc/resolv.conf"
+				}
+			}
+
+			/etc/init.d/dnsmasq restart
+			# TODO: also restart fake-dnsserver?
+
+			_log it $funcname daemon alert "dnsmasq died, old PIDs: '$pid', restarted, PID now '$( pidof dnsmasq )'"
+			return 0
+		else
+			ip="$( grep 'nameserver' '/etc/resolv.conf' | head -n1 )"
+			ip="$( _sanitizer run "$ip" ip4 )"
+
+			_sanitizer run "$ip" ip4 check && {
+				# real server configured, working without local daemon
+				return 0
+			}
+		fi
+	}
+
+	nslookup "$$.$testserver" 2>/dev/null >/dev/null || {		# can we resolv a random address?
+		_net inet_seems_stable || return 0
+
+		# if we have 2 pid's, we must use nobody-pid
+		# for SIGUSR1 (=stats to syslog) or SIGHUP (=reread config)
+		# and main-pid for SIGSEGV (=coredump)
+		for pid_parent in $pid; do {
+			if grep ^'Uid:' "/proc/$pid_parent/status" | grep -q '65534'; then
+				:
+				# nobody-pid = dhcp-script child
+				# after SIGUSR1 in syslog:
+				# dnsmasq[3843]: time 1415187118
+				# dnsmasq[3843]: cache size 1000, 0/0 cache insertions re-used unexpired cache entries.
+				# dnsmasq[3843]: queries forwarded 65, queries answered locally 93
+				# dnsmasq[3843]: server 8.8.8.8#53: queries sent 65, retried or failed 0
+			else
+				pid_main="$pid_parent"
+			fi
+		} done
+
+		if [ -z "$pid" ]; then
+			_log it $funcname daemon alert 'no pid, will restart soon'
+		else
+			if _watch counter "$TMPDIR/$funcname" increment 1 max 20 ; then
+				_log it $funcname daemon alert "after DNS fail: sending SIGHUP to dnsmasq: $pid_parent (reread config)"
+				kill -SIGHUP "$pid_parent"
+				sleep 5
+			else
+				_system crashreboot 'dns_hangs'
+			fi
+		fi
+
+		# again: can we resolv first a local and then random address?
+		testdomain="$( grep ^"[0-9]" '/etc/local.hosts' | head -n1 | cut -d' ' -f2 )"
+		_log it $funcname daemon info "trying to resolv '$testdomain' from /etc/local.hosts"
+
+		if nslookup "$testdomain" 2>/dev/null >/dev/null; then
+			_log it $funcname daemon info "[OK] resolv '$testdomain' good"
+			dump_core=
+			[ -e "$TMPDIR/$funcname" ] && rm "$TMPDIR/$funcname"
+		else
+			# only dump core, if local lookup fails too
+			dump_core='true'
+		fi
+
+		nslookup "$$.$testserver" 2>/dev/null >/dev/null || {
+			[ -n "$dump_core" -a -n "$pid" ] && {
+				_log it $funcname daemon alert "[ERR] dns hangs - we will crash dnsmasq: $pid_parent"
+				kill -SIGUSR1 "$pid_parent"	# stats to syslog
+				kill -SIGSEGV "$pid_main"	# produce coredump
+				sleep 5
+			}
+
+			/etc/init.d/dnsmasq restart
 		}
 	}
 }
 
+_watch_pppoe()
+{
+	local funcname='watch_pppoe'
+	local failure_file="$TMPDIR/${funcname}:conn_is_faulty"
+	local good_file="$TMPDIR/${funcname}:conn_good"
+	local ifname='wan'
+	local daemon
+
+	[ "$( uci -q get network.$ifname.proto )" = 'pppoe' ] || return 0
+
+	if ip route list exact '0.0.0.0/0' | grep -Fq "dev $WANDEV" ; then	# WANDEV= "pppoe-wan" OR "ppp0"
+		if [ -e "$failure_file" ]; then
+			rm "$failure_file"
+			_stopwatch stop "$funcname" quiet 1 'pppoe-connection'
+
+			{
+				echo '/etc/init.d/S43ethers_fff+ call'
+				echo 'cron.check_inet_gw_fff+'
+				echo 'cron.monitoring send_alive_message'
+			} >>$SCHEDULER_IMPORTANT
+		else
+			touch "$good_file"
+		fi
+
+		[ -e "$TMPDIR/${funcname}:maxfail" ] && rm "$TMPDIR/${funcname}:maxfail"
+	elif ifstatus $ifname | grep -Fq 'AUTH_TOPEER_FAILED'; then
+		# https://dev.openwrt.org/ticket/18026
+		if _watch counter "$TMPDIR/${funcname}:maxfail" increment 1 max 4; then
+			_log it $funcname daemon info "authfail - trying to reconnect"
+			ifup $ifname
+			echo >>$SCHEDULER '_watch pppoe'
+		else
+			_log it $funcname daemon info "no action, too much auth fails - please do manually 'ifup $ifname'"
+		fi
+	else
+		[ $( _system uptime min ) -le 5 ] && return 0
+
+		# ip monitor:
+		# [OK]
+		# eth0.2@eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP
+		# [ERR]
+		# eth0.2@eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state LOWERLAYERDOWN
+
+		type1()
+		{
+			:
+			# Oct 13 13:28:56 EG-labor-AP daemon.info pppd[14877]: No response to 5 echo-requests
+			# Oct 13 13:28:56 EG-labor-AP daemon.notice pppd[14877]: Serial link appears to be disconnected.
+			# Oct 13 13:28:56 EG-labor-AP daemon.info pppd[14877]: Connect time 11.1 minutes.
+			# Oct 13 13:28:56 EG-labor-AP daemon.info pppd[14877]: Sent 992464 bytes, received 3814282 bytes.
+			# Oct 13 13:29:02 EG-labor-AP daemon.notice pppd[14877]: Connection terminated.
+			# Oct 13 13:29:02 EG-labor-AP daemon.notice pppd[14877]: Modem hangup
+		}
+
+		type2()
+		{
+			:
+			# Oct 13 13:53:26 EG-labor-AP daemon.info pppd[29450]: Plugin rp-pppoe.so loaded.
+			# Oct 13 13:53:26 EG-labor-AP daemon.info pppd[29450]: RP-PPPoE plugin version 3.8p compiled against pppd 2.4.5
+			# Oct 13 13:53:26 EG-labor-AP daemon.notice pppd[29450]: pppd 2.4.5 started by root, uid 0
+			# Oct 13 13:53:26 EG-labor-AP daemon.info pppd[29450]: PPP session is 7211
+			# Oct 13 13:53:26 EG-labor-AP daemon.warn pppd[29450]: Connected to 00:30:88:1a:1c:b9 via interface eth0.2
+			# Oct 13 13:53:26 EG-labor-AP daemon.info pppd[29450]: Using interface pppoe-wan
+			# Oct 13 13:53:26 EG-labor-AP daemon.notice pppd[29450]: Connect: pppoe-wan <--> eth0.2
+			# Oct 13 13:53:26 EG-labor-AP daemon.info pppd[29450]: Remote message: 0030 PSULM003 0035202316 session limit exceeded
+			# Oct 13 13:53:26 EG-labor-AP daemon.err pppd[29450]: PAP authentication failed
+			# Oct 13 13:53:32 EG-labor-AP daemon.notice pppd[29450]: Connection terminated.
+			# Oct 13 13:53:32 EG-labor-AP daemon.notice pppd[29450]: Modem hangup
+		}
+
+		type3()
+		{
+			:
+			# Oct 13 14:42:23 EG-labor-AP daemon.info pppd[16479]: Terminating on signal 15
+			# Oct 13 14:42:23 EG-labor-AP daemon.info pppd[16479]: Exit.
+			# Oct 13 14:42:26 EG-labor-AP daemon.info fff+ /bin/sh watch_hanging_command(): successfully killed 'pppd'-process
+			# Oct 13 14:42:26 EG-labor-AP daemon.info pppd[16727]: Plugin rp-pppoe.so loaded.
+			# Oct 13 14:42:26 EG-labor-AP daemon.info pppd[16727]: RP-PPPoE plugin version 3.8p compiled against pppd 2.4.5
+			# Oct 13 14:42:26 EG-labor-AP daemon.notice pppd[16727]: pppd 2.4.5 started by root, uid 0
+			# Oct 13 14:42:41 EG-labor-AP daemon.warn pppd[16727]: Timeout waiting for PADO packets
+			# Oct 13 14:42:41 EG-labor-AP daemon.err pppd[16727]: Unable to complete PPPoE Discovery
+		}
+
+		type4()
+		{
+			:
+			# Oct 14 09:31:46 EG-labor-AP daemon.info pppd[17121]: PPP session is 5395
+			# Oct 14 09:31:46 EG-labor-AP daemon.warn pppd[17121]: Connected to 00:30:88:1a:1c:b9 via interface eth0.2
+			# Oct 14 09:31:46 EG-labor-AP daemon.info pppd[17121]: Using interface pppoe-wan
+			# Oct 14 09:31:46 EG-labor-AP daemon.notice pppd[17121]: Connect: pppoe-wan <--> eth0.2
+			# Oct 14 09:31:46 EG-labor-AP daemon.info pppd[17121]: Remote message: 0030 PSULM003 0043173374 session limit exceeded
+			# Oct 14 09:31:46 EG-labor-AP daemon.err pppd[17121]: PAP authentication failed
+			# Oct 14 09:31:52 EG-labor-AP daemon.notice pppd[17121]: Connection terminated.
+			# Oct 14 09:31:52 EG-labor-AP daemon.notice pppd[17121]: Modem hangup
+		}
+
+		[ -e "$failure_file" ] || {
+			touch "$failure_file"
+			_stopwatch start "$funcname" global
+		}
+
+		[ -e "$good_file" ] || {
+			_log it $funcname daemon info "no default route over $WANDEV - but do nothing, $good_file not found"
+			return 0
+		}
+
+		daemon='pppd'
+
+		_log it $funcname daemon alert "no default route over $WANDEV - restarting PPPoE / $daemon"
+		_watch hanging_command $daemon
+		_watch hanging_command $daemon
+
+		ifup $ifname
+		_log sleep $funcname 180 step 30
+		_log it $funcname daemon info "restarted: '$( ip route list exact 0.0.0.0/0 dev $WANDEV )'"
+
+		echo >>$SCHEDULER '_watch pppoe'
+	fi
+}
+
 _watch_webserver()
 {
-	local funcname="watch_webserver"
+	local funcname='watch_webserver'
 	local option="$1"	# e.g. force
-	local server="uhttpd"
+	local server
 	local action=
 
-	[ "$( uci -q get uhttpd.main.max_requests )" = "1" ] && {
+	if   [ -e '/usr/sbin/uhttpd' ];then
+		server='uhttpd'
+	elif [ -e '/usr/sbin/apache2' ];then
+		server='apache2'
+	else
+		return 0
+	fi
+
+	[ -e '/www/index.html' ] && {
+		[ $OPENWRT_REV -lt 36645 ] && {
+			mv '/www/index.html' '/www/index2.html'		# from LuCI
+		}
+	}
+
+	bool_true 'uhttpd.main.max_requests' && {	# means: '1'
 		case "$( pidof ash )" in
-			*" "*)
-				action="no_check"
+			*' '*)
+				action='no_check'
 			;;
 		esac
 	}
 
 	case "$( pidof userdb )" in
-		*" "*)
-			action="no_check"
+		*' '*)
+			action='no_check'
 		;;
 	esac
 
-	[ "$option" = "force" ] && action=
+	[ "$option" = 'force' ] && action=
 
 	[ -n "$action" ] && {
-		_log it $funcname daemon info "[OK] no check during webserver forking action"
+		_log it $funcname daemon info '[OK] no check during webserver forking action'
 		return 0
 	}
 
 	restart_server()
 	{
-		uci set uhttpd.main.script_timeout=15
-		uci set uhttpd.main.network_timeout=20
-		uci set uhttpd.main.max_requests=50
+		# FIXME! move to init
+		# https://dev.openwrt.org/changeset/39057
+		[ $OPENWRT_REV -lt 39057 ] && {
+				[ -n "$( uci -q get uhttpd.main.ubus_prefix )" ] && uci delete uhttpd.main.ubus_prefix
+		}
+
+		# FIXME! move to init
+		# maybe https wrong configured
+		[ -n "$( uci get uhttpd.main.listen_https )" ] && uci delete uhttpd.main.listen_https
+
+		[ -z "$LOWMEM" ] && {
+			uci set uhttpd.main.script_timeout='15'
+			uci set uhttpd.main.network_timeout='20'
+			uci set uhttpd.main.max_requests='50'
+		}
 
 		_log it $funcname daemon info "[OK] trying to stop '$server' with PID '$( pidof $server )'"
 
@@ -368,8 +1274,8 @@ _watch_webserver()
 
 		if pidof $server >/dev/null; then
 			_log it $funcname daemon alert "[ERR] during kill of $server, rebooting"
-			_stopwatch stop $funcname quiet
-			reboot
+			_stopwatch stop "$funcname" quiet
+			_system crashreboot 'uhttpd_zombie'
 		else
 			/etc/init.d/$server start
 			_log it $funcname daemon alert "[OK] server PID after restart: '$( pidof $server )'"
@@ -385,28 +1291,27 @@ _watch_webserver()
 		fi
 	}
 
-	local size_gethttp filesize httpsize checkfile
-	local checkfile_sample="/tmp/$funcname.sample"
-	local file_seen_good="/tmp/$funcname.was_good"
+	local size_gethttp size_file checkfile out duration
+	local checkfile_sample="$TMPDIR/$funcname.sample"
+	local file_seen_good="$TMPDIR/$funcname.was_good"
 	local i=0
 
-	if [ -e "/www/robots.txt" ]; then
-		checkfile="robots.txt"
+	if [ -e '/www/robots.txt' ]; then
+		checkfile='robots.txt'
 	else
-		checkfile="favicon.ico"
+		checkfile='favicon.ico'
 	fi
 
 	if [ -e "/www/$checkfile" ]; then
-
 		while [ ${size_gethttp:-0} -eq 0 ]; do {
-			i=$(( $i + 1 ))
+			i=$(( i + 1 ))
 			[ $i -gt 1 ] && {
 				_log it $funcname daemon info "size_gethttp = 0, try $i"
 				[ $i -gt 5 ] && break
 				sleep 10
 			}
 
-			size_gethttp="$( _curl it "http://127.0.0.1/$checkfile" 20 >"$checkfile_sample" )"
+			size_gethttp="$( _curl it "http://127.0.0.1/$checkfile" >"$checkfile_sample" )"
 
 			[ -e "$checkfile_sample" ] && {
 				size_gethttp="$( wc -c <"$checkfile_sample" )"
@@ -415,17 +1320,16 @@ _watch_webserver()
 		} done
 
 		if [ ${size_gethttp:-0} -gt 0 ]; then
-
 			size_file="$( _file size "/www/$checkfile" )"
 
 			[ ${size_file:-0} -eq 1000 ] && {
 				cp /www/$checkfile /tmp			# fixme! this is a workaround for
-				chmod 777 /tmp/$checkfile		# bad file_size() when
+				chmod 777 "$TMPDIR/$checkfile"		# bad file_size() when
 				rm /www/$checkfile			# user/group is '1000'
-				cp /tmp/$checkfile /www
-				rm /tmp/$checkfile
+				cp "$TMPDIR/$checkfile" /www
+				rm "$TMPDIR/$checkfile"
 
-				size_file="$( _file size "/www/$checkfile" )" 
+				size_file="$( _file size "/www/$checkfile" )"
 			}
 
 			if [ $size_file -eq $size_gethttp ]; then
@@ -444,120 +1348,268 @@ _watch_webserver()
 			fi
 		fi
 
+		# should work now, measure again how fast:
 		_stopwatch start $funcname
-		wget -qO /dev/null "http://127.0.0.1/$checkfile"
-		local duration="$( _stopwatch stop $funcname nolog )"
+		_curl it "http://127.0.0.1/$checkfile" >/dev/null
+		duration="$( _stopwatch stop "$funcname" nolog )"
 
-		if [ $duration -gt 175 ]; then		# = 1.75 sec
-			_log it $funcname daemon alert "last too long: $(( $duration / 100 )).$(( $duration % 100 )) sec"
-		else
-			return 0
-		fi
+		[ $duration -gt 225 ] && {		# = 2.25 sec
+			_log it $funcname daemon alert "last too long: $(( duration / 100 )).$(( duration % 100 )) sec"
+		}
+
+		# do not work with 'apache2' (cgi maybe unconfigured on VPN-server)
+		[ "$( _weblogin authserver )" = "$LANADR" -a "$server" = 'uhttpd' ] && {
+			out="$( _curl it "http://$LANADR/cgi-bin-tool.sh?OPT=wifimac" )"
+
+			case "$out" in
+				*':'*)
+					# CGI is working, outputs a MAC
+				;;
+				*)
+					_log it $funcname daemon alert "[ERR] CGI did not work, answer: '$out'"
+					restart_server
+				;;
+			esac
+		}
 	else
 		:
 	fi
+
+	return 0
 }
 
-_watch_sshd_or_telnet ()
+_watch_sshd_or_telnet()
 {
-	local funcname="watch_sshd_or_telnet"
-	local option="$1"
-	local pid
+	local funcname='watch_sshd_or_telnet'
+	local option="$1"	# force or <empty>
+	local pid_ssh pid_telnetd ssh_binary ssh_name ssh_pidname
 
-	[ "$option" = "force" ] || {
-		[ -e /tmp/service_ssh_nowatching ] && return
+	# e.g. called with 'force' in cgi-mode or on vpn-server regulary
+	[ "$option" = 'force' ] || {
+		[ -e '/tmp/service_ssh_nowatching' ] && return
 	}
+
+	if   [ -e '/usr/sbin/dropbear' ]; then		# OpenWrt
+		ssh_binary='/usr/sbin/dropbear'
+		ssh_name='dropbear'
+		ssh_pidname='dropbear'
+	elif [ -e '/usr/sbin/sshd' ]; then		# debian
+		ssh_binary='/usr/sbin/sshd'
+		ssh_name='ssh'
+		ssh_pidname='sshd'
+	fi
 
 	restart_sshd()
 	{
-		_watch hanging_command dropbear
-		_watch hanging_command dropbear
+		_log it restart_sshd daemon alert "reason: $1"
 
-		/etc/init.d/*dropbear start
-	}
-
-	pidof dropbear >/dev/null && {
-
-		which nc >/dev/null && {
-			which dropbear >/dev/null && {
-
-				( nc 127.0.0.1 22 >"/tmp/$funcname" ) &
-				pid="$!"
-				sleep 3
-				kill $pid
-
-				if fgrep -i dropbear "/tmp/$funcname" ; then
-					_log it $funcname daemon debug "[OK] dropbear seems to run: '$( cat "/tmp/$funcname" )'"
-				else
-					_log it $funcname daemon alert "[ERR] dropbear seems to hang: '$( cat "/tmp/$funcname" )' - restarting"
-					restart_sshd
-				fi
-
-				rm "/tmp/$funcname"
-			}
+		# FIXME: how can this happen? (e.g. wagenplatz)
+		logread | grep -F 'authpriv.warn dropbear' | grep -F "User 'root' has blank password, rejected" && {
+			sh -c "echo admin; sleep 1; echo admin" | passwd
 		}
 
-		return 0
+		[ -n "$pid_ssh" ] && {
+			_watch hanging_command $( basename "$ssh_binary" )
+			_watch hanging_command $( basename "$ssh_binary" )
+		}
+
+		/etc/init.d/$ssh_name start >/dev/null
+		pidof $ssh_pidname >/dev/null && return 0
+
+		$ssh_binary
+		pidof $ssh_pidname >/dev/null
 	}
 
-	pidof telnetd >/dev/null || {
-	
-		_log it $funcname daemon err "dropbear nor telnetd not running - restarting"
-		
-		restart_sshd
-		if pidof dropbear >/dev/null; then
-			
-			_log it $funcname daemon info "dropbear PID now: '$( pidof dropbear )'"
+	if pid_ssh="$( pidof $ssh_pidname )"; then
+		pid_telnetd="$( pidof telnetd )" && {
+			_log it $funcname daemon alert "[OK] ssh running $pid_ssh, killing telnet $pid_telnetd"
+			kill $pid_telnetd
+		}
+
+		[ "$option" = 'force' -a -z "$LOWMEM" ] && {
+			/usr/sbin/cron.reverse_ssh_tunnel no_check_ssh
+		}
+
+		# content e.g.:
+		# 'SSH-2.0-dropbear_2012.55'
+		# 'SSH-2.0-OpenSSH_6.1p1 Debian-4'
+		if _net tcp_port_reachable '127.0.0.1' '22' 'SSH-2.0' 2>/dev/null; then
+			_log it $funcname daemon info "[OK] $ssh_name seems to run"
+			return 0
 		else
-			if telnetd; then
-				_log it $funcname daemon info "telnetd PID now: '$( pidof telnetd )'"
-			else
-				_log it $funcname daemon err "dropbear nor telnetd not startable?"
+			_log it $funcname daemon alert "[ERR] $ssh_name seems to hang - restarting"
+			restart_sshd 'hangs' && return 0
+		fi
+	else
+		if [ "$option" = 'force' ]; then
+			restart_sshd 'force:nopid1' && return 0
+		else
+			if [ -x "/etc/rc.d/$ssh_name" ]; then	# oldstyle
+				restart_sshd 'nopid2' && return 0
+			elif [ ! -e '/etc/rc.common' ]; then
+				# vpn-server?
+				return 0
+			elif . /etc/rc.common /etc/init.d/dropbear enabled; then
+				restart_sshd 'nopid3'&& return 0
 			fi
+		fi
+	fi
+
+	pidof telnetd >/dev/null || {
+		_log it $funcname daemon info "telnetd not running - restarting"
+
+		# without pass: telnetd -l /bin/ash
+		if telnetd -l /bin/login.sh <> /dev/null 2>&1 ; then
+			_log it $funcname daemon alert "telnetd PID now: '$( pidof telnetd )'"
+		else
+			_log it $funcname daemon alert 'dropbear nor telnetd not startable'
 		fi
 	}
 }
 
-
-_watch_counter ()		# call: _watch counter "/tmp/mycounter" increment 1 max 10 || action
+_watch_random_node_id()		# check if nodenumber/id is from random pool
 {
-	local func="watch_counter"
-	local FILE="$1"
-	local MODE="$2"		# increment|decrement|set
-	local MODE_VALUE="${3:-1}"
-	local OPTION="$4"	# max|min
-	local OPTION_VALUE="$5"
-	local VALUE
+	local option="$1"			# force
+	local funcname='watch_random_node_id'
+	local URL SSH_PUBKEY_FP DIRTY
+	local macfile='/www/monitoring.wifimac'
 
-	read VALUE 2>/dev/null <"$FILE"
+	[ -e "$macfile" ] || return 1
 
-	case "$MODE" in
-		increment)
-			VALUE="$(( ${VALUE:-0} + $MODE_VALUE ))"
+	build_vars()
+	{
+		local wifimac; read -r wifimac <"$macfile"
+		local SSH_PUBKEY_FP_HEXONLY="$( _sanitizer run "$( _ssh key_public_fingerprint_get )" hex )"
+		local SSH_PUBKEY="$( _file convert_bin2hex "$( _ssh key_public_fingerprint_get keyfilename ).pub" )"
+		local SERVER_URL="$( uci get system.@monitoring[0].url )"
+
+#		echo "WIFIMAC=$wifimac"
+		echo "SSH_PUBKEY_FP=${SSH_PUBKEY_FP_HEXONLY}"	
+		echo "URL='$SERVER_URL/registrator/?WIFIMAC=${wifimac}&SSHPUBKEYFP=${SSH_PUBKEY_FP_HEXONLY}&SSHPUBKEY=${SSH_PUBKEY}'"
+	}
+
+	_ipsystem get | grep -q ^'NODE_NUMBER_RANDOM=true' && DIRTY=1
+	[ -z "$WIFIADR" ] && DIRTY=	# fixme! we have valid nodes without wifi...
+
+	if [ "$DIRTY" = "1" ]; then
+		eval "$( build_vars )"
+		_log it $funcname daemon info "detected ID from random pool or a changed nodenumber - registering official ID from '$URL'"
+
+		[ -n "$SSH_PUBKEY_FP" ] && ID="$( _curl it "$URL" )"		# FIXME! no ssh  -> no ssh_pubkey_fingerprint!
+										# FIXME! no wifi -> no wifimac -> no registration?
+	 	if _ipsystem get "${ID:-99999}" >/dev/null ; then		# ipsystem() has a sanitizer built in, so don't worry 8-)
+			if [ -e "/tmp/LOCKFILE_APPLY" ]; then
+				_log it $funcname daemon info "will not apply anything, /tmp/LOCKFILE_APPLY exists"
+			else
+				uci set system.@profile[0].nodenumber="$ID"
+				/etc/init.d/apply_profile.code boot
+				_system crashreboot 'applied_nodeid'
+			fi
+		else
+			_log it $funcname daemon info "ID not clean: '$ID' - aborting"
+		fi
+	else
+		local wait
+
+		if [ "$option" = "force" ]; then
+			wait=0
+
+			[ -e "$TMPDIR/REGISTRATED" ] && {
+				rm "$TMPDIR/REGISTRATED"
+			}
+		else
+			if [ $( _system uptime min ) -lt 30 ]; then
+				wait=1
+			else
+				wait=0
+			fi
+		fi
+
+		if [ ! -e "$TMPDIR/REGISTRATED" ] && [ "$wait" = '0' ]; then
+
+			eval "$( build_vars )"
+
+			[ -n "$SSH_PUBKEY_FP" ] && {
+				URL="${URL}&NODE=$NODENUMBER"
+				ID="$( _curl it "$URL" )"
+			}
+
+			[ -e "/tmp/DEBUG" ] && rm "/tmp/DEBUG"	# fixme! wrong place
+
+			if [ -n "$ID" ]; then		# fixme! OK = went fine ; REGENERATE_KEY = ...
+				_log it registrator_petting daemon info "answer was '$ID' (question was: '$URL')"	
+
+				case "$ID" in
+					OK)
+						touch "$TMPDIR/REGISTRATED"
+
+						. /usr/sbin/cron.registrator_client.sh
+					;;
+					REGENERATE_KEY)
+						_ssh regen_keys
+						echo >>$SCHEDULER "_watch random_node_id"
+					;;
+					*)
+						:
+					;;
+				esac
+			else
+				_log it registrator_petting daemon info "no answer (service '$URL' not running or no pubkey_fp?)"
+			fi
+		else
+			[ -e "$TMPDIR/REGISTRATED" ] && _log it registrator_petting daemon debug 'is already lucky'
+		fi
+	fi
+}
+
+_watch_counter()		# call: _watch counter "/tmp/mycounter" increment 1 max 10 || action
+{
+	local funcname='watch_counter'
+	local file="$1"
+	local mode="$2"		# increment|decrement|set|remove
+	local mode_value="${3:-1}"
+	local option="$4"	# max|min
+	local option_value="$5"
+	local special="$6"	# autoremove
+	local value
+
+	read -r value 2>/dev/null <"$file"
+
+	case "$mode" in
+		'increment')
+			value=$(( ${value:-0} + mode_value ))
 		;;
-		decrement)
-			VALUE="$(( ${VALUE:-0} - $MODE_VALUE ))"
+		'decrement')
+			value=$(( ${value:-0} - mode_value ))
 		;;
-		set)
-			VALUE="$MODE_VALUE"
+		'set')
+			value="$mode_value"
+		;;
+		'remove')
+			[ -e "$file" ] && rm "$file"
+			return 0
 		;;
 		*)
-			return
+			return 0
 		;;
 	esac
 
-	echo $VALUE >"$FILE"
+	echo "$value" >"$file"
 
-	case "$OPTION" in
-		max)
-			[ $VALUE -ge $OPTION_VALUE ] && {
-				_log it $func daemon info "[$FILE] max: $VALUE >= $OPTION_VALUE"
+	case "$option" in
+		'max')
+			[ $value -ge $option_value ] && {
+				[ "$special" = 'autoremove' ] && rm "$file"
+				_log it $funcname daemon info "[$file] max: $value >= $option_value"
+
 				return 1
 			}
 		;;
-		min)
-			[ $VALUE -le $OPTION_VALUE ] && {
-				_log it $func daemon info "[$FILE] min: $VALUE =< $OPTION_VALUE"
+		'min')
+			[ $value -le $option_value ] && {
+				[ "$special" = 'autoremove' ] && rm "$file"
+				_log it $funcname daemon info "[$file] min: $value =< $option_value"
+
 				return 1
 			}
 		;;
@@ -568,110 +1620,252 @@ _watch_counter ()		# call: _watch counter "/tmp/mycounter" increment 1 max 10 ||
 
 _watch_topusage_task()
 {
-	local funcname="watch_topusage_task"
-	local file="/tmp/$funcname_$$"
-	local line pid cpu cpu_int toptask
-	local crit_percent_border=70
+	local funcname='watch_topusage_task'
+	local call_reason="$1"
+	local file="$TMPDIR/${funcname}_$$"
+	local line pid cpu toptask toptask2 khubd_state logprio logmessage
+	local crit_percent_border=70 cpu_int=-1
+	local parse=
 
-	top -b -n 1 >"$file"
+	[ $( _system uptime min ) -lt 30 ] && return 0		# same like in cron.minutely
 
-	while read line; do {
-		set -- $line
-		case "$line" in
-			[0-9]*)
-				pid="$1"
-				cpu="$7"
-				cpu_int="${7//%/}"
-				toptask="$8"
+	# we need at least 2 iterations, otherwise the values are wrong
+	top -b -n 2 >"$file"
 
-				break
-			;;
-		esac
+	while read -r line; do {
+		if [ "$parse" = 'Mem:Mem:' ]; then
+			case "$line" in
+				[0-9]*)
+					explode $line
+					pid="$1"
+					cpu="$7"
+					cpu_int="$( echo "$7" | tr -d '%' )"
+					toptask="$8"
+					toptask2="$9"	# e.g. {exe} gzip -f
+							#      {cron.db_generat} /bin/sh /usr/sbin/cron.db_generate_statistics monthly
+
+					[ "$toptask" = 'top' ] || break
+				;;
+			esac
+		else
+			case "$line" in
+				'Mem:'*)
+					# each iteration of 'top' starts with
+					# 'Mem: ...' and we want the 2nd shot
+					parse="${parse}Mem:"
+				;;
+			esac
+		fi
 	} done <"$file"
-	rm "$file"
 
-	[ $cpu_int -gt $crit_percent_border ] || return 0
+	# seems to be USB-related, last detected on r40826
+	# https://lists.openwrt.org/pipermail/openwrt-devel/2014-April/024995.html
+	if grep -F '[khubd]' "$file" | grep -q ' DW'; then
+		khubd_state='blocked'
+	else
+		[ -e "$TMPDIR/khubd_blocked" ] && rm "$TMPDIR/khubd_blocked"
+	fi
+
+	# delete if no error
+	[ "$cpu_int" = '-1' ] || rm "$file"
+
+	[ "$toptask" = '{exe}' ] && toptask="$toptask2"
+
+	case "$toptask" in
+		*'gnunet'*)
+			crit_percent_border=200
+		;;
+		'sed')
+			_weblogin authserver is_myself && crit_percent_border=101
+		;;
+		*'olsrd')
+			[ $( _olsr uptime ) -lt 600 ] && crit_percent_border=101
+		;;
+		'rsync'|'e2fsck')
+			crit_percent_border=99
+		;;
+		'dd'|*'dropbear')
+			_firmware get_usecase 'NAS' && crit_percent_border=101
+		;;
+	esac
 
 	task="$( basename "$toptask" )"
-	_log it $funcname daemon alert "pid: $pid cpu: $cpu toptask: $toptask task: $task"
+	logmessage="pid: $pid cpu: $cpu toptask: $toptask task: $task crit%border: $crit_percent_border"
+	logmessage="$logmessage khubd_state: $khubd_state reason: $call_reason file: $file"
 
-	_watch hanging_command $task	# must be called 2 times
-	_watch hanging_command $task
+	if [ $cpu_int -gt $crit_percent_border ]; then
+		_log it $funcname daemon alert "$logmessage"
+
+		case "$task" in
+			*'procd'*)
+				[ $( pidof procd ) -eq 1 ] && {
+					_system crashreboot 'procd_overload'
+				}
+			;;
+			*'netifd'*)
+				_system crashreboot 'netifd_overload'
+			;;
+			*'hostapd'*)
+				_log it $funcname daemon alert "task: $task stations: $( iw dev "$WIFIDEV" station dump | grep -c ^'Station' )"
+			;;
+		esac
+
+		case "$toptask" in
+			'['*)
+				# e.g. 'cpu: 83% toptask: [ksoftirqd/0] task: 0] crit_percent_border: 70'
+				_log it $funcname daemon info "no further action for kernel-task '$toptask'"
+			;;
+			'{'*'}')
+				# e.g. 'cpu: 83% toptask: {cron.monitoring} task: {cron.monitoring}'
+				_watch hanging_command "$task" "$pid"
+				_watch hanging_command "$task" "$pid"
+			;;
+			*)
+				if [ -n "$pid" ]; then
+					# e.g. 'cpu: 92% toptask: /bin/sh task: sh crit_percent_border: 70'
+					_watch hanging_command "$task" "$pid"
+					_watch hanging_command "$task" "$pid"
+				else
+					_watch hanging_command "$task"	# must be called 2 times
+					_watch hanging_command "$task"
+				fi
+			;;
+		esac
+
+		case "$task" in
+			*'hostapd'*)
+				grep -sq 'unlimited' '/lib/wifi/hostapd.sh' && {
+					kill -SIGSEGV $pid	# gen coredump
+				}
+
+				_wifi phy_restart "$WIFIDEV" "overload: $task - $cpu cpu"
+			;;
+		esac
+	else
+		[ "$khubd_state" = 'blocked' ] && {
+			_watch counter "$TMPDIR/khubd_blocked" increment 1 max 15 || {
+				_system crashreboot 'khubd_blocked'
+			}
+		}
+
+		# normally injected from cron.minutley
+		[ -z "$LOAD" ] && read -r LOAD _ <'/proc/loadavg'
+		case "$LOAD" in
+			''|'0.0'*|'0.1'*|'0.2'*|'0.3'*|'0.4'*|'0.5'*)
+				logprio='info'
+			;;
+			*)
+				logprio='alert'
+			;;
+		esac
+
+		_log it $funcname daemon $logprio "$logmessage"
+		return 0
+	fi
 }
 
-_watch_switch_linkstatus()
+_watch_nanostation_max_ethernet()	# eth-phy has hardware error/problem
 {
-	local funcname="watch_switch_linkstatus"
-	local statfile="/tmp/$funcname.stat"
-	local type="${1:-$( uci -q get network.@switch[0].name )}"
-	local stat_old stat_new devname interface_name 
+	local funcname='watch_nanostation_max_ethernet'
+	local option="$1"
+	local out ethmode
 
-	[ -z "$type" ] && {                                                                           
-		if [ -e "/tmp/SWITCH_TYPE" ]; then                                
-			read type <"/tmp/SWITCH_TYPE"                                                          
-			_log it $funcname daemon debug "[INFO] Write switch type $type to uci"
-			uci set network.@switch[0].name="$type"                                       
-			uci commit                                                                                             
-		else                                                                                  
-			_log it $funcname daemon debug "[INFO] Switch type unknown, probe switch type"
-			_switch show                                                                  
-			return 0                                                   
-		fi                                                          
-	}
-	
-	case "$HARDWARE" in
-		*WR841N*)
-			type="wr841n"
-		;;
-		*WR842N*)
-			type="wr842n"
-		;;
-	esac
-		
-	
-	case "$type" in
-		bcm53xx)
-			stat_new="$( robocfg show 2>/dev/null | grep "vlan: 1" | cut -f2 -d ':' | cut -c 3-6 )"
-		;;
-		rtl8366rb|ar8316|switch0) #on tp-link vlan 2 represents the wan port
-			case "$HARDWARE" in
-				#wdr 4300 and other use different vlan layout (0 1t vs. 0t 1)
-				"TP-Link TL-WDR3600 v1"|"TP-LINK TL-WDR4300"|"TP-LINK TL-WDR4310"|"TP-LINK TL-WDR3600/4300/4310"|"TP-LINK TL-WDR4900 v1"|"TP-LINK Archer C7 v2")                               
-
-					stat_new="$( swconfig dev $type port "$(swconfig dev $type vlan 2 get ports|cut -f2 -d ' ')" get link)"
-				;;
-				*)
-					stat_new="$( swconfig dev $type port "$(swconfig dev $type vlan 2 get ports|cut -f1 -d ' ')" get link)"
-				;;
-			esac
-					
-			case "$stat_new" in
-				*down*)
-					stat_new="DOWN"
-				;;
-				*)
-					stat_new="UP"
-				;;
-			esac
-		;;
-		ar7240|ag71xx|eth0|wr841n|wr842n) #tp-link wr842nd has separate wan interface eth1 / ag71xx is wr841n
-			[ -z "$WANDEV" ] || {
-				stat_new="$( ip a|fgrep "$WANDEV:"|cut -f9 -d ' ' )"
-			}
+	case "$option" in
+		force)
 		;;
 		*)
-			stat_new=""
+			case "$HARDWARE" in
+				'Ubiquiti Bullet M'|'Ubiquiti Bullet M2'|'Ubiquiti Bullet M5')
+					bool_true 'network.@switch[0].disable_autoneg' || return 0
+
+					case "$( mii-tool eth0 )" in
+						'eth0: 10 Mbit, full duplex, link ok'|'eth0: 100 Mbit, full duplex, link ok')
+							# OK - keep it
+						;;
+						*)
+							# in case something is wrong we must toggle,
+							# other mii-tool will not apply
+							_log it $funcname daemon info 'enforcing 100baseTx-FD'
+							mii-tool --force=10baseT-FD   'eth0'
+							sleep 3
+							mii-tool --force=100baseTx-FD 'eth0'
+
+							out="$( mii-tool eth0 )"
+							case "$out" in
+								*'no link'*)
+									# F36dach:
+									# mii-tool --restart
+									#   -> 'eth0: negotiated 100baseTx-FD, link ok'
+									# but
+									# mii-tool --force=100baseTx-FD eth0
+									#   -> 'eth0: 100 Mbit, full duplex, no link'
+									_log it $funcname daemon alert "must fallback: '$out'"
+									mii-tool --force=10baseT-FD 'eth0'
+									out="$( mii-tool eth0 )"
+									_log it $funcname daemon alert "fallback now: '$out'"
+								;;
+								*)
+									_log it $funcname daemon info "[OK] now: '$out'"
+								;;
+							esac
+						;;
+					esac
+
+					return 0
+				;;
+				'Ubiquiti Nanostation2')
+					[ "$( uci get wireless.radio0.macaddr )" = "00:15:6d:ad:5c:26" ] || return 0
+				;;
+				*)
+					return 0
+				;;
+			esac
 		;;
 	esac
-		
-	if [ -e "$statfile" ]; then
-		read stat_old <"$statfile"
+
+	lan_olsr_wished()
+	{
+		grep -q "$LANDEV" "/var/etc/olsrd.conf"
+	}
+
+	refire()
+	{
+		ifup lan
+		_olsr daemon restart "lan-ethernet was lost"
+	}
+
+	ethmode='10baseT-HD'
+	if mii-tool 2>&1 | grep -q " $ethmode"; then
+		pidof olsrd >/dev/null && {
+			lan_olsr_wished && refire
+		}
 	else
-		echo $stat_new > "$statfile"
+		for OPT in R "A 10baseT-HD" "F 10baseT-HD" r v ; do {
+			sleep 3
+			mii-tool -$OPT | _log it mii-tool daemon info
+		} done
+
+		lan_olsr_wished && refire
+	fi
+}
+
+_watch_switch_linkstatus()	# only used for ffweimar
+{
+	local funcname="watch_switch_linkstatus"
+	local statfile="$TMPDIR/$funcname.stat"
+	local stat_old stat_new devname interface_name
+
+	_watch nanostation_max_ethernet
+
+	if [ -e "$statfile" ]; then
+		read -r stat_old <"$statfile"
+	else
+		_switch show >"$statfile"
 		_log it $funcname daemon debug "[OK] first status check, no action"
 		return 0
 	fi
 
+	stat_new="$( _switch show )"
 
 	[ "${#stat_new}" -gt 0 ] || {
 		_log it $funcname daemon info "[ERR] could not read switch-status"
@@ -680,33 +1874,502 @@ _watch_switch_linkstatus()
 
 	if [ "$stat_new" = "$stat_old" ]; then
 		_log it $funcname daemon debug "[OK] nothing changed"
-		if [ "$stat_new" != "DOWN" ]; then
-			if _watch vpn; then
-				rm "/tmp/vpnproblemcounter"
-			else
-				_log it $funcname daemon debug "Error in VPN connection"
-				_watch counter "/tmp/vpnproblemcounter" increment 1 max 5 || {
-					_vpn restart
-				}
-			fi	
-			
-		fi
 		return 0
 	else
 		echo "$stat_new" >"$statfile"
+
 		_log it $funcname daemon info "[OK] switch-status old: $stat_old"
 		_log it $funcname daemon info "[OK] switch-status new: $stat_new"
-		
-		if [ "$stat_old" = "DOWN" ]; then
-			_log it $funcname daemon info "[OK] wan - link up"
-			_vpn start
-		elif [ "$stat_new" != "DOWN" ]; then #do nothing until new status is DOWN                                                            
-                        _log it $funcname daemon info "[OK] wan still up, perhaps duplex mode changed"
+
+		# FIXME! to be correct we have to check the vlan-settings
+		# fallback for routers with one jack only, which is configured as lan
+		# e.g. eth0.2
+		devname="${WANDEV:-$LANDEV}"
+		interface_name="$( _net dev2name "$devname" )"
+
+		firstbyte()
+		{
+			echo "$1" | cut -b1
+		}
+
+		if [ "$( firstbyte "$stat_old" )" = "$( firstbyte "$stat_new" )" ]; then
+			_log it $funcname daemon info "[OK] lan-connectors changed"
 		else
-			_log it $funcname daemon info "[OK] wan - link down"
-			_vpn stop
-			ifup wan
-			/etc/init.d/olsrd restart
+			case "$( firstbyte "$stat_old" )" in
+				"-")
+					_log it $funcname daemon info "[OK] $interface_name/$devname - link up"
+					ifup $interface_name
+				;;
+				*)
+					_log it $funcname daemon info "[OK] $interface_name/$devname - link down"
+					ifdown $interface_name
+				;;
+			esac
 		fi
 	fi
+}
+
+_watch_wifistuff()
+{
+	local funcname='watch_wifistuff'
+
+	[ -n "$WIFIDEV" ] && {
+		local uptime="$( _wifi phy_uptime "$WIFIDEV" )"
+		[ $uptime -lt 120 ] && return 0
+
+		ip -family inet address show dev "$WIFIDEV" | grep -Fq 'inet ' || {
+			_wifi phy_restart "$WIFIDEV" 'no ip on dev' || touch '/tmp/WIFI_PHY_ERROR'
+			# avoid fail of next checks
+			WIFIDEV=
+		}
+
+		local file='/tmp/WIFI_SPECIALS.sh'
+		grep -Fsq 'brctl addif ' "$file" && {
+			case "$( brctl show )" in
+				*'wlan'*)
+				;;
+				*)
+					_log it $funcname daemon alert "lost batman-bridge, calling '$file'"
+					. "$file"
+				;;
+			esac
+		}
+	}
+
+	incoming_wifi_activity()
+	{
+		local funcname='incoming_wifi_activity'
+
+		[ -z "$WIFIDEV" ] && return 0
+		bool_true 'system.@monitoring[0].ignore_wifi_framecounter' && return 0
+
+		local bad=1 good=0
+		local framecount_old framecount_new check_dev uptime_old uptime_new uptime_diff txt
+		local file_framecount="/tmp/WIFI_INCOMING_FRAME_COUNTER_$WIFIDEV"
+		local file_activity_seen="$file_framecount.active"
+		local file_uptime="$file_framecount.uptime"
+		local monitoring_vif="mon.$WIFIDEV"
+		local logprio='alert'
+
+		if   grep -Fsq '"wlan0-1"' /var/etc/olsrd.conf; then	# hybrid adhoc/ap - check adhoc
+			check_dev='wlan0-1'
+		elif grep -Fsq '"wlan0"' /var/etc/olsrd.conf; then
+			check_dev='wlan0'
+		elif _net dev_is_valid "$monitoring_vif"; then
+			check_dev="$monitoring_vif"
+		else
+			check_dev="$WIFIDEV"
+		fi
+
+		framecount_new=
+		eval "$( sed -n "s/.*${check_dev}: *[0-9]* *\([0-9]*\).*/framecount_new=\1/p" '/proc/net/dev' )"
+
+		uptime_new="$( _system uptime sec )"
+		read -r uptime_old 2>/dev/null <"$file_uptime"
+		echo "$uptime_new" >"$file_uptime"
+		uptime_diff=$(( uptime_new - ${uptime_old:-0} ))
+
+		[ $uptime_diff -gt 65 ] && \
+			_log it $funcname daemon info "[ERR] timediff > 60 sec = $uptime_diff"
+
+		if [ -e "$file_framecount" ]; then
+			read -r framecount_old <"$file_framecount"
+		else
+			framecount_old='-1'			# ensures, that first start is without errors
+		fi
+
+		echo "$framecount_new" >"$file_framecount"
+
+		if [ "$framecount_old" = "$framecount_new" ]; then
+			case "$WIFIMODE" in
+				*'ap'*)
+					logprio='debug'
+				;;
+				*)
+					[ "$framecount_new" = '0' ] && {
+						logprio="info"
+					}
+				;;
+			esac
+
+			txt="[ERR] framecounter for $check_dev old/new: $framecount_old ="
+			txt="$txt $framecount_new timediff: $uptime_diff sec"
+			_log it $funcname daemon $logprio "$txt"
+			echo '0' >"$file_framecount"
+
+			if [ $uptime_diff -ge 60 ]; then
+				[ $( _wifi phy_uptime $WIFIDEV ) -ge 60 ] || return $good
+
+				if [ -e "$file_activity_seen" ]; then
+					[ "$logprio" = "debug" ] || {
+						txt="[ERR] framecounter hanging for $check_dev old/new:"
+						txt="$txt $framecount_old = $framecount_new timediff: $uptime_diff sec"
+						_wifi bugreport_create "$check_dev" "$txt" "${file_framecount}.error_debug.${uptime_new}"
+					}
+
+					if bool_true 'system.@monitoring[0].lazy_wifi_framecounter'; then
+						if _watch counter "$TMPDIR/$funcname.lazy" increment 1 max 10; then
+							return $good
+						else
+							rm "$TMPDIR/$funcname.lazy"
+							rm "$file_activity_seen"
+							return $bad
+						fi
+					else
+						rm "$file_activity_seen"
+						return $bad
+					fi
+				else
+					return $good
+				fi
+			else
+				return $good
+			fi
+		else
+			[ -e "$file_activity_seen" ] || {
+				[ "$framecount_old" = "-1" ] || {
+					txt="[OK] first activity seen on dev $check_dev ($framecount_old packets) - marking"
+					_log it $funcname daemon info "$txt"
+					touch "$file_activity_seen"
+				}
+			}
+
+			txt="$framecount_old + $(( framecount_new - framecount_old )) = $framecount_new"
+			txt="$( _sanitizer run "$txt" number_humanreadable )"
+			txt="[OK] framecounter for dev $check_dev: old + diff = new : $txt"
+			txt="$txt (during $uptime_diff sec)"
+			_log it $funcname daemon debug "$txt"
+
+			return $good
+		fi
+
+		return $good
+	}
+
+	# we check:
+	# wlan0 in adhoc-mode or
+	# mon.wlan0 in ap-mode
+	# on newstyle-devices
+
+	WIFIMODE="$( _wifi mode "$WIFIDEV" )"	# e.g. adhocap
+
+	incoming_wifi_activity || {
+		case "$WIFIMODE" in
+			*'adhoc'*)
+				_wifi phy_restart "$WIFIDEV" "no incoming_wifi_activity, mode '$WIFIMODE'"
+			;;
+			*)
+				# AP-mode:     WIFIDEV =    ap-interface
+				# HYBRID-mode: WIFIDEV = adhoc-interface
+				if [ -n "$( iw dev "$WIFIDEV" station dump )" ]; then
+					touch "/tmp/wifi_hasclients_$WIFIDEV"
+					_wifi check_each_client || {
+						_wifi phy_restart "$WIFIDEV" "clients active, no incoming_wifi_activity, mode '$WIFIMODE'"
+					}
+				else
+					[ -e "/tmp/wifi_hasclients_$WIFIDEV" ] && {
+						rm "/tmp/wifi_hasclients_$WIFIDEV"
+
+						_net local_inet_offer >/dev/null || {
+							_wifi phy_restart "$WIFIDEV" 'cleanup after last client'
+						}
+					}
+
+					# _wifi phy_restart "$WIFIDEV" "no clients, no incoming_wifi_activity, mode $WIFIMODE" info
+					_log it incoming_wifi_activity daemon info "no clients, no incoming_wifi_activity, mode '$WIFIMODE'"
+				fi
+			;;
+		esac
+	}
+
+	local interface line file clients clients_max file2 dev reason marker
+	for file in /var/run/hostapd-phy[0-3].conf; do {
+		while read -r line; do {
+			case "$line" in
+				'interface='*)
+					interface=	# for shellcheck
+					eval $line
+
+					if iw dev "$interface" station dump | grep -c ^'Station' >"/tmp/wifi_hasclients_TEMP_$interface"; then
+						mv "/tmp/wifi_hasclients_TEMP_$interface" "/tmp/wifi_hasclients_$interface"
+						read -r clients     <"/tmp/wifi_hasclients_${interface}"
+						read -r clients_max <"/tmp/wifi_hasclients_${interface}_max"
+						[ $clients -gt ${clients_max:-1} ] && {
+							echo "$clients" >"/tmp/wifi_hasclients_${interface}_max"
+							bool_true 'system.@monitoring[0].max_wificlients' && {
+								_log remote "new max: $clients clients on $interface"
+							}
+						}
+
+						_log it $funcname daemon info "$clients clients on APDEV '$interface'"
+					else
+						_log it $funcname daemon debug "no clients on APDEV '$interface'"
+
+						# https://dev.openwrt.org/changeset/44696/trunk -> enforce phyrestart every hour:
+						[ $OPENWRT_REV -lt 44696 ] && {
+							_watch counter "/tmp/$funcname-apmode" increment 1 max 60 || {
+								touch "/tmp/wifi_hasclients_$interface"
+							}
+						}
+
+						if [ -e "/tmp/wifi_hasclients_$interface" ]; then
+							rm "/tmp/wifi_hasclients_$interface" "/tmp/$funcname-apmode"
+
+							marker=
+							for marker in '/tmp/wifi_hasclients_'*; do :; done
+							[ -z "$marker" ] && {
+								# only if all AP-devs have no clients
+								_net roaming_eventlistener restart "$funcname: no clients on APDEV '$interface'"
+
+								_net local_inet_offer >/dev/null || {
+									_wifi phy_restart "$interface" 'cleanup after last client'
+								}
+							}
+
+							break
+						else
+							for file2 in /tmp/REQUESTED_PHY_RESTART-*; do {
+								[ -e "$file2" ] && {
+									rm "$file2"
+									dev="$( echo "$file2" | cut -d'-' -f2 )"
+									read -r reason <"$file2"
+									_wifi phy_restart "$dev" "$reason"
+								}
+							} done
+						fi
+					fi
+				;;
+			esac
+		} done <"$file"
+	} done
+
+	case "$WIFIMODE" in
+		*adhoc*)
+		;;
+		*)
+			_wifi check_each_client || {
+				_log it check_each_client daemon info "tx/arping to all clients failed"
+			}
+
+			case "$WIFIMODE" in
+				*ap*|*client*)
+					command -v hostapd >/dev/null && {
+						if pidof hostapd >/dev/null; then
+							touch "$TMPDIR/DAEMON_hostapd_seen"
+						else
+							if   [ -e '/tmp/PHYRESTART' ]; then
+								sleep 30
+							elif [ -z "$( _net dev2ip $WIFIDEV )" ]; then
+								_log it $funcname daemon alert "empty dev2ip '$WIFIDEV'"
+								ps >>$PERMLOG
+
+								_watch coredump 'after: hostapd-check'
+								_system reboot_safe "lost_ip_and_hostapd on $WIFIDEV"
+							else
+								if pidof wpa_supplican not >/dev/null; then
+									# maybe manually configured for maintenance
+									_log it $funcname daemon info '[OK] found wpa_supplican not'
+								else
+									[ -e "$TMPDIR/DAEMON_hostapd_seen" ] && {
+										_wifi phy_restart "$WIFIDEV" "missing_hostapd"
+									}
+								fi
+							fi
+						fi
+					}
+				;;
+			esac
+		;;
+	esac
+}
+
+_watch_olsrstuff()
+{
+	local funcname='watch_olsrstuff'
+	local firstrun
+
+	# during early init we deactivate the module if unneeded
+	grep -q ^'batman_adv ' '/proc/modules' && {
+		# this means, no wired clients or we must speak batman on ethernet too
+		olsr_unneeded()
+		{
+			pidof bat_events >/dev/null || return 1
+			$( _system uptime min ) -gt 30 || return 1
+			batctl gateways | grep -q "MBit" || return 1
+
+			test -e "/tmp/OLSR_HNA_SLAVE_PINGTEST" && return 0
+			bool_true 'olsrd.@meta[0].no_watching' || return 0
+
+			return 1
+		}
+
+		olsr_unneeded && {
+			_log it $funcname daemon info 'OK - olsr_unneeded'
+			rm "/tmp/OLSR_HNA_SLAVE_PINGTEST"
+			uci set olsrd.@meta[0].no_watching='true'
+			_olsr daemon stop "batman_active_now"
+			_net local_inet_offer >/dev/null || ip route add default via "$( uci get network.mybridge.gateway )"
+		}
+	}
+
+	if pidof olsrd >/dev/null ; then
+		[ -e '/tmp/OLSR/ALL' ] || firstrun='true'
+
+		_olsr build_tables && {
+			[ "$firstrun" = 'true' ] && {
+				[ -e '/tmp/OLSR/ALL' ] && {
+					_log it $funcname daemon info "first successful OLSR-query"
+				}
+			}
+
+			[ -n "$LOWMEM" ] && {
+				if [ -e '/www/SIMPLE_MESHNODE' ]; then
+					# TODO: neigh? + (potential olsr-master = slave on the other side) -> wait till we are master
+					[ $( _system uptime min ) -gt 60 ] && _watch lowmem_freemem
+				else
+					_watch lowmem_freemem
+				fi
+			}
+		}
+
+		_olsr restarts_are_suspicious_often && {
+			_system crashreboot 'olsr_restart2much'
+		}
+
+		bool_true 'olsrd.@meta[0].hnaslave' && {
+			/usr/sbin/cron.olsr-hna-slave
+		}
+
+		local watch_olsr_ip
+		local watch_value
+		local value bad
+		watch_olsr_ip="$( uci -q get olsrd.@meta[0].watch_ip )" && {		# e.g. 10.63.2.25
+			watch_value="$( uci -q get olsrd.@meta[0].watch_value )"	# e.g. "2500" = max 2.500
+
+			explode $( grep -F "$watch_olsr_ip" "/tmp/OLSR/ALL" | head -n1 )
+			value="$( echo "$value" | tr -d '.' )"	# ETX-value, e.g 1.234 -> 1234
+
+			if   [ "$value" = '0100' ]; then
+				:
+			elif [ "$value" = 'INFINITE' ]; then
+				bad='true'
+			elif [ "$value" -le "$watch_value" ]; then
+				:
+			else
+				bad='true'
+			fi
+
+			if [ -n "$bad" -a -e "/tmp/check_$watch_olsr_ip" ]; then
+				if    _watch counter "/tmp/check_$watch_olsr_ip" increment 1 max 10 ; then
+					_log it "check_$watch_olsr_ip" daemon info  "bad value for $watch_olsr_ip: '$value' max: $watch_value"
+				elif  _watch counter "/tmp/check_$watch_olsr_ip" increment 1 max 20 ; then
+					_log it "check_$watch_olsr_ip" daemon info  "bad value for $watch_olsr_ip: '$value' max: $watch_value"
+					_wifi phy_restart "$WIFIDEV" 'bad_link'
+				else
+					_log it "check_$watch_olsr_ip" daemon alert "bad value for $watch_olsr_ip: '$value' - rebooting"
+					_system crashreboot 'bad_link'
+				fi
+			else
+				echo "0" >"/tmp/check_$watch_olsr_ip"
+			fi
+		}
+	else
+		if bool_true 'olsrd.@meta[0].no_watching'; then
+			[ -e '/tmp/OLSR_HNA_SLAVE_PINGTEST' ] && {
+				read -r IP <'/tmp/OLSR_HNA_SLAVE_PINGTEST'
+
+				_net ip_reachable "$IP" ping 30 || {
+					_log it $funcname daemon info "[ERR] ping to $IP failed"
+					ip route del default
+					uci del 'olsrd.@meta[0].no_watching'	# fire olsr and watch - really?
+					rm "/tmp/OLSR_HNA_SLAVE_PINGTEST"
+
+					_olsr daemon start "$funcname() ping to $IP failed"
+				}
+			}
+		else
+			_olsr daemon start 'no running daemon'
+		fi
+	fi
+}
+
+_watch_lowmem_freemem()
+{
+	local markerfile="$TMPDIR/watch_lowmem_freemem"
+
+	[ -e "$markerfile" ] && return 0
+
+	killall klogd
+	killall hotplug2
+	killall syslogd
+	/etc/init.d/log stop
+
+	[ -e /www/SIMPLE_MESHNODE ] && {
+		touch /tmp/service_ulog_nowatching
+		killall ulogd
+
+		list_ip_from_dhcp_leases()
+		{
+			cut -d' ' -f3 /tmp/dhcp.leases
+		}
+
+		list_ip_from_arp_cache()
+		{
+			ip neigh show | cut -d' ' -f1
+		}
+
+		can_see_lan_clients()
+		{
+			local ip
+
+			for ip in $( list_ip_from_dhcp_leases ) $( list_ip_from_arp_cache ); do {
+				grep -Fq "$ip;" "/tmp/CLIENTS_LAN" && return 0
+			} done
+
+			test -e "/www/SIMPLE_MESHNODE_FORCE_DHCP_LAN"
+		}
+
+		uci set dhcp.wlan.ignore=1
+		uci delete dhcp.@dnsmasq[0].dhcpscript
+
+		if can_see_lan_clients; then
+			/etc/init.d/dnsmasq restart
+		else
+			uci set dhcp.lan.ignore=1
+			/etc/init.d/dnsmasq stop
+			echo "nameserver $( uci get dhcp.@dnsmasq[0].server )" >"/etc/resolv.conf"
+		fi
+	}
+
+	ROOTETHERNET="$( echo $LANDEV | cut -d'.' -f1 )"	# eth0.1 -> eth0
+	ip link set dev $ROOTETHERNET txqueuelen 32
+
+	touch "/tmp/service_ssh_nowatching"
+	killall dropbear
+
+	[ "$( pidof procd )" = "1" ] || {
+		killall netifd
+
+		if [ -e '/etc/rc.d/watchdog' ]; then
+			/etc/init.d/watchdog stop
+			/etc/init.d/watchdog disable
+			_system crashreboot 'watchdog_disable'
+		else
+			# older revisions start the watchdog not via init-file
+			pidof watchdog >/dev/null && {
+				rm $( command -v watchdog )
+				_system crashreboot 'watchdog_disable'
+			}
+		fi
+
+		killall procd
+
+		if pidof hostapd >/dev/null; then
+			grep -q "ubus_connect" /usr/sbin/hostapd || killall ubusd
+		else
+			killall ubusd
+		fi
+	}
+
+	touch "$markerfile"
 }
