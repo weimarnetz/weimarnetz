@@ -388,6 +388,11 @@ esac
 
 echo "$OLD_HOSTNAME" >/proc/sys/kernel/hostname
 
+_config_cron () 
+{
+	echo "* * * * * . /usr/sbin/cron.minutely; . /tmp/loader; _watch switch_linkstatus" | crontab -
+}
+
 _config_system ()
 {
 	local NODE="$1"
@@ -1469,8 +1474,7 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 /etc/init.d/count_reboots enable
 /etc/init.d/generate_kalua_loader enable
 /etc/init.d/end_boot enable
-/etc/init.d/S51crond_fff+ start 
-/etc/init.d/cron disable
+/etc/init.d/cron enable
 /etc/init.d/set_etc_hardware enable
 /etc/init.d/S70prepare_fff+ enable
 /etc/init.d/S43ethers_fff+ enable

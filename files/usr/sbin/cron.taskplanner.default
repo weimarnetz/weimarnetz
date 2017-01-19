@@ -1,0 +1,290 @@
+#!/bin/sh
+
+# here we will our work-queue by writing tasks
+# into $SCHEDULER and $SCHEDULER_IMPORTANT - and it should
+# run as fast as possible. this file is sourced each minute
+# from cron and later executed from '_scheduler run'
+
+# MINUTE = 00...59
+# HOUR   = 00...23
+MINUTE=;HOUR=;WEEKDAY=;DAYOFMONTH=;UNIXTIME=
+eval $( date '+MINUTE=%M; HOUR=%H; WEEKDAY=%A; DAYOFMONTH=%d; UNIXTIME=%s;' )
+
+. /tmp/loader
+[ -z "$UP" ] && read -r UP REST </proc/uptime		# normally done during cron.minutely
+
+if [ -e "$TMPDIR/firstrun" ]; then
+	[ -e "$TMPDIR/.autorun" ] && _watch autorun		# direct call
+
+	[ -e "$TMPDIR/fw" ] && {
+		_firmware check_image "$TMPDIR/fw" && {
+			if _firmware check_forced_upgrade; then
+				/bin/sleep 180
+			else
+				/sbin/reboot
+			fi
+		}
+	}
+
+	bool_true 'olsrd.@meta[0].watch_gateway' && {
+		read -r REST <'/tmp/OLSR/DEFGW_NOW' || REST='8.8.8.8'
+		test $( _net ping_getlatency "$REST" || echo '100' ) -gt 99 && {
+			_system crashreboot wifiphy_probs
+		}
+	}
+else
+	touch "$TMPDIR/firstrun"
+
+	# jobs directly after bootup
+	cat >>$SCHEDULER <<EOF
+_watch flash_free_space
+_ssh sanitize_and_cleanup_keys
+_watch nanostation_max_ethernet
+_firmware update_pmu
+/usr/sbin/cron.check_inet_gw_fff+
+cron.monitoring send_alive_message
+_vpn x
+EOF
+fi
+
+cat >>$SCHEDULER <<EOF
+_watch wifistuff
+_watch olsrstuff
+_watch monitoring
+_watch coredump 'during: taskplanner.minutely'
+_wifi watch_phy_problems
+. /usr/sbin/cron.check_switch
+_netfilter traffic_control_autoapply_speedsuggest
+_watch pppoe
+_watch local_proxy
+_netfilter splash_batman_alien_unauth
+_netfilter user_stats_collect
+_watch roaming
+EOF
+
+# full test is every 15min
+pidof uhttpd  >/dev/null || echo >>$SCHEDULER_IMPORTANT '_watch webserver'
+pidof dnsmasq >/dev/null || echo >>$SCHEDULER_IMPORTANT '_watch dns_resolution'
+bool_true 'olsrd.@meta[0].no_watching' || {
+	pidof olsrd >/dev/null || {
+		[ ${UP%.*} -gt 180 ] && _olsr daemon start 'missing_during_taskplanner'
+	}
+}
+
+# uptime.sec->minutes divideable (without rest) by 360? -> each 360 mins
+[ $(( $(( ${UP%.*} / 60 )) % 360 )) -eq 0 ] && {
+	echo 'cron.upgrade_packages'	# e.g. daily restart is at 4:05
+	echo '_firmware update_pmu'	# so: 10:05, 16:05, 22:05
+	echo '_watch configchange'
+	echo '_olsr incoming_and_outgoing_olsr_traffic'
+} >>$SCHEDULER
+
+# TODO: build a real crontab-entry once a day
+# TODO: block for 60 minutes when e.g. closed or opened manually?
+_chickendoor state 'enabled' && {
+	case "$( _chickendoor state 'get' )" in
+		'closed')
+			REST=$(( $( _date sunrise_today ) - 2700 ))	# open: 45 min before sunrise
+			[ $(( UNIXTIME - REST )) -ge 0 -a $(( UNIXTIME - REST )) -lt 1800 ] && _chickendoor morning_open
+		;;
+		'open')
+			REST=$(( $( _date sunset_today ) + 2700 ))	# close: 45 min after sunset
+			[ $(( UNIXTIME - REST )) -ge 0 -a $(( UNIXTIME - REST )) -lt 1800 ] && _chickendoor evening_close
+		;;
+	esac
+}
+
+case "$HOUR:$MINUTE" in
+	17:00)
+#		echo >>$SCHEDULER_IMPORTANT '_wifi longshot_test 17:10:00 36...40 "719 670" >/www/BLUBB'
+	;;
+	01:00|02:00|03:00)
+		{
+			echo '_db ticketcheck auto'
+			echo '_firmware update_pmu'
+		} >>$SCHEDULER
+	;;
+	04:00)
+		{
+			echo '_watch archivsize "/tmp/messages" 5000'	# e.g. VPN-server
+			echo "_watch archivsize '$PERMLOG' 400 500"
+			echo '_wifi longshot_report'
+			echo '_net roaming_eventlistener restart'
+			echo '_rrd upload'
+		} >>$SCHEDULER
+
+		[ -e '/tmp/cron.webcam' ] && {
+			echo 'touch /tmp/webcam_force_safe'
+			echo '. /tmp/cron.webcam'
+		} >>$SCHEDULER
+
+		if bool_true 'system.@system[0].avoid_autoreboot'; then
+			{
+				# housekeeping stuff
+				echo '/etc/init.d/override_uci_vars boot'
+				echo '_netparam check'
+				echo '_net arp_reset'
+			} >>$SCHEDULER
+		else
+			# do not make serious action, when we are not sure if time is correct
+			_ntp set is_unset || {
+				echo '_netfilter stop remember_over_reboot'
+				echo '_netfilter ipforwarding_start'
+				echo '_netfilter masquerade_start'
+				echo '_log sleep collecting_userdata_from_all_nodes 300 step 30'
+				echo '_watch reanimate_dead_neighbour'
+				echo '_system reboot_safe nightly_reboot'
+			} >>$SCHEDULER
+		fi
+	;;
+	05:00)
+		rm "$TMPDIR/wifi_scan_geolocation" 2>/dev/null
+
+		bool_true 'system.@monitoring[0].nightly_longrange' && {
+			echo >>$SCHEDULER '_wifi nightly_longrange set'
+		}
+
+		[ -e "$DIR_DATABASE/USER/login/rows" ] && {
+			echo '_db user login index_gen'
+		} >>$SCHEDULER
+	;;
+	06:00)
+		echo >>$SCHEDULER '_wifi nightly_longrange unset'
+
+		[ -e "$DIR_DATABASE/USER/device/stats" ] && {
+			bool_true 'system.@monitoring[0].report_daily_stats' && {
+				[ -e '/tmp/statistics_send_mail-daily' ] || {
+					touch '/tmp/statistics_send_mail-daily'		# only once
+					echo "sleep $( _math random_integer 0 100 )"
+					echo '_db statistics_send_mail daily yesterday'
+				} >>$SCHEDULER
+			}
+
+			case "$WEEKDAY" in
+				'Monday')
+					[ -e '/tmp/statistics_send_mail-weekly' ] || {
+						touch '/tmp/statistics_send_mail-weekly'	# only once
+						echo "sleep $( _math random_integer 0 100 )"
+						echo '_db statistics_send_mail weekly report'
+
+						# each first monday in month
+						case "$DAYOFMONTH" in
+							01|02|03|04|05|06|07)
+								echo '_db statistics_send_mail monthly_report'
+							;;
+						esac
+					} >>$SCHEDULER
+				;;
+			esac
+		}
+	;;
+	06:25)
+		echo >>$SCHEDULER '_wifi nightly_longrange unset'
+	;;
+esac
+
+case "$MINUTE" in
+	00|15|30|45)
+		case "$MINUTE" in
+			00)	# hourly
+				{
+					echo '_watch user_list'
+					echo '_net roaming_fetch_cache'
+					echo "_watch wifi_cronactive $HOUR $MINUTE"
+					echo '_mail stash_resend'
+					echo '_olsr neighs_meshrdf_evalable >/tmp/OLSR/meshrdf_neighs'
+					echo '_wifi scan_geolocation'
+					echo '_wifi longshot_name && _rrd upload'
+				} >>$SCHEDULER
+
+				bool_true 'system.@monitoring[0].cisco_collect' && {
+					echo >>$SCHEDULER '_cisco collect'
+				}
+
+				_system maintenance_window_active 'pppoe_reconnect' || {
+					echo >>$SCHEDULER 'cron.monitoring send_alive_message'
+				}
+			;;
+			*)
+				# collect only, do not send
+				test -z "$LOWMEM" && echo >>$SCHEDULER 'cron.monitoring'
+			;;
+		esac
+
+		# check if enough ram is available
+#		echo >>$SCHEDULER '_rrd show'
+
+		bool_true 'system.@monitoring[0].cdp_send' && {
+			echo >>$SCHEDULER '_cisco cdpsend'
+		}
+
+		bool_true 'system.@vds[0].enabled' && {
+			echo '/usr/sbin/cron.evaluate_ulogd_syslogemu_fff+'
+
+			# only call if needed
+			[ -e '/tmp/COLLECT_DATA' ] && echo 'cron.add_collected_userdata_into_db'
+
+			# wait for process (=http to master) if we are not the master/authserver
+			# this should help against too much load on master
+			# TODO: _weblogin_authserver "isme?"
+			[ -e "$DIR_DATABASE/USER/device/stats" ] || {
+				echo '_log sleep jitter_user_stats_process networksize step 5'
+			}
+
+			echo '_netfilter user_stats_process'
+		} >>$SCHEDULER
+
+		bool_true 'system.@monitoring[0].statusprecache' && {
+			echo >>$SCHEDULER '_olsr build_overview_static /tmp/statuspage_neigh_pregenerated'
+		}
+
+		bool_true 'system.@monitoring[0].toggle_wifi' && {
+			MINUTEOFDAY=$(( ${HOUR#0} * 60 + MINUTE ))	# remove leading zeros
+
+			uci2minuteofday()
+			{
+				local value="$( uci get "$1" )"		# e.g. 06:15
+				local hour="${value%:*}"
+				local min="${value#*:}"
+
+				echo $(( ${hour#0} * 60 + ${min#0} ))	# remove leading zeros
+			}
+
+			if [ -n "$WIFIDEV" ]; then
+				WISH=$( uci2minuteofday 'system.@monitoring[0].toggle_wifi_off' )
+				[ $MINUTEOFDAY -ge $WISH ] && echo >>$SCHEDULER '_wifi toggle off'
+			else
+				WISH=$( uci2minuteofday 'system.@monitoring[0].toggle_wifi_on' )
+				[ $MINUTEOFDAY -ge $WISH ] && echo >>$SCHEDULER '_wifi toggle on'
+			fi
+		}
+
+		# called every 15 mins
+		_system maintenance_window_active 'pppoe_reconnect' || {
+			echo '_watch dns_resolution'
+			echo '_vpn x'
+		} >>$SCHEDULER
+
+		cat >>$SCHEDULER <<EOF
+/usr/sbin/cron.check_inet_gw_fff+
+/etc/init.d/S69watch_olsrd_fff+
+_watch wifi_mode
+_watch webserver
+_watch cgminer
+_watch hanging_command usual_suspects
+_watch flash_free_space
+_watch system_time
+_watch sshd_or_telnet
+_watch random_node_id
+_watch dhcp_space
+_watch nanostation_max_ethernet
+_watch db_ticketrequest
+_net refresh_dnshosts
+_net roaming_cleanup_cache
+_db generate_grepable_index check
+_http robotstxt_generate
+EOF
+
+		[ -z "$LOWMEM" ] && echo >>$SCHEDULER '/usr/sbin/cron.reverse_ssh_tunnel'
+	;;
+esac
