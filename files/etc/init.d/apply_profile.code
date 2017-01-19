@@ -23,16 +23,12 @@ fi
 	exit 0
 }
 
-[ "$( logread | grep "init: process '/bin/ash" | grep -c "exited. Scheduling for restart." )" -gt 10 ] && {
-	# daemon.info init: starting pid 15022, tty '/dev/ttyS0': '/bin/ash --login'		// should correctly detect 'ttyS0'
-	log "detect_respawing_login daemon alert deactivating ttyS0 in /etc/inittab"
-	sed -i 's/^ttyS0/# ttyS0/' /etc/inittab
-	kill -HUP 1	# forced process "init" to reload it's config-file
-}
-
-log "uptime now: $( uptime_in_seconds ) seconds, waiting 5sec"
-sleep 5
-df | logger
+if [ -e /tmp/LOCKFILE_APPLY ]; then                                                                                                     
+        log "abort: /tmp/LOCKFILE_APPLY exists"                                                                                         
+        exit 1                                                                                                                          
+else                                                                                                                                    
+        touch /tmp/LOCKFILE_APPLY                                                                                                       
+fi             
 
 find_all_strings_in_dmesg()
 {
@@ -315,13 +311,6 @@ case "$PROFILE_MODE" in
 	;;
 esac
 
-if [ -e /tmp/LOCKFILE_APPLY ]; then
-	log "abort: /tmp/LOCKFILE_APPLY exists"
-	exit 1
-else
-	touch /tmp/LOCKFILE_APPLY
-fi
-
 password_was_never_set()
 {
 	grep -qs '^root:[!x]\?:' /etc/shadow
@@ -388,7 +377,7 @@ OLD_HOSTNAME="$( uci -q get meshwizard.system.hostname )"
 }
 
 case "$OLD_HOSTNAME" in
-	OpenWrt|LEDE|"")
+	OpenWrt|lede|"")
 		OLD_HOSTNAME="${INSTALLATION}-${PROFILE_MODE}-${GATEWAY}-${NODENUMBER}"
 		log "using new hostname $OLD_HOSTNAME"
 	;;
@@ -448,7 +437,7 @@ _config_system ()
 	uci set system.weblogin="weblogin"
 
 	[ -z "$( uci -q get system.weblogin.enabled )" ] && {
-		uci set system.weblogin.enabled="1"
+		uci set system.weblogin.enabled="0"
 	}
 	[ -z "$( uci -q get system.weblogin.email2owm )" ] && {
 		uci set system.weblogin.email2owm="0"
@@ -852,7 +841,7 @@ EOF
 			local new_essid="bb"
 
 			case "${INSTALLATION}" in
-				ffweimar*) new_essid="weimarnetz" ;;
+				ffweimar*) new_essid="ff.intern.$NODE.ch$CHANNEL" ;;
 			esac
 
 			cat >> "$temp" <<EOF
@@ -867,10 +856,6 @@ $hide_noscan	option noscan		"1"
 EOF
 
 			[ -n "$driver_path" ] && echo "	option path		\"$driver_path\"" >> "$temp"
-
-	grep -q ^"b43 " "/proc/modules" && cat >> "$temp" <<EOF
-	option bitrates '6 9 12 18 24 36 48 54'
-EOF
 
 			cat >> "$temp" <<EOF
 	option hwmode		"$hwmode"
@@ -1453,7 +1438,7 @@ EOF
 	fi
 
 
-	/etc/init.d/S41build_static_netparam # it's essential for ipsystem()
+	/etc/init.d/S41build_static_netparam start # it's essential for ipsystem()
 }
 
 # enforce settings delivered by meshkit
@@ -1484,9 +1469,8 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
 /etc/init.d/count_reboots enable
 /etc/init.d/generate_kalua_loader enable
 /etc/init.d/end_boot enable
-/etc/init.d/S51crond_fff+ enable
+/etc/init.d/S51crond_fff+ start 
 /etc/init.d/cron disable
-/etc/init.d/S12switch_etx enable
 /etc/init.d/set_etc_hardware enable
 /etc/init.d/S70prepare_fff+ enable
 /etc/init.d/S43ethers_fff+ enable
