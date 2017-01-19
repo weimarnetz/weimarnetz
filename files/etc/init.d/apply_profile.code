@@ -1465,7 +1465,7 @@ EOF
 }
 
 # rewrite new settings
-for SECTION in softwareinstall wireless network system freifunk olsrd dhcp; do {
+for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron; do {
 	log "....working on section '$SECTION'"
 	_config_$SECTION "$NODENUMBER"
 	log "[ok] ready with section '$SECTION'"
