@@ -1436,7 +1436,7 @@ EOF
 #EOF
 }
 
-_roaming()
+_config_roaming()
 {
 	local wired_networks="$1"		# e.g. 'lan' or 'lan wan'
 	local special_ssid="weimar.freifunk.net"
