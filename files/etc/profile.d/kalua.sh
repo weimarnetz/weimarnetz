@@ -61,6 +61,9 @@ case "$LOAD" in
 esac
 unset LOAD
 
+[ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
+
+[ -n $FFF_VERSION ] && echo "                kalua g$FFF_VERSION"
 read -r UP REST <'/proc/uptime'
 UP="${UP%.*}"
 case "${#UP}" in 1|2|3) echo "[ATT] low uptime: $UP sec";; esac
