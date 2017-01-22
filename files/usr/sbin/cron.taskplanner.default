@@ -36,9 +36,10 @@ fi
 cat >>$SCHEDULER <<EOF
 _watch wifistuff
 _watch olsrstuff
-_watch monitoring
 _wifi watch_phy_problems
 _watch roaming
+_watch switch_linkstatus
+/usr/sbin/cron.check_vtun_status
 EOF
 
 # full test is every 15min
@@ -215,7 +216,6 @@ case "$MINUTE" in
 
 		cat >>$SCHEDULER <<EOF
 /usr/sbin/cron.check_inet_gw_fff+
-/usr/sbin/cron.check_vtun_status
 _watch wifi_mode
 _watch webserver
 _watch hanging_command usual_suspects
