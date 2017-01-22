@@ -544,59 +544,65 @@ _config_softwareinstall ()
 	} done
 }
 
-_config_wireless ()			# fixme! channels hardcoded
+_config_wireless()			# fixme! channels hardcoded
 {
 	local NODE="$1"
-	local MAC htmode hwmode country ht_cap ht_cap_list hideht i radiotype radiocard hidetx
+	local MAC htmode hwmode country ht_cap ht_cap_list hideht radiotype radiocard hidetx
 	local temp="/tmp/config_wireless.tmp"
-	local driver_path
+	local driver_path distance
 	local network_append=
 	local default_channel="$CHANNEL"
 	local pointing2device
+
+	# only for AP-interfaces:
+	local default_encryption_type="${WIFI_ENCRYPTION:-none}"	# e.g. psk2
+	local default_encryption_pass="$WIFI_PASS"			# e.g. mypass
+	local hideE='#'
+	[ "$default_encryption_type" = 'none' ] || hideE=
+
+	# wireless.@wifi-iface[0].encryption=psk2 wireless.@wifi-iface[0].key=31122014
 
 	[ -e "/etc/config/wireless" ] || {
 		log "omitting section wireless, wifi n/a"
 		return 0
 	}
 
-	[ -e "$temp" ] && rm "$temp"
+	[ -e "$temp" ] && rm -f "$temp"
 
 	[ -z "$TXPOWER" ] && hidetx="#"
-	
+
 	for radiocard in 0 1 2 3; do {
-		[ "$( uci -q get wireless.radio${radiocard}.disabled )" = "1" ] && {
+		[ "$( uci get wireless.radio${radiocard}.disabled )" = "1" ] && {
 			uci set wireless.radio${radiocard}.disabled=0
 		}
 	} done
 
-	local profile_mode_tmp=$PROFILE_MODE
+for radiocard in 0 1 2 3; do {
+	# old:
+	# new:
+	driver_path="$( uci get wireless.radio${radiocard}.path )"		# e.g. 'platform/ath9k' or 'platform/ar231x-wmac.0'
+	distance="$(    uci get wireless.radio${radiocard}.distance )"
 
-	for radiocard in 0 1 2 3; do {
+	# check if real wifi card or only VAP/hybrid interface
+	local var="wireless.@wifi-iface[$radiocard].device"
+	pointing2device="$( uci get $var )"	# e.g. radio1
+	[ "$( uci get wireless.${pointing2device} )" = "wifi-device" ] || continue
+	[ -n "$( uci get wireless.${pointing2device}.type )" ] || continue
 
-		driver_path="$( uci -q get wireless.radio${radiocard}.path )"		# e.g. 'platform/ath9k' or 'platform/ar231x-wmac.0'
-		
-		# check if real wifi card or only VAP/hybrid interface
-		pointing2device="$( uci -q get wireless.@wifi-iface[${radiocard}].device )"		# e.g. radio1
-		[ "$( uci -q get wireless.${pointing2device} )" = "wifi-device" ] || continue
-		[ -n "$( uci -q get wireless.${pointing2device}.type )" ] || continue
-		
-		radiotype="$( uci -q get wireless.radio${radiocard}.type )"	# e.g. 'mac80211' or 'atheros'
-		[ -z "$radiotype" ] && continue
-		
-		[ $radiocard -gt 0 ] && {
-			echo >> "$temp"
-			echo "### next radio ###" >> "$temp"
-			echo >> "$temp"
-			PROFILE_MODE="adhoc"					# only first wifi card will profide an ap
-			network_append="RADIO${radiocard}"
-		}
+	radiotype="$( uci get wireless.radio${radiocard}.type )"	# e.g. 'mac80211' or 'atheros'
+	[ -z "$radiotype" ] && continue
 
-	[ $radiocard -gt 0 ] && echo "" >> "$temp"
+	[ $radiocard -gt 0 ] && {
+		echo
+		echo '### next radio ###'
+		echo
+		network_append="RADIO${radiocard}"
+	} >>"$temp"
 
 	log "configuring radio${radiocard} ..."
 
 	local hide_mac="#"
-	MAC="$( uci -q get wireless.radio${radiocard}.macaddr )"
+	MAC="$( uci get wireless.radio${radiocard}.macaddr )"
 	if [ -z "$MAC" ]; then
 		[ -z "$driver_path" ] && {
 			hide_mac=
@@ -607,8 +613,9 @@ _config_wireless ()			# fixme! channels hardcoded
 		hide_mac=
 	fi
 
-	hwmode="$( uci -q get wireless.radio${radiocard}.hwmode )"		# backup current state
+	hwmode="$( uci get wireless.radio${radiocard}.hwmode )"		# backup current state
 	hwmode="${hwmode:-11g}"
+	[ "$HARDWARE" = 'UML' -a "$radiocard" = '0' ] && hwmode='11n'	# hwsim has 2 x dualcard
 
 	case "$hwmode" in
 		11g|11a)
@@ -616,20 +623,18 @@ _config_wireless ()			# fixme! channels hardcoded
 		;;
 	esac
 
-	case "$( uci -q get wireless.radio${radiocard}.htmode )" in		# maybe switched off by user
+	case "$( uci get wireless.radio${radiocard}.htmode )" in	# maybe switched off by user
 		"")
-			hideht=""
+			hideht="#"
 		;;
 	esac
 
-	radiotype="$( uci -q get wireless.radio${radiocard}.type )"		# e.g. 'mac80211' or 'atheros'
-
-	ht_cap_list="$( uci -q get wireless.radio${radiocard}.ht_capab )"	# backup current state
+	ht_cap_list="$( uci get wireless.radio${radiocard}.ht_capab )"	# backup current state
 
 	ht_cap_uci_output()
 	{
 		for ht_cap in $ht_cap_list; do {
-			echo "	list ht_capab		\"$ht_cap\""
+			echo "	list ht_capab	'$ht_cap'"
 		} done
 	}
 
@@ -637,6 +642,16 @@ _config_wireless ()			# fixme! channels hardcoded
 	{
 		local channel="$1"			# e.g. 161
 		local bssid="${2:-02:ca:ff:ee:ba:be}"
+
+		case "$INSTALLATION" in
+			liszt28|ffweimar)
+				[ "$channel" = '5' ] && {
+					log "[OK] enforcing special value '02:ca:ff:ee:ba:be' for $INSTALLATION"
+					echo '02:ca:ff:ee:ba:be'
+					return 0
+				}
+			;;
+		esac
 
 		bssid="$( echo "$bssid" | cut -b 1-11 )"	# 02:be:ef:ca:ff:ee -> 02:be:ef:ca
 
@@ -661,17 +676,35 @@ _config_wireless ()			# fixme! channels hardcoded
 	# channel 153 (5765mhz)  --  |HT40-|NOHT
 	# channel 157 (5785mhz) HT40+|HT40-
 	# channel 161 (5805mhz) HT40+|NOHT
+	#
+	# with jow's reghack:
+	# 36 40 44 48 52 56 60 64 100 104 108 112 116 120 124 128 132 136 140 149 153 157 161 165
 
-	case "$hwmode" in
-		11na|11a)
-			local channel_now="$( uci -q get wireless.radio${radiocard}.channel )"
-			local bssid_now="$( uci -q get wireless.@wifi-iface[${radiocard}].bssid )"
+	CHANNEL="$default_channel"
+
+	get_wifi_band()
+	{
+		case "$hwmode" in
+			11na|11a)
+				echo 'a'
+			;;
+			*)
+				echo 'g'
+			;;
+		esac
+	}
+
+	case "$( get_wifi_band )" in
+		a)
+			local channel_now="$( uci get wireless.radio${radiocard}.channel )"
+			local var="wireless.@wifi-iface[$radiocard].bssid"
+			local bssid_now="$( uci get $var )"
 
 			if [ "$bssid_now" = "$( bssid_wellformed "$channel_now" "$BSSID" )" ]; then
 				log "[OK] using already configured channel $channel_now"
 				CHANNEL="$channel_now"
 			else
-				CHANNEL=40
+				CHANNEL=36
 			fi
 
 			BSSID="$( bssid_wellformed "$CHANNEL" "$BSSID" )"
@@ -684,6 +717,9 @@ _config_wireless ()			# fixme! channels hardcoded
 					MCAST_RATE="6000"
 				;;
 			esac
+		;;
+		*)
+			BSSID="$( bssid_wellformed "$CHANNEL" "$BSSID" )"
 		;;
 	esac
 
@@ -716,9 +752,9 @@ _config_wireless ()			# fixme! channels hardcoded
 
 	[ "$hideht" = "#" ] && hide_noscan="#"
 
-	local chanbw="$( uci -q get wireless.radio${radiocard}.ath9k_chanbw )$( uci -q get wireless.radio${radiocard}.chanbw )"
+	local chanbw="$( uci get wireless.radio${radiocard}.ath9k_chanbw )$( uci get wireless.radio${radiocard}.chanbw )"
 	case "$chanbw" in
-		5|10|20)
+		5|10)
 			hide_chanbw=
 		;;
 		*)
@@ -732,63 +768,55 @@ _config_wireless ()			# fixme! channels hardcoded
 	case "$PROFILE_MODE" in
 		hybrid)
 			local ssid_adhoc="ff.intern.$NODE.ch$CHANNEL"			# fixme! work with 'hidden'
-			local ssid_ap="$( uci -q get wireless.@wifi-iface[$(( ${radiocard} + 1 ))].ssid )"
-			[ -z "$ssid_ap" -o "$ssid_ap" = "OpenWrt" -o "$ssid_ap" = "LEDE" ] && ssid_ap="Weimarnetz - Knoten $NODE"
+			local ssid_ap="$( uci get wireless.@wifi-iface[$(( radiocard + 1 ))].ssid )"
+			[ -z "$ssid_ap" ] || [ "$ssid_ap" = "LEDE" ] && ssid_ap="Weimarnetz Knoten $NODE"
 
-			cat >> "$temp" <<EOF
+			cat >>"$temp" <<EOF
 config wifi-device radio${radiocard}
-	option type		"$radiotype"
-	option country		"$country"
-	option channel		"$CHANNEL"
-$hide_chanbw	option chanbw		"$chanbw"	# since r32596
-$hide_mac	option macaddr		"$MAC"
-$hidetx	option txpower		"$TXPOWER"
-$hide_noscan	option noscan		"1"
+	option type	$radiotype
+	option country	$country
+	option channel	$CHANNEL
+$hide_chanbw	option chanbw	$chanbw		# since r32596
+$hide_mac	option macaddr	$MAC
+$hidetx	option txpower	$TXPOWER
+${hide_noscan}	option noscan	1
+$( test -n "$distance" && echo "	option distance '$distance'" )
 EOF
 
-			[ -n "$driver_path" ] && echo "	option path		\"$driver_path\"" >> "$temp"
+			[ -n "$driver_path" ] && echo "	option path '$driver_path'" >>"$temp"
 
 
-			cat >> "$temp" <<EOF
-	option hwmode		"$hwmode"
-$hideht	option htmode		"$htmode"
+			cat >>"$temp" <<EOF
+	option hwmode   $hwmode
+${hideht}	option htmode   $htmode
 $( ht_cap_uci_output )
 EOF
 
-	case "$HARDWARE" in
-		"Buffalo WHR-HP-G54")
-			echo >> "$temp" "	option rxantenna	1"
-			echo >> "$temp" "	option rxantenna	1"
-		;;
-		"Linksys WRT54G"*|"ASUS WL-500g Premium")
-			echo >> "$temp" "	option rxantenna	0"
-			echo >> "$temp" "	option rxantenna	0"
-		;;
-	esac
-
 			[ -z "$BSSID" ] && BSSID="$( bssid_wellformed "$CHANNEL" )"
 
-			cat >> "$temp" <<EOF
-
+			cat >>"$temp" <<EOF
 config wifi-iface
-	option device		"radio${radiocard}"
-	option network		"wlanadhoc${network_append}"
-	option mode		"adhoc"
-	option bssid		"${BSSID}"
-	option ssid		"${ssid_adhoc}"
-	option mcast_rate	"${MCAST_RATE}"
-#	option bintval		"1000"
-
+	option device	radio${radiocard}
+	option network	wlanadhoc${network_append}
+	option mode	adhoc
+	option bssid	'$BSSID'
+	option ssid	'${ssid_adhoc}'
+	option mcast_rate ${MCAST_RATE}
+#	option bintval	1000
 config wifi-iface
-	option device		"radio${radiocard}"
-	option network		"wlan${network_append}"
-	option mode		"ap"
-	option ssid		"${ssid_ap}"
+	option device	radio${radiocard}
+	option network	wlan${network_append}
+	option encryption '$default_encryption_type'
+	option mode	ap
+$hideE	option encryption '$default_encryption_type'
+$hideE	option key '$default_encryption_pass'
+	option ssid	'${ssid_ap}'
 EOF
 		;;
 		ap*)
-			local old_essid="$( uci -q get wireless.@wifi-iface[${radiocard}].ssid )"
-			local new_essid="${INSTALLATION} $NODE"
+			local var="wireless.@wifi-iface[$radiocard].ssid"
+			local old_essid="$( uci get $var )"
+			local new_essid="Weimarnetz Knoten $NODE"
 
 			[ -n "$SSID_ENFORCED" ] && {
 				new_essid="$SSID_ENFORCED"
@@ -809,87 +837,76 @@ EOF
 				;;
 			esac
 
-			cat >> "$temp" <<EOF
+			cat >>"$temp" <<EOF
 config wifi-device radio${radiocard}
-	option type		"$radiotype"
-	option country		"$country"
-$hidetx	option txpower		"$TXPOWER"
-	option channel		"$CHANNEL"
-$hide_mac	option macaddr		"$MAC"
-${hide_noscan}	option noscan		"1"
+	option type	$radiotype
+	option country	$country
+$hidetx	option txpower	$TXPOWER
+	option channel	$CHANNEL
+$hide_mac	option macaddr	$MAC
+${hide_noscan}	option noscan	1
+$( test -n "$distance" && echo "	option distance '$distance'" )
 EOF
 
-			[ -n "$driver_path" ] && echo "	option path 		\"$driver_path\"" >> "$temp"
+			[ -n "$driver_path" ] && echo "	option path '$driver_path'" >>"$temp"
 
-	grep -q ^"b43 " "/proc/modules" && cat >> "$temp" <<EOF
-	option bitrates '6 9 12 18 24 36 48 54'
-EOF
-
-			cat >> "$temp" <<EOF
-	option hwmode		"$hwmode"
-${hideht}	option htmode		"$htmode"
+			cat >>"$temp" <<EOF
+	option hwmode   $hwmode
+${hideht}	option htmode   $htmode
 $( ht_cap_uci_output )
 EOF
 
-			cat >> "$temp" <<EOF
-
+			cat >>"$temp" <<EOF
 config wifi-iface
-	option device		"radio${radiocard}"
-	option network		"wlan${network_append}"
-	option mode		"ap"
-	option ssid		"${new_essid}"
-	option max_num_sta	"64"		# since r33400
-	option max_inactivity	"300"		# since r33412 [sec]
+	option device	radio${radiocard}
+	option network	wlan${network_append}
+	option mode	ap
+	option ssid	'${new_essid}'
+$hideE	option encryption '$default_encryption_type'
+$hideE	option key '$default_encryption_pass'
 EOF
 		;;
 		*)
-			local new_essid="bb"
+			local new_essid="ff.intern.$NODE.ch$CHANNEL"
 
-			case "${INSTALLATION}" in
-				ffweimar*) new_essid="ff.intern.$NODE.ch$CHANNEL" ;;
-			esac
-
-			cat >> "$temp" <<EOF
+			cat >>"$temp" <<EOF
 config wifi-device radio${radiocard}
-	option type		"$radiotype"
-	option country		"$country"
-	option channel		"$CHANNEL"
-$hide_chanbw	option chanbw		"$chanbw"		# since r32596
-$hide_mac	option macaddr		"$MAC"
-$hidetx	option txpower		"$TXPOWER"
-$hide_noscan	option noscan		"1"
+	option type	$radiotype
+	option country	$country
+	option channel	$CHANNEL
+$hide_chanbw	option chanbw	$chanbw		# since r32596
+$hide_mac	option macaddr	$MAC
+$hidetx	option txpower	$TXPOWER
+${hide_noscan}	option noscan	1
+$( test -n "$distance" && echo "	option distance '$distance'" )
 EOF
 
-			[ -n "$driver_path" ] && echo "	option path		\"$driver_path\"" >> "$temp"
+			[ -n "$driver_path" ] && echo "	option path '$driver_path'" >>"$temp"
 
-			cat >> "$temp" <<EOF
-	option hwmode		"$hwmode"
-${hideht}	option htmode		"$htmode"
+			cat >>"$temp" <<EOF
+	option hwmode	$hwmode
+${hideht}	option htmode	$htmode
 $( ht_cap_uci_output )
 EOF
 
 			[ -z "$BSSID" ] && BSSID="$( bssid_wellformed "$CHANNEL" )"
 
-			cat >> "$temp" <<EOF
-
+			cat >>"$temp" <<EOF
 config wifi-iface
-	option device		"radio${radiocard}"
-	option network		"wlan${network_append}"
-	option mode		"adhoc"
-	option bssid		"${BSSID}"
-	option ssid		"${new_essid}"
-	option mcast_rate	"${MCAST_RATE}"
+	option device	radio${radiocard}
+	option network	wlan${network_append}
+	option mode	adhoc
+	option bssid	'$BSSID'
+	option ssid	'${new_essid}'
+	option mcast_rate ${MCAST_RATE}
+#	option bintval	1000
 EOF
 		;;
 	esac
 
 } done
 
-	cat >> "$temp" <<EOF
-EOF
-
-	mv "$temp" /etc/config/wireless
-	PROFILE_MODE=$profile_mode_tmp		#reset original profile mode
+	mv -f "$temp" /etc/config/wireless
 }
 
 _config_network ()
