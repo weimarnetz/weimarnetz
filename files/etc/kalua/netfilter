@@ -25,33 +25,10 @@ _netfilter_start()
 	_netfilter conntrack_adjust_max		# needs testcase + respect /database-ramdisk
 	_netfilter mssfix
 
-	case "$CONFIG_PROFILE" in
-		ejbw*)
-			case "$NODENUMBER" in
-				100)	# j4
-					$IPT -I FORWARD -i $LANDEV -o $WIFIDEV	# 2nd rule = up
-					$IPT -I FORWARD -i $WIFIDEV -o $LANDEV	# 1st rule = down
-				;;
-				101)	# reithaus
-					$IPT -I FORWARD -i $LANDEV -o $WIFIDEV	# 2nd rule = up
-					$IPT -I FORWARD -i $WIFIDEV -o $LANDEV	# 1st rule = down
-				;;
-			esac
-		;;
-	esac
-
 	[ -e "/etc/init.d/apply_profile" ] && return 0
 	[ -e "/www/GOOD_MODULE_UNLOAD" ] || {
 		[ -n "$LOWMEM" ] && return 0
 	}
-
-	[ -e "/etc/hosts.drop" ] && {
-		_netfilter adblocking_start
-	}
-
-	# can last long
-	echo >>$SCHEDULER_IMPORTANT '_storage automount'	# FIXME! rely on hotplug?
-	echo >>$SCHEDULER_IMPORTANT '_db restore'
 
 	bool_true 'system.@weblogin[0].enabled' && {
 		[ -e "/www/SIMPLE_MESHNODE" ] || {

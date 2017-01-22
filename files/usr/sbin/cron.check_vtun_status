@@ -10,7 +10,7 @@ test ! -e "/www/SOFTWARE_FULLY_INSTALLED"       && exit
 
 _olsr uptime is_short && {
         _log it olsr_uptime_is_short daemon info "[OK] scheduling job"
-        _scheduler add "$0" force
+        echo >>$SCHEDULER "$0" force
         exit
         }
 

@@ -258,54 +258,6 @@ _watch_autorun()	# can be helpful to make changes on many nodes
 	_log it $funcname daemon info "[READY] $file - rc: $?"
 }
 
-_watch_monitoring()
-{
-	local funcname='watch_monitoring'
-	local option="$1"	# e.g. 'force'
-
-	case "$option" in
-		'force')
-		;;
-		*)
-			_file age "$TMPDIR/ARCHIV_MONITORING" -gt 900 || {
-				grep -q ^'# alive-message was send' "$TMPDIR/ARCHIV_MONITORING" || {
-					echo >>$SCHEDULER_IMPORTANT 'cron.monitoring send_alive_message'
-				}
-
-				_log it $funcname daemon debug "last send <900 sec, use 'force'"
-				return 1
-			}
-
-			_net inet_seems_stable || {
-				_log it $funcname daemon debug "inet unstable, use 'force'"
-				return 1
-			}
-		;;
-	esac
-
-	_monitoring heartbeat_minimal_send
-
-	if bool_true 'system.@monitoring[0].send_mapapi'; then
-		_monitoring heartbeat_mapapi
-	else
-		true
-	fi
-}
-
-_watch_cgminer()
-{
-	local funcname='watch_cgminer'
-
-	command -v cgminer >/dev/null && {
-		/etc/init.d/cgminer enabled && {
-			pidof cgminer >/dev/null || {
-				_log it $funcname daemon alert "no pid found, restart daemon"
-				/etc/init.d/cgminer start
-			}
-		}
-	}
-}
-
 _watch_coredump()
 {
 	local funcname='watch_coredump'

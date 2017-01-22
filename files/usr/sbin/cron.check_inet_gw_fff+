@@ -10,7 +10,7 @@ test ! -e "/www/SOFTWARE_FULLY_INSTALLED"	&& exit
 
 _olsr uptime is_short && {
 	_log it olsr_uptime_is_short daemon info "[OK] scheduling job"
-	_scheduler add "$0" force
+	echo >>$SCHEDULER "$0" force
 	exit
 }
 
@@ -76,7 +76,7 @@ rm $FILE_OLSR_ROUTES
 		OUT="COST_INT=99999; GATEWAY=${LAST_GATEWAY}; NEXTHOP=127.0.0.0; METRIC=-1"
 
 		_log it guess_gateway daemon info "empty default router, last inet-gateway was: $LAST_GATEWAY"
-		_scheduler add "$0" force
+		echo >>$SCHEDULER "$0" force
 	else
 		# provider-lan with subnet >/24 is not implemented yet (see /etc/init.d/S43...)
 		if [ "$WIFIADR" = "$GW" ]; then

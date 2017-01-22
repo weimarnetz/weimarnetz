@@ -16,16 +16,6 @@ eval $( date '+MINUTE=%M; HOUR=%H; WEEKDAY=%A; DAYOFMONTH=%d; UNIXTIME=%s;' )
 if [ -e "$TMPDIR/firstrun" ]; then
 	[ -e "$TMPDIR/.autorun" ] && _watch autorun		# direct call
 
-	[ -e "$TMPDIR/fw" ] && {
-		_firmware check_image "$TMPDIR/fw" && {
-			if _firmware check_forced_upgrade; then
-				/bin/sleep 180
-			else
-				/sbin/reboot
-			fi
-		}
-	}
-
 	bool_true 'olsrd.@meta[0].watch_gateway' && {
 		read -r REST <'/tmp/OLSR/DEFGW_NOW' || REST='8.8.8.8'
 		test $( _net ping_getlatency "$REST" || echo '100' ) -gt 99 && {
@@ -39,11 +29,7 @@ else
 	cat >>$SCHEDULER <<EOF
 _watch flash_free_space
 _ssh sanitize_and_cleanup_keys
-_watch nanostation_max_ethernet
-#_firmware update_pmu
 /usr/sbin/cron.check_inet_gw_fff+
-cron.monitoring send_alive_message
-_vpn x
 EOF
 fi
 
@@ -51,14 +37,7 @@ cat >>$SCHEDULER <<EOF
 _watch wifistuff
 _watch olsrstuff
 _watch monitoring
-_watch coredump 'during: taskplanner.minutely'
 _wifi watch_phy_problems
-. /usr/sbin/cron.check_switch
-_netfilter traffic_control_autoapply_speedsuggest
-_watch pppoe
-_watch local_proxy
-_netfilter splash_batman_alien_unauth
-_netfilter user_stats_collect
 _watch roaming
 EOF
 
@@ -73,8 +52,6 @@ bool_true 'olsrd.@meta[0].no_watching' || {
 
 # uptime.sec->minutes divideable (without rest) by 360? -> each 360 mins
 [ $(( $(( ${UP%.*} / 60 )) % 360 )) -eq 0 ] && {
-	echo 'cron.upgrade_packages'	# e.g. daily restart is at 4:05
-	echo '_firmware update_pmu'	# so: 10:05, 16:05, 22:05
 	echo '_watch configchange'
 	echo '_olsr incoming_and_outgoing_olsr_traffic'
 } >>$SCHEDULER
@@ -83,24 +60,12 @@ case "$HOUR:$MINUTE" in
 	17:00)
 #		echo >>$SCHEDULER_IMPORTANT '_wifi longshot_test 17:10:00 36...40 "719 670" >/www/BLUBB'
 	;;
-	01:00|02:00|03:00)
-		{
-			echo '_db ticketcheck auto'
-			echo '_firmware update_pmu'
-		} >>$SCHEDULER
-	;;
 	04:00)
 		{
 			echo '_watch archivsize "/tmp/messages" 5000'	# e.g. VPN-server
 			echo "_watch archivsize '$PERMLOG' 400 500"
 			echo '_wifi longshot_report'
 			echo '_net roaming_eventlistener restart'
-			echo '_rrd upload'
-		} >>$SCHEDULER
-
-		[ -e '/tmp/cron.webcam' ] && {
-			echo 'touch /tmp/webcam_force_safe'
-			echo '. /tmp/cron.webcam'
 		} >>$SCHEDULER
 
 		if bool_true 'system.@system[0].avoid_autoreboot'; then
@@ -173,10 +138,8 @@ case "$MINUTE" in
 		case "$MINUTE" in
 			00)	# hourly
 				{
-					echo '_watch user_list'
 					echo '_net roaming_fetch_cache'
 					echo "_watch wifi_cronactive $HOUR $MINUTE"
-					echo '_mail stash_resend'
 					echo '_olsr neighs_meshrdf_evalable >/tmp/OLSR/meshrdf_neighs'
 					echo '_wifi scan_geolocation'
 					echo '_wifi longshot_name && _rrd upload'
@@ -252,22 +215,19 @@ case "$MINUTE" in
 
 		cat >>$SCHEDULER <<EOF
 /usr/sbin/cron.check_inet_gw_fff+
-/etc/init.d/S69watch_olsrd_fff+
+/usr/sbin/cron.check_vtun_status
 _watch wifi_mode
 _watch webserver
-_watch cgminer
 _watch hanging_command usual_suspects
 _watch flash_free_space
 _watch system_time
 _watch sshd_or_telnet
 _watch random_node_id
 _watch dhcp_space
-_watch nanostation_max_ethernet
-_watch db_ticketrequest
 _net refresh_dnshosts
 _net roaming_cleanup_cache
-_db generate_grepable_index check
-_http robotstxt_generate
 EOF
+
+		[ -z "$LOWMEM" ] && echo >>$SCHEDULER '/usr/sbin/cron.reverse_ssh_tunnel'
 	;;
 esac
