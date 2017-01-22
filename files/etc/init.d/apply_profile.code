@@ -1381,15 +1381,13 @@ config 'LoadPlugin'
 	option 'latlon_file' '/var/run/latlon.js'
 	option 'latlon_infile' '/var/run/latlon.txt'
 
-config LoadPlugin
-	option library	'olsrd_watchdog.so.0.1'
 
 config LoadPlugin
 	option library	'olsrd_dyn_gw.so.0.5'
 	option 'CheckInterval' '5000'
 	option 'PingInterval' '40'
-	option 'Ping' '141.1.1.1'
-	option 'Ping' '194.25.2.129'
+	option 'Ping' '209.244.0.3'
+	option 'Ping' '8.8.8.8'
 
 config LoadPlugin
 	option library	'olsrd_txtinfo.so.0.1'
@@ -1419,6 +1417,169 @@ EOF
 #	}
 
 #EOF
+}
+
+_roaming()
+{
+	local wired_networks="$1"		# e.g. 'lan' or 'lan wan'
+	local special_ssid="weimar.freifunk.net"
+	local index network list list_ap has_5ghz has_2ghz is_hybrid milliwatt disassoc_low_ack
+
+#	local ssid2	# TODO: dhcp complains about missing IP on dev
+#	ssid2="freifunk ($HOSTNAME"
+#	ssid2="$( _sanitizer run "$ssid2" length:30 )"
+#	ssid2="$ssid2)"
+#	uci add wireless wifi-iface
+#	uci set wireless.@wifi-iface[-1].network='wlan'
+#	uci set wireless.@wifi-iface[-1].device='radio1'
+#	uci set wireless.@wifi-iface[-1].mode='ap'
+#	uci set wireless.@wifi-iface[-1].ssid="$ssid2"
+#	uci set wireless.@wifi-iface[-1].ssid_donttouch='true'
+
+	list_ap="$( _wifi get any mode ap ) $wired_networks"
+	[ -z "$list_ap" ] && return 1
+
+	# e.g. dnsmasq 2.66 or openwrt script are broken for DHCP-range
+	[ -e "/lib/modules/$( uname -r )/macvlan.ko" ] || return 1
+	modprobe 'macvlan'
+
+	uci_remove_section 'network.@alias[].interface' 'mastergate'
+	uci set network.mastergate='interface'			# here we collect all interfaces, see below
+	uci set network.mastergate.type='bridge'		# bridge needed for multiple interfaces
+	uci set network.mastergate.proto='static'		# list of ifnames is added below
+	uci set network.mastergate.ipaddr="$ROAMING_GATEWAY" # global from /etc/kalua/net
+	uci set network.mastergate.netmask="$( _net cidr2mask "$ROAMING_PRE" )" 
+
+	# we occupy the existing 'wlan'-section (generated from apply_profile)
+	uci set dhcp.wlan.interface='mastergate'
+
+	# maybe also fill: 1, 3, 6, 12, 28 = ???
+	uci del      dhcp.wlan.dhcp_option
+	uci add_list dhcp.wlan.dhcp_option="3,$ROAMING_GATEWAY"	# same like 'option:router' is "option name => RFC 2132"
+	uci add_list dhcp.wlan.dhcp_option="6,$ROAMING_DNS"
+
+	uci set dhcp.wlan.leasetime='12h'	# very long: otherwise a ssh-session is lost when the IP changes...
+	uci set dhcp.wlan.start="$ROAMING_DHCPSTART_LOCAL"
+	uci set dhcp.wlan.limit='253'
+	uci -q delete dhcp.wlan.netmask		# otherwise 'wlan.start' has no effect
+
+	# FIXME! 2nd AP on same band does not work
+	for index in $list_ap; do {
+		if network="$( uci -q get "wireless.@wifi-iface[$index].network" )"; then
+			# e.g. 'wlanRADIO1' 'wlan'
+
+			case "$HARDWARE" in
+				*)
+					# force active
+					uci set "wireless.@wifi-iface[$index].disabled=0"
+				;;
+			esac
+
+			if _wifi is2ghz "$index"; then
+				has_2ghz='true'
+				# https://wiki.openwrt.org/doc/uci/wireless#inactivity_timeout_options
+				if [ -n "$special_ssid" ]; then
+					disassoc_low_ack=0
+				else
+					disassoc_low_ack=1
+				fi
+
+				uci set "wireless.@wifi-iface[$index].disassoc_low_ack=$disassoc_low_ack"
+				uci del "wireless.@wifi-iface[$index].max_inactivity"
+#				uci set "wireless.@wifi-iface[$index].max_inactivity"='30'
+			else
+				has_5ghz='true'
+				uci set "wireless.@wifi-iface[$index].disassoc_low_ack=0"	# sticky 5ghz
+			fi
+		else
+			# e.g. 'lan'
+			network="$index"
+			uci delete dhcp.$index
+		fi
+
+		# omit dnsmasq-logerrors: in roaming mode we should
+		# only answer on 'mastergate' not e.g. 'wlan' (or even 'lan')
+		case " $( uci -q get dhcp.@dnsmasq[0].notinterface ) " in
+			*" $network "*)
+				# only add once
+			;;
+			*)
+				uci add_list dhcp.@dnsmasq[0].notinterface="$network"
+			;;
+		esac
+
+		uci set network.roaming${index}='device'
+		uci set network.roaming${index}.type='macvlan'
+		uci set network.roaming${index}.name="roaming${index}"
+		uci set network.roaming${index}.ifname="@$network"
+		uci set network.roaming${index}.macaddr='02:ff:ff:ff:00:00'		# same on all bands
+
+		list="$( uci -q get network.mastergate.ifname )"
+		case "$list" in
+			*"roaming${index}"*)
+			;;
+			*)
+				uci set network.mastergate.ifname="${list}${list:+ }roaming${index}"
+			;;
+		esac
+	} done
+
+	uci_already_added 'olsrd' 'Hna4' 'netaddr' "$ROAMING_NET_LOCAL" || {
+		uci add olsrd Hna4 >/dev/null
+		uci set olsrd.@Hna4[-1].netaddr="$ROAMING_NET_LOCAL"
+		uci set olsrd.@Hna4[-1].netmask="$( _net cidr2mask "$ROAMING_PRE_LOCAL" )"
+	}
+
+	config_add_alias 'mastergate' "$ROAMING_ADR_LOCAL/$ROAMING_PRE_LOCAL"
+
+	# TODO: hostapd: band-steering
+	# https://forum.openwrt.org/viewtopic.php?id=33335
+	#
+	#if _wifi longshot_name >/dev/null; then
+	#	_wifi set ap anyfreq 'off'
+	#else
+	#	# TODO: test if this speeds up roaming? CoverageClass1 = 450m
+	#	_wifi set ap 2ghz distance '100'
+	#	_wifi set ap 2ghz beacon_int '250'	# better powersafe and not too slow
+	#	_wifi set ap 2ghz txpower '10'
+	#
+	#	_wifi set ap 5ghz distance '100'
+	#	_wifi set ap 5ghz beacon_int  '50'	# maybe this helps better sticking to 5ghz
+	#	_wifi set ap 5ghz txpower '20'
+	#
+	#	_wifi set ap anyfreq mcast_rate ''	# use defaults
+	#
+	#	# TODO: be band-specific
+	#	[ -n "$( _wifi get any mode adhoc )" ] && is_hybrid='true'	# FIXME! mesh?
+	#
+	#	# single band 5ghz AP
+	#	[ -n "$has_5ghz" -a -z "$has_2ghz" ] && {
+	#		[ -n "$is_hybrid" ] && {
+	#			_wifi set ap 5ghz beacon_int '50'
+	#			_wifi set ap 5ghz txpower '20'
+	#		}
+	#	}
+	#
+	#	# TODO: uci var for describing "next to me/wired is already an adhoc-only device, so do not power up my adhoc"
+	#	# single band 2ghz AP
+	#	[ -z "$has_5ghz" -a -n "$has_2ghz" ] && {
+	#		[ -n "$is_hybrid" ] && {
+	#			_wifi set ap 2ghz beacon_int '125'
+	#			_wifi set ap 2ghz txpower '20'
+	#		}
+	#	}
+
+		# this should make the roaming-better, because the client does not 'glue' that much at an AP
+		# TODO: do not if nexthop is wired
+	#	[ -n "$has_2ghz" ] && {
+	#		bool_true 'system.@monitoring[0].txpower_auto' && {
+	#			milliwatt=-1	# means: go lower and lower by 1 milliwatt
+	#			echo >>$SCHEDULER "_wifi reduce_txpower_if_compatible_roaming_nodes_are_near 2ghz $milliwatt"
+	#		}
+	#	}
+	#fi
+
+	return 0
 }
 
 [ -e "/etc/kalua_init" ] && {
@@ -1465,7 +1626,7 @@ EOF
 }
 
 # rewrite new settings
-for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron; do {
+for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron roaming; do {
 	log "....working on section '$SECTION'"
 	_config_$SECTION "$NODENUMBER"
 	log "[ok] ready with section '$SECTION'"
