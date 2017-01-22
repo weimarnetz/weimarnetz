@@ -13,7 +13,7 @@ HTTPD_CREDENTIALS=	# can be a list e.g. "admin:pass123 foo:bar" (username/pass)
 
 case "$INSTALLATION" in
 	ffweimar)
-		OLSR_METRIC="etx_ff"	# we should change as soon as possible to etx_ffeth
+		OLSR_METRIC="etx_ffeth"	# we should change as soon as possible to etx_ffeth
 		IPSYSTEM="ffweimar"
 		password_set "admin"
 
