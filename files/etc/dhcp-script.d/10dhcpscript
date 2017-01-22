@@ -1,15 +1,18 @@
 #!/bin/sh
-# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
-
-command . /tmp/loader || exit 0		# TODO: rebuild loader + enable cron?
+. /tmp/loader
 
 MODE="${1:-unset}"
-MAC="${2:-ff:00:00:00:00:00}"		# fixme! this enforces an invalid mac, see sanitizer_mac()
+MAC="${2:-ff:00:00:00:00:00}"		# FIXME! this enforces an invalid mac, see sanitizer_mac()
 IP="${3:-127.0.0.1}"
 HOST="${4:-unset}"
 
+[ "$MODE" = 'old' -a -e '/tmp/CRON_OVERLOAD' ] && exit 0
+
 case "$MAC" in
-	*"-"*)
+	'00:00:00:00:00:00')
+		MODE='cron-watchdog'
+	;;
+	*'-'*)
 		_log it dhcp_script daemon info "ignore non-ethernet events: $MAC"
 		exit 0
 	;;
@@ -19,78 +22,119 @@ if [ -n "$DNSMASQ_INTERFACE" ]; then
 	DEV="$DNSMASQ_INTERFACE"
 else
 	DEV="$( _net ip2dev $IP )"
+	_log it dhcp_script daemon info "guessed dev: '$DEV'"
 fi
 
-case "${DEV%-1}" in
-	 $WANDEV) TYPE="wan" ;;
-	 $LANDEV) TYPE="lan" ;;
-	$WIFIDEV) TYPE="wifi" ;;
-	  $LODEV) TYPE="loopback"
-		[ "$MAC" = '00:00:00:00:00:00' ] && MODE='cron-watchdog'
+case "$DEV" in
+	'br-mastergate')
+		TYPE='roaming'
+
+		case "$MODE" in
+			'add')
+				echo "$MAC $IP $DNSMASQ_LEASE_EXPIRES" >>"$TMPDIR/roaming_dhcp_worker"
+				# recent entries on top ("tac")
+				grep -sn '' "$TMPDIR/roaming_dhcp_worker" | sort -rn | cut -d: -f2- >"$TMPDIR/roaming_dhcp"
+			;;
+			'del')
+				sed -i "/^$MAC/d" "$TMPDIR/roaming_dhcp_worker"
+				sed -i "/^$MAC/d" "$TMPDIR/roaming_dhcp"
+			;;
+		esac
 	;;
-	'by-mybridge'|'gateway0') TYPE='batman' ;;	# just for better logging
-		   *) TYPE="unknown" ;;
+	$WANDEV)
+		TYPE='wan'
+	;;
+	$LANDEV)
+		TYPE='lan'
+
+		case "$MODE" in
+			'add'|'old')
+				bool_true 'system.@monitoring[0].report_lan_dhcp' && {
+					SHOW_HOST="$HOST"
+					[ "$SHOW_HOST" = 'unset' ] && SHOW_HOST="$( _net mac2vendor "$MAC" short )"
+					echo >>$SCHEDULER_IMPORTANT "_log remote 'lan_dhcp: date: $( date ) CLIENT: mac: $MAC ip: $IP hostname: $SHOW_HOST ROUTER: $HOSTNAME'"
+				}
+			;;
+		esac
+	;;
+	$WIFIDEV)
+		TYPE='wifi'
+	;;
+	$LODEV)
+		TYPE='loopback'
+	;;
+	'by-mybridge'|'gateway0')	# just for better logging
+		TYPE='batman'
+	;;
+	*)
+		TYPE='unknown'
+	;;
 esac
 
-if [ "$MODE" = "old" ]; then
-	[ -e "/tmp/CRON_OVERLOAD" ] && exit 0
+case "$HOST" in
+	'reanimateV2')
+		# seed watch_reanimate_dead_neighbour()
+		MODE='invalid'
+	;;
+esac
+
+if [ "$MODE" = 'old' ]; then
+	_log it dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV HOST: $HOST"
 else
-	_log it dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV"
-fi
+	_log it dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV HOST: $HOST"
 
-case "$MODE-$HOST" in
-	'add-check_if_reachable')
-		MODE="$HOST"
-		_log it dhcp_add_check_if_reachable daemon info "MAC: $MAC IP: $IP DEV: $DEV"
-		_netfilter user_add "$MAC" "$IP"
-	;;
-esac
+	case "$MODE-$HOST" in
+		'add-check_if_reachable')
+			MODE="$HOST"
+			_log it dhcp_add_check_if_reachable daemon info "MAC: $MAC IP: $IP DEV: $DEV"
+			_netfilter user_add "$MAC" "$IP"
+		;;
+	esac
+fi
 
 case "$MODE" in
 	add|old)
-		bool_true 'system.weblogin.enabled' && {
-			case "$HOST" in
-				'old')
-					_netfilter user_probe "$MAC" && exit 0
-				;;
-				'reanimate'*)
-					# seed watch_reanimate_dead_neighbour()
-					exit 0
-				;;
-			esac
-
+		bool_true 'system.@weblogin[0].enabled' && {
 			case "$MODE" in
 				'old')
 					_netfilter user_probe "$MAC" && exit 0
+					# maybe unknown after unscheduled reboot, so go further
+				;;
+				'add')
+					case "$TYPE" in
+						'roaming')
+							echo >>$SCHEDULER_IMPORTANT "_net roaming_report_new $MAC $IP $DNSMASQ_LEASE_EXPIRES"
+						;;
+					esac
 				;;
 			esac
 
 			USER="$MAC"
-			NODE_HOSTNAME="$( uci -q get system.@system[0].hostname )"
-			SIGNAL="${NODE_HOSTNAME}_dhcp-${MODE}"				# keyword 'dhcp' is important for login_check()
+			SIGNAL="${HOSTNAME}_dhcp-${MODE}"				# keyword 'dhcp' is important for login_check()
 			export REMOTE_ADDR="$IP"
 
-#			if _weblogin login_check "$USER" "" "$MAC" "$SIGNAL" ; then
-#				# for "very fast unsplashing" and not showing 'please use credentials'
-#				$IPT -t mangle -I PREROUTING -j ACCEPT
-#				_log it $SIGNAL daemon info "[OK] _weblogin login_check $USER"
-#				_netfilter user_add "$MAC" "$IP"
-#				# remove the hack for "very fast unsplashing"
-#				$IPT -t mangle -D PREROUTING -j ACCEPT
-#			else
-#				if _weblogin login_check "$USER" "$NODE_HOSTNAME" "$MAC" "$SIGNAL" ; then
-#					_log it $SIGNAL daemon info "[OK] _weblogin login_check $USER/$NODE_HOSTNAME (2nd try)"
-#					_netfilter user_add "$MAC" "$IP"
-#				else
-#					_log it $SIGNAL daemon info "[ERR] _weblogin login_check $USER/$NODE_HOSTNAME"
-#				fi
-#			fi
-#		}
+			if _weblogin login_check "$USER" '' "$MAC" "$SIGNAL" ; then
+				# for "very fast unsplashing" and not showing 'please use credentials'
+				$IPT -t mangle -I PREROUTING -j ACCEPT
+				_log it $SIGNAL daemon info "[OK] _weblogin login_check $USER"
+				_netfilter user_add "$MAC" "$IP"
+				# remove the hack for "very fast unsplashing"
+				$IPT -t mangle -D PREROUTING -j ACCEPT
+			else
+				if _weblogin login_check "$USER" "$HOSTNAME" "$MAC" "$SIGNAL" ; then
+					_log it $SIGNAL daemon info "[OK] _weblogin login_check $USER/$HOSTNAME (2nd try)"
+					_netfilter user_add "$MAC" "$IP"
+				else
+					_log it $SIGNAL daemon info "[ERR] _weblogin login_check $USER/$HOSTNAME"
+				fi
+			fi
+		}
 
+		echo >>$SCHEDULER "_netfilter portforwarding_request $IP $MAC $HOST"
 	;;
 	del)
-#		if bool_true 'system.weblogin.dhcpautologout'; then
-#			echo >>$SCHEDULER "_netfilter user_del $MAC dhcp_del"
+#		if bool_true 'system.@weblogin[0].dhcpautologout'; then
+			echo >>$SCHEDULER "_netfilter user_del $MAC dhcp_del"
 #		else
 #			_netfilter set_arp reachable "$MAC" "$IP" "$DEV"
 #		fi
