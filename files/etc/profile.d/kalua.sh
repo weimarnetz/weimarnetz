@@ -1,7 +1,7 @@
 #!/bin/sh
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
-[ -n "$FFF_VERSION" ] && echo "                kalua g$FFF_VERSION"
+[ -n "$FFF_VERSION" ] && echo "kalua git$FFF_VERSION"
 printf "\n" 
 
 prompt_set()
