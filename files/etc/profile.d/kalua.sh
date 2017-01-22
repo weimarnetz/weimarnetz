@@ -48,7 +48,7 @@ alias lr='logread'
 alias flush='_system ram_free flush'
 alias myssh='ssh -i $( _ssh key_public_fingerprint_get keyfilename )'
 alias regen='_ rebuild; _(){ false;}; . /tmp/loader'
-alias unload='_ u'
+#alias unload='_ u'
 alias dropshell='echo >>$SCHEDULER_IMPORTANT "/etc/init.d/dropbear stop"; killall dropbear'
 
 read -r LOAD <'/proc/loadavg'
@@ -95,7 +95,7 @@ _ t 2>/dev/null || {
 				echo 'get stats with: _wifi longshot_report'
 			}
 
-			unload wifi
+			#unload wifi
 			unset NAME
 		}
 	}

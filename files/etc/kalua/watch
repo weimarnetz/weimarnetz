@@ -2373,3 +2373,48 @@ _watch_lowmem_freemem()
 
 	touch "$markerfile"
 }
+
+_watch_vpn()
+{
+	local func="watch_vpn"
+	local ip_server="$( _ipsystem getvar 'WIFIVPNSERVERADR' )"
+
+	if pidof vtund >/dev/null; then
+	        _log it $func daemon debug "daemon running"
+	        grep -sq ^"Interface .*tap0" /etc/olsrd.conf /var/etc/olsrd.conf || {   # fixme! more abstraction: tun/tapXY + conf-filename
+			_log it $FUNC daemon info "daemon running but tunnel-device not used by olsr"
+	        	return 1
+		}
+	        _log it $func daemon debug "tunnel-device is in olsr.conf"
+
+	        ps | grep vtund | grep -q connecting && {
+			_log it $func daemon info "daemon running but connection seems broken"
+	                return 1
+	        }
+	        _log it $func daemon debug "connection seems active"
+
+		vpn_server_is_neigh()
+		{
+			local file='/tmp/OLSR/LINKS'
+			local ip_other_side="$( _sanitizer run "$ip_server" escape_dots )"
+
+			_log it $func daemon debug "checking '$file' for ip: $ip_server"
+			grep -q "$ip_other_side" "$file"
+		}
+
+		if vpn_server_is_neigh; then
+			_log it $func daemon debug "tunnel-olsr neigh available"
+
+			_net ping_getlatency "$ip_server" 2>/dev/null || {
+				_log do $func daemon info "ping failed: $ip_server"
+				return 1
+			}
+	        else
+			_log it $func daemon info "no tunnel-olsr neigh available?!"
+	        	return 1
+	        fi
+	else
+		_log it $func daemon info "daemon NOT running"
+		return 1
+	fi
+}

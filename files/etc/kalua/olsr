@@ -1,22 +1,77 @@
 #!/bin/sh
 
+array_set()
+{
+	local name="$1"
+	local value="$2"
+
+	eval "ARRAY_${name}=$value"
+}
+
+array_get()
+{
+	local name="$1"
+	local varname="$2"
+
+	eval "$varname=\"\${ARRAY_${name}}\""
+}
+
+_olsr_defgw_change_stats()
+{
+	local file='/tmp/OLSR/DEFGW_changed'
+	local i=0
+	local t_sum=0
+	local line t t_old t_diff defgw defgw_sane oldIFS value
+
+	[ -e "$file" ] || return 0
+
+	while read -r line; do {
+		# 1473330000 12:36:02 empty
+		# 1473331203 12:40:03 10.10.9.1		-> 1203 sec empty
+		# 1473332203 ---xx--- empty		-> 1000 sec 10.10.9.1
+		# 1473334203 ---xx--- 10.10.3.1		-> 1000 sec empty
+		# 1473335203 ---xx--- 10.10.9.1		-> 1000 sec 10.10.3.1
+		explode $line
+		t=$1
+		defgw=$3
+
+		i=$(( i + 1 ))		# change-count
+		[ $i -eq 1 ] && todo	# ...
+
+		t_diff=$(( t - t_old ))
+		t_sum=$(( t_sum + t_diff ))
+
+		oldIFS="$IFS"; IFS=.; set -- $defgw; IFS="$oldIFS"
+		defgw_sane="${1}_${2}_${3}_${4}"	# valid varname
+
+		array_get "$defgw_sane" value
+		value=$(( ${value:-0} + t_diff ))
+
+		# raise array for each known gateway and sum_up t_diff, e.g:
+		# gw:empty  1234 sec 10%
+		# gw:ipadr1 2345 sec 40%
+		# gw:ipadr2 3456 sec 50%
+	} done <"$file"
+}
+
 _olsr_build_overview_static()		# runs as cron.minutely on vpn-server into '/tmp/statuspage_neigh_pregenerated'
 {
 	local funcname='olsr_build_overview_static'
 	local output="${1:-/var/www/cgi-bin-status.html}"
-
-	local time1 time2 size
+	local time1='-'
+	local time2 size
 	local tempfile="/tmp/$funcname"
 
 	_olsr uptime is_short && return 0
 
-	_stopwatch start "$funcname:build_tables"
-	# only on VPN-server: see uci() in /tmp/loader
-	uci unvalid_call 2>/dev/null && _olsr build_tables
-	time1="$( _stopwatch stop "$funcname:build_tables" )"
+	[ $OPENWRT_REV -eq 0 ] && {
+		_stopwatch start "$funcname:build_tables"
+		_olsr build_tables
+		time1="$( _stopwatch stop "$funcname:build_tables" )"
+	}
 
 	_stopwatch start "$funcname:cgi-bin-status.sh"
-	REMOTE_ADDR= /www/cgi-bin-status.sh >"$tempfile"
+	REMOTE_ADDR='' /www/cgi-bin-status.sh >"$tempfile"
 	time2="$( _stopwatch stop "$funcname:cgi-bin-status.sh" )"
 	size=$( _file size "$tempfile" )
 
@@ -24,11 +79,11 @@ _olsr_build_overview_static()		# runs as cron.minutely on vpn-server into '/tmp/
 	cp "$tempfile" "$output"
 
 	# this is ugly, we really compress 2 times (for showing compressed size)
-	gzip "$tempfile"
+	gzip -f "$tempfile"
 	size=$( _file size "$tempfile.gz" )
-	gzip -d "$tempfile.gz"
+	gzip -f -d "$tempfile.gz"
 	sed -i "s|bytes (cache) |&($size bytes gzip)|" "$tempfile"
-	gzip "$tempfile"
+	gzip -f "$tempfile"
 	mv "$tempfile.gz" "$output.gz"
 
 	# remove all marker-files (because we have fresh values), see /www/cgi-bin-status.sh
@@ -36,110 +91,719 @@ _olsr_build_overview_static()		# runs as cron.minutely on vpn-server into '/tmp/
 	rm /tmp/statuspage_neigh_lastfetch_*
 }
 
+_olsr_hna4_inetoffer()
+{
+	local funcname='olsr_hna4_inetoffer'
+	local action="$1"		# start | stop | check_active
+	local reason="${2:-no_reason}"
+	local i=0
+	local file='/tmp/OLSR/ALL'
+	local change=
+	local value
 
-_olsr_build_tables ()				# building of /tmp/OLSR_TMP/ALL 		// is called every minute
-{						#			   /LINKS
-	local func="olsr_build_tables"		#			   /LINKS.sh
-	local line				# and moving /tmp/OLSR_TMP/* -> /tmp/OLSR (which is used by all functions)
-	local uptime_was_short			# also collecting routing_table
+	case "$action" in
+		'check_active')
+			[ -e "$TMPDIR/olsr_hna_inetoffer_needed" ] || return 0		# see /etc/hotplug.d/iface/60...
+
+			if   grep -s -A2 ^'Table: HNA' "$file" | grep -q ^'0\.0\.0\.0/0'; then
+				return 0
+			elif [ -e "$file" ]; then
+				_olsr daemon restart "$funcname() $action"
+				echo >>$SCHEDULER_NEXTRUN '_olsr hna4_inetoffer check_active'
+			else
+				echo >>$SCHEDULER_NEXTRUN '_olsr hna4_inetoffer check_active'
+				return 0
+			fi
+		;;
+		'start')
+			. /etc/init.d/override_uci_vars
+			uci_already_added olsrd Hna4 netaddr '0.0.0.0' || {
+				change='true'
+				uci add olsrd Hna4 >/dev/null
+				uci set olsrd.@Hna4[-1].netaddr='0.0.0.0'
+				uci set olsrd.@Hna4[-1].netmask='0.0.0.0'
+			}
+		;;
+		'stop')
+			while value="$( uci -q get olsrd.@Hna4[$i].netaddr )"; do {
+				if [ "$value" = '0.0.0.0' ]; then
+					change='true'
+					uci del olsrd.@Hna4[$i]
+				else
+					i=$(( i + 1 ))
+				fi
+			} done
+		;;
+	esac
+
+	[ "$change" = 'true' ] && {
+		_log it $funcname daemon info "changed config: action: $action reason: $reason"
+		echo >>$SCHEDULER_NEXTRUN '_olsr hna4_inetoffer check_active'
+
+		# /var is a symlink to /tmp (ramdisk)
+		[ -e '/var/etc/olsrd.conf' ] && {
+			grep -q '0\.0\.0\.0 0\.0\.0\.0' '/var/etc/olsrd.conf' || {
+				_olsr daemon restart "$funcname() $reason"
+			}
+		}
+	}
+}
+
+_olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every minute
+{						#			   /LINKS + /LINKS.sh
+	local funcname='olsr_build_tables'	# and moving /tmp/OLSR_TMP/* -> /tmp/OLSR (which is used by all functions)
+	local line uptime_was_short firstrun	# also collecting routing_table
 	local configfile="/var/etc/olsrd.conf"
 	local max_errors=3
-
-	mkdir -p /tmp/OLSR /tmp/OLSR_TMP
+	local route_count=0
+#	local very_bad_wifi_neighs='false'	# FIXME! try to detect if any wifi-neigh is good (berlinle) otherwise 'wifi up'
+	local firstping_lan firstping_wan gateway gateway_old ip i cost cost_best prio has_wired_neigh parse
 
 	[ -e "$configfile" ] || {
-		_log it $func daemon info "config file not found, daemon was never started"
+		_log it $funcname daemon info "config file not found, daemon was never started"
 		return 0
 	}
 
 	while _olsr uptime is_short ; do {
-		_log it $func daemon info "waiting till olsr-uptime is long enough"
-		uptime_was_short="true"
+		_log it $funcname daemon info "waiting till olsr-uptime is long enough"
+
 		sleep 10
+		uptime_was_short='true'
+		[ -d '/tmp/OLSR' ] && rm -fR '/tmp/OLSR' '/tmp/OLSR_TMP'
 	} done
 
+	mkdir -p '/tmp/OLSR' '/tmp/OLSR_TMP'
+
 	while true; do {
-		if _curl it "http://127.0.0.1:2006/all" >/tmp/OLSR_TMP/ALL ; then
-			[ -e "/tmp/OLSR_TMP/ALL" ] && {
-				[ "$( _file size "/tmp/OLSR_TMP/ALL" )" = "0" ] || {
-					break
-				}
-			}
+		if _olsr txtinfo 'all' >'/tmp/OLSR_TMP/ALL' ; then
+			# filesize > 0
+			[ -s "/tmp/OLSR_TMP/ALL" ] && break
 
-			[ $max_errors -eq 0 ] && return 1
+			sleep 3		# needed on fast devices?
+			[ -s "/tmp/OLSR_TMP/ALL" ] && break
 
-			_log it $func daemon info "zero txtinfo.plugin-output, trying again"
+			_log it $funcname daemon info "zero txtinfo.plugin-output, trying again"
 		else
-			if [ $max_errors -eq 0 ]; then
-				if pidof olsrd >/dev/null ; then
-					_olsr daemon restart "$func did not work, but daemon is up"
-				else
-					_olsr daemon start   "$func did not work, daemon is not up"
-				fi
-
-				return 1
-			else
-				_log it $func daemon info "wget-error trying again"
-			fi
+			_log it $funcname daemon info "wget-error trying again"
 		fi
 
-		max_errors=$(( $max_errors - 1 ))
+		[ $max_errors -gt 0 ] || {
+			if pidof olsrd >/dev/null ; then
+				_olsr daemon restart "$funcname did not work, but daemon is up"
+			else
+				_olsr daemon start   "$funcname did not work, daemon is not up"
+			fi
+
+			return 0
+		}
+
+		max_errors=$(( max_errors - 1 ))
 		sleep "$( _math random_integer 1 5 )"
 	} done
 
-	ip route show table main >/tmp/OLSR_TMP/ROUTING_TABLE_MAIN	# fixme! update also when fetching neighbour table fails?
+	# FIXME! update also when fetching neighbour table fails?
+	ip route show table main >'/tmp/OLSR_TMP/ROUTING_TABLE_MAIN'
+	gateway="$( grep ^'default' '/tmp/OLSR_TMP/ROUTING_TABLE_MAIN' | head -n1 )"
 
-	while read line; do {
+	# FIXME! why can that happen? seen with e.g. r44150/limona5
+	case "$gateway" in
+		'default dev br-mastergate'*)
+			_log it $funcname daemon alert "removing: $gateway"
+			ip route del $gateway
+		;;
+	esac
+
+	while read -r line; do {
+		[ $route_count -eq 0 ] && {	# firstline of file
+			case "$line" in
+				'default '*)
+					# TODO: do not take a public IP into account
+					gateway="$( _sanitizer run "$line" ip4 )"
+
+					# TODO: ipv6?
+					# TODO: default routes can be late (not ontop)
+
+					# root@server1:/# tail -n5 /tmp/OLSR/ROUTING_TABLE_MAIN
+					# 10.142.0.0/16 via 10.63.1.49 dev wnvpn  metric 2 onlink
+					# 10.139.0.0/16 via 10.63.1.49 dev wnvpn  metric 2 onlink
+					# 10.64.0.0/11 via 10.63.1.49 dev wnvpn  metric 2 onlink
+					# default dev venet0  scope link
+					# default via 10.63.21.121 dev tap276  metric 2 onlink
+				;;
+				*)
+					# var '$gateway' was set just before the loop
+					if [ -n "$gateway" ]; then
+						explode $gateway
+
+						case "$gateway" in
+							'default via '*)
+								gateway="$( _sanitizer run "$3" ip4 )"
+							;;
+							*)
+								gateway="$3"
+							;;
+						esac
+					else
+						echo >>$SCHEDULER_IMPORTANT '_net inet_seems_stable'
+					fi
+				;;
+			esac
+
+			gateway="${gateway:-empty}"
+
+			if [ -e "/tmp/OLSR/DEFGW_$gateway" ]; then
+				read -r i <"/tmp/OLSR/DEFGW_$gateway"
+				i=$(( i + 1 ))
+			else
+				i=1
+			fi
+
+			echo "$i" >"/tmp/OLSR_TMP/DEFGW_$gateway"
+
+			# calc changerate
+			if [ -e '/tmp/OLSR/DEFGW_NOW' ]; then
+				read -r gateway_old <'/tmp/OLSR/DEFGW_NOW'
+			else
+				# first ever gateway seen
+				gateway_old="$gateway"
+				echo >>$SCHEDULER "_wifi speed check $gateway"		# will only test once
+
+				bool_true 'olsrd.@meta[0].nexthop_dns' && {
+					if _net ip4_is_private "$gateway"; then
+						_net dns_resolvconf_change_first_nameserver "$gateway" simple
+					else
+						_net dns_resolvconf_change_first_nameserver 'remove' simple
+					fi
+				}
+			fi
+
+			if [ "$gateway_old" = "$gateway" ]; then
+				# no gw-change:
+				[ -e "/tmp/OLSR_TMP/DEFGW_VALUES_$gateway" ] || {
+					_olsr best_inetoffer "/tmp/OLSR_TMP/ALL" >"/tmp/OLSR_TMP/DEFGW_VALUES_$gateway"
+				}
+
+				[ "$gateway" = 'empty' ] || {
+					echo "$gateway" >'/tmp/OLSR_TMP/DEFGW_LASTGOOD'
+
+					[ -s '/tmp/OLSR/meshrdf_neighs' ] || {
+						# for monitoring
+						echo >>$SCHEDULER "_olsr neighs_meshrdf_evalable >/tmp/OLSR/meshrdf_neighs"
+						# will only test once
+						echo >>$SCHEDULER "_wifi speed check $gateway"
+					}
+				}
+			else
+				# write to working dir: otherwise append does not work
+				# format: unixtime + e.g. 20:29:47 (humanreadable)
+				date +"%s %X $gateway" >>'/tmp/OLSR/DEFGW_changed'
+
+				[ "$gateway" = 'empty' ] || {
+					_net ip_reachable "$gateway" || {
+						# e.g. bad powerline-adapter with etx_ffeth
+						_olsr daemon restart "$funcname unreachable gateway: $gateway"
+					}
+
+					echo "$gateway" >'/tmp/OLSR_TMP/DEFGW_LASTGOOD'
+
+					echo >>$SCHEDULER "_olsr neighs_meshrdf_evalable >/tmp/OLSR/meshrdf_neighs"	# for monitoring
+					echo >>$SCHEDULER "_wifi speed check $gateway"					# will only test once
+				}
+
+				bool_true 'olsrd.@meta[0].nexthop_dns' && {
+					if _net ip4_is_private "$gateway"; then
+						_net dns_resolvconf_change_first_nameserver "$gateway" simple
+					else
+						_net dns_resolvconf_change_first_nameserver 'remove' simple
+					fi
+				}
+
+				_olsr best_inetoffer "/tmp/OLSR_TMP/ALL" >"/tmp/OLSR_TMP/DEFGW_VALUES_$gateway"
+			fi
+
+			echo "$gateway" >'/tmp/OLSR_TMP/DEFGW_NOW'
+
+			[ "$gateway" = 'empty' ] || {
+				_net ip4_is_private "$gateway" && {
+					_net ip_reachable "$gateway" || {
+						_net arp_reset
+						_olsr daemon restart "$funcname unreachable2 gateway: $gateway"
+					}
+				}
+			}
+		}
+
+		route_count=$(( route_count + 1 ))
+	} done <'/tmp/OLSR_TMP/ROUTING_TABLE_MAIN'
+	echo "$route_count" >'/tmp/OLSR_TMP/ROUTE_COUNT'
+
+	# marker file for being HNA-master
+	_olsr version >/dev/null
+
+	# FIXME! we need a generic approach:
+	# measure 'average' and detect breakdown.
+	# e.g. average = 195 -> count = 146 (75%) -> restart + new buildup of 'average'
+	case "${NODENUMBER}_${CONFIG_PROFILE}" in
+		'50_ejbw'*)
+			[ $route_count -lt 150 ] && {
+				_olsr daemon restart "$funcname too few routes: $route_count"
+				return 0
+			}
+		;;
+	esac
+
+	# here we try to catch this block:
+	#
+	# Table: Links
+	# Local IP        Remote IP       Hyst.   LQ      NLQ     Cost
+	# 10.63.39.65     10.63.8.67      0.00    1.000   0.851   1.175
+	# 10.63.39.65     10.63.34.65     0.00    1.000   1.000   1.000
+	# 10.63.39.65     10.63.10.65     0.00    0.819   0.819   1.488
+
+	parse=
+	while read -r line; do {
 		case "$line" in
-			"Table: Neighbors")			# fixme! safe all paragraphs? (All, Links, Neighbours, Topology, HNA, MID, Routes)
-				break
+			'Table: Links')
+				parse='true'
+			;;
+			'Table:'*)
+				test "$parse" = 'true' && break
 			;;
 			*)
-				echo "$line"
+				test "$parse" = 'true' || continue
 			;;
 		esac
-	} done </tmp/OLSR_TMP/ALL >/tmp/OLSR_TMP/LINKS
-								# COST of 'INFINITE' is converted to ''
 
-	sed -n '/0\.00/s/^\([0-9\.]*\)[^0-9]*\([0-9\.]*\)[^0-9]*0\.00[^0-9]*\([0-9\.]*\)[^0-9]*\([0-9\.]*\)[^0-9]*\([0-9\.]*\)/LOCAL=\1;REMOTE=\2;LQ=\3;NLQ=\4;COST=\5;COUNT=\$\(\( \$COUNT \+ 1 \)\)/p' "/tmp/OLSR_TMP/LINKS" >"/tmp/OLSR_TMP/LINKS.sh"
+		case "$line" in
+			[0-9]*)
+				explode $line
+			;;
+			*)
+				continue
+			;;
+		esac
 
-	mv /tmp/OLSR_TMP/* /tmp/OLSR
+		if [ "$6" = 'INFINITE' ]; then
+			cost=
+		else
+			cost="$6"
+		fi
 
-	did_we_ever_had_neighbours()
-	{
-		ls -1 /tmp/OLSR/isneigh_* >/dev/null 2>/dev/null
-	}
+		# $IPT -I INPUT -i $WANDEV -p udp --dport 698 ! -s $WANADR -j LOG --log-prefix "WANolsrIN: "
+		# - mark, if we have an WAN/LAN-neigh: e.g. /www/has_lanneigh
+		# - if no wired neigh: remove file + restart olsr -> if there is really one, entry will reappear
 
-	did_we_ever_had_neighbours && {
-		[ $( _file size "/tmp/OLSR/LINKS.sh" ) -eq 0 ] && {
-			_log it $func daemon alert "detected 0 neighbours"
-			return 1
+		[ -e "/tmp/OLSR/is_my_neigh-$2" ] || {
+			touch "/tmp/OLSR/is_my_neigh-$2"
+			_log it $funcname daemon info "new neigh $2"
+		}
+
+		# this is a test for a faulty switch, not for OLSR
+		case "$1" in
+			$LANADR)
+				has_wired_neigh='true'
+				[ -e '/www/OLSR_has_neigh_LAN' ] || echo "$2" >'/www/OLSR_has_neigh_LAN'
+
+				[ "$firstping_lan" = 'false' ] || {
+					if _net ip_reachable "$2" 'ping' "$LANDEV"; then
+						# ok, only 1 check per dev
+						firstping_lan='false'
+						echo "$2" >"/tmp/OLSR/goodping_$LANDEV"
+					else
+						# = we _have_ a wired neigh, but unreachable
+						firstping_lan='error'
+					fi
+				}
+
+				case "$cost" in
+					'1.0'*|'1.1'*|'1.000'|'0.100')
+						[ -e "/tmp/$funcname-unstableLAN" ] && rm "/tmp/$funcname-unstableLAN"
+					;;
+					*)
+						[ -e "/tmp/OLSR_TMP/$funcname.unstable_interface.lan" ] || {
+							# only complain once per interface
+							touch "/tmp/OLSR_TMP/$funcname.unstable_interface.lan"
+
+						[ $( _system uptime min ) -lt 15 ] || {
+							if bool_true 'system.@monitoring[0].ignore_lossyethernet'; then
+								prio='info'	# e.g. powerline or wireless-bridge
+							else
+								prio='alert'
+							fi
+
+							# TODO: only log valid IPs: _ipsystem getvar '....ADR' $REMOTE_NODENUMBER
+							_log it $funcname daemon $prio "unstable LAN: $*"
+							_watch counter "/tmp/$funcname-unstableLAN" increment 1 max 5 || {
+								bool_true 'olsrd.@meta[0].reboot_weak_ethernet' && {
+									_system crashreboot 'flappy_olsr'
+								}
+							}
+						}
+						}
+					;;
+				esac
+			;;
+			$WANADR)
+				has_wired_neigh='true'
+				[ -e '/www/OLSR_has_neigh_WAN' ] || echo "$2" >'/www/OLSR_has_neigh_WAN'
+
+				[ "$firstping_wan" = 'false' ] || {
+					if _net ip_reachable "$2" 'ping' "$WANDEV"; then
+						# ok, only 1 check per dev
+						firstping_wan='false'
+						echo "$2" >"/tmp/OLSR/goodping_$WANDEV"
+					else
+						# = we _have_ a wired neigh, but unreachable
+						firstping_wan='error'
+					fi
+				}
+
+				case "$cost" in
+					'1.0'*|'1.1'*|'1.000'|'0.100')
+						[ -e "/tmp/$funcname-unstableWAN" ] && rm "/tmp/$funcname-unstableWAN"
+					;;
+					*)
+						[ -e "/tmp/OLSR_TMP/$funcname.unstable_interface.wan" ] || {
+							# only complain once per interface
+							touch "/tmp/OLSR_TMP/$funcname.unstable_interface.wan"
+
+						[ $( _system uptime min ) -lt 15 ] || {
+							if bool_true 'system.@monitoring[0].ignore_lossyethernet'; then
+								prio='info'	# powerline or airOS
+							else
+								prio='alert'
+							fi
+
+							# TODO: only log valid IPs: _ipsystem getvar '....ADR' $REMOTE_NODENUMBER
+							_log it $funcname daemon $prio "unstable WAN: $*"
+							_watch counter "/tmp/$funcname-unstableWAN" increment 1 max 5 || {
+								bool_true 'olsrd.@meta[0].reboot_weak_ethernet' && {
+									_system crashreboot 'flappy_olsr'
+								}
+							}
+						}
+						}
+					;;
+				esac
+			;;
+			*)
+				# TODO: special case for 'tapX'
+
+				# this is for detecting a somehow broken/misbehaving
+				# wireless-driver, normally all values are ~1.x and
+				# under load it goes up to INFINITE
+				needs_watching()	# TODO: define via uci
+				{
+					local remote_ip="$1"
+
+					case "$CONFIG_PROFILE" in
+						'olympia'*)
+							return 0
+						;;
+						'berlinle'*)
+							[ "$NODENUMBER" = '2' ] && {
+								case "$remote_ip" in
+									*'.6.'*|*'.4.'*|*'.12.'*)
+										return 0
+									;;
+								esac
+							}
+						;;
+					esac
+
+					return 1
+				}
+
+				needs_watching "$2" && {
+					case "$6" in
+						'1.'*)
+							# ETX/cost
+						;;
+						*)
+							_log it $funcname daemon alert "bad: remote: $2 cost: $6"
+						;;
+					esac
+				}
+
+				# special marker for 'is a WiFi neigh'
+				[ -e "/tmp/OLSR/isneigh_$2" ] || {
+					touch "/tmp/OLSR/isneigh_$2"
+					_log it $funcname daemon info "1st contact to WiFi-neigh: $2"
+					_net ip2mac "$2" >/dev/null
+				}
+				touch "/tmp/OLSR/isneigh_$2"
+
+				if [ -e "/tmp/OLSR/isneigh_${2}_bestcost" ]; then
+					read -r cost_best <"/tmp/OLSR/isneigh_${2}_bestcost"
+
+					[ -n "$cost" ] && {
+						# 3.421 -> 3421
+						[ ${cost%.*}${cost#*.} -lt ${cost_best%.*}${cost_best#*.} ] && {
+							echo "$cost" >"/tmp/OLSR_TMP/isneigh_${2}_bestcost"
+						}
+					}
+				else
+					[ -n "$cost" ] && {
+						echo "$cost" >"/tmp/OLSR_TMP/isneigh_${2}_bestcost"
+					}
+				fi
+			;;
+		esac
+
+		# TODO: dump into RRD
+
+		# we build an includeable file:
+		# var $COUNT is then automatically counted up
+		if [ "$firstrun" = 'false' ]; then
+			echo "LOCAL=$1;REMOTE=$2;LQ=$4;NLQ=$5;COST=${cost};COUNT=\$(( COUNT + 1 ))"
+		else
+			firstrun='false'
+			echo "LOCAL=$1;REMOTE=$2;LQ=$4;NLQ=$5;COST=${cost};COUNT=1"
+		fi
+
+		# accidentally added to netfilter?
+		[ -e "/tmp/NETFILTER/IP2MAC/$2" ] && {
+			_netfilter user_del "$( _net ip2mac "$2" )"
+		}
+
+		_olsr throttle_traffic "$2"
+
+		[ -f "/tmp/OLSR/fixed_arp_$2" ] || {
+			bool_true 'olsrd.@meta[0].fixedarp' && {
+				echo >>$SCHEDULER "_olsr force_static_arp $2 $1"
+			}
+		}
+
+		echo "$line" >>'/tmp/OLSR_TMP/LINKS'
+	} done <'/tmp/OLSR_TMP/ALL' >'/tmp/OLSR_TMP/LINKS.sh'
+
+	# FIXME! workaround for buggy 'mv'-function in loader
+	/bin/mv /tmp/OLSR_TMP/* /tmp/OLSR
+
+	[ -z "$has_wired_neigh" ] && {
+		[ -e '/www/OLSR_has_neigh_WAN' -o -e '/www/OLSR_has_neigh_LAN' ] && {
+			# give some time for the other side / neighbour
+			[ $( _system uptime min ) -lt 60 -a $( _system uptime min ) -gt 15 ] && {
+				local oldneighs="$( cat /www/OLSR_has_neigh_WAN /www/OLSR_has_neigh_LAN 2>/dev/null )"
+				[ -e '/www/OLSR_has_neigh_WAN' ] && rm '/www/OLSR_has_neigh_WAN'
+				[ -e '/www/OLSR_has_neigh_LAN' ] && rm '/www/OLSR_has_neigh_LAN'
+				_olsr daemon restart "$funcname - missing formally known wired neigh: '$oldneighs'"
+			}
 		}
 	}
 
-	[ "$uptime_was_short" = "true" ] && {
+	# attention, this leads to the following behaviour:
+	# if we ever had a wan/lan-neighbour, which was pingable and
+	# we loose all (if there is only _one_ it will happen) then the
+	# other side (we) will crashreboot:
+
+	if [ "$firstping_lan" = 'error' ]; then
+		bool_true 'system.@monitoring[0].ignore_lossyethernet' || {
+			_log it $funcname daemon alert "lan-ping failed"
+			_watch counter "/tmp/error_lanping_$funcname" increment 1 max 5 || _system crashreboot 'lanping'
+		}
+	else
+		if   [ "$firstping_lan" = 'false' ]; then
+			[ -e "/tmp/error_lanping_$funcname" ] && rm "/tmp/error_lanping_$funcname"
+		elif [ -e "/tmp/OLSR/goodping_$LANDEV" ]; then
+			read -r ip <"/tmp/OLSR/goodping_$LANDEV"
+
+			if _net ip_reachable "$ip" 'ping' "$LANDEV"; then
+				[ -e "/tmp/error_lanping_$funcname" ] && rm "/tmp/error_lanping_$funcname"
+			else
+				bool_true 'system.@monitoring[0].ignore_lossyethernet' || {
+					# only for valid IP's
+					_ipsystem get "$ip" >/dev/null && {
+						_log it $funcname daemon alert "lan-ping to '$ip' failed"
+						_watch counter "/tmp/error_lanping_$funcname" increment 1 max 5 || _system crashreboot 'lanping'
+					}
+				}
+			fi
+		fi
+	fi
+
+	if [ "$firstping_wan" = 'error' ]; then
+		bool_true 'system.@monitoring[0].ignore_lossyethernet' || {
+			_log it $funcname daemon alert "wan-ping failed"
+			_watch counter "/tmp/error_wanping_$funcname" increment 1 max 5 || _system crashreboot 'wanping'
+		}
+	else
+		if   [ "$firstping_wan" = 'false' ]; then
+			[ -e "/tmp/error_wanping_$funcname" ] && rm "/tmp/error_wanping_$funcname"
+		elif [ -e "/tmp/OLSR/goodping_$WANDEV" ]; then
+			read -r ip <"/tmp/OLSR/goodping_$WANDEV"
+
+			if _net ip_reachable "$ip" 'ping' "$WANDEV"; then
+				[ -e "/tmp/error_wanping_$funcname" ] && rm "/tmp/error_wanping_$funcname"
+			else
+				bool_true 'system.@monitoring[0].ignore_lossyethernet' || {
+					# only for valid IP's
+					_ipsystem get "$ip" >/dev/null && {
+						_log it $funcname daemon alert "wan-ping to '$ip' failed"
+						_watch counter "/tmp/error_wanping_$funcname" increment 1 max 5 || _system crashreboot 'wanping'
+					}
+				}
+			fi
+		fi
+	fi
+
+	did_we_ever_had_neighbours()
+	{
+		bool_true 'olsrd.@meta[0].no_watching' && return 1
+
+		# this means 'WiFi-neigh' and 'LAN/WAN-neigh' and/or VPN-neighs
+		ls -1 /tmp/OLSR/isneigh_*  2>/dev/null >/dev/null && return 0
+		ls -1 /tmp/OLSR/goodping_* 2>/dev/null >/dev/null && return 0
+	}
+
+	if did_we_ever_had_neighbours; then
+		[ $( _file size '/tmp/OLSR/LINKS.sh' ) -eq 0 -a $OPENWRT_REV -gt 0 ] && {
+			_system maintenance_window_active 'pppoe_reconnect' || {
+				_log it $funcname daemon alert 'detected 0 neighbours'
+			}
+
+			return 1
+		}
+	else
+		bool_true 'olsrd.@meta[0].allow_no_neigh' || {
+			_watch counter '/tmp/OLSR/watch_noneighs' increment 1 max 60 autoremove || {
+				_olsr daemon restart 'no neigh for 60 calls'
+			}
+		}
+	fi
+
+	[ "$uptime_was_short" = 'true' ] && {
 		/usr/sbin/cron.check_inet_gw_fff+
+	}
+
+	[ -e '/tmp/olsr_throttle.firstrun' ] && {
+		rm '/tmp/olsr_throttle.firstrun'
+
+		# https://dev.openwrt.org/ticket/18419
+		[ $OPENWRT_REV -gt 38651 ] || {
+			$IPT -A OLSR -j LOG --log-prefix 'OLSR: unknown: '
+		}
 	}
 
 	return 0
 }
 
-_olsr_gateways_get()            # OUT: list with each HNA4-0.0.0.0/0-announcing IP line by line
+_olsr_throttle_traffic()	# TODO: choose droprate according to OLSR-speed and neighbour count
 {
-        local file="/tmp/OLSR/ALL"      # fixme! make ROUTES
-        local line
+	local funcname='olsr_throttle_traffic'
+	local ip_or_dev="$1"
+	local option="$2"	# e.g. 'myself' or 'restart'
+	local ip dev list=
+	local dir='/tmp/OLSR_throttle'
 
-        grep ^"0.0.0.0/0" "$file" | while read line; do set -- $line; test -n "$3" || echo $2; done
+	[ -e "$dir/${ip_or_dev:-no_value}" ] && return 0
+
+	bool_true 'olsrd.@meta[0].throttle_traffic' || return 1
+	bool_true 'olsrd.@meta[0].hnaslave'	    && return 1
+
+	[ "$ip_or_dev" = 'restart' -o "$option" = 'restart' ] && {
+		$IPT -D INPUT  -p udp --dport 698 -j OLSR
+		$IPT -D OUTPUT -p udp --dport 698 -j OLSR
+		$IPT --flush        OLSR_MYSELF
+		$IPT --delete-chain OLSR_MYSELF
+		$IPT --flush        OLSR
+		$IPT --delete-chain OLSR
+
+		for ip in "$dir/myself_dev-"*; do {
+			ip=${ip#*-}
+			_net ip4_is_private "$ip" && list="$list $ip"
+		} done
+		rm -fR "$dir"
+
+		for ip in $list; do {
+			_olsr throttle_traffic "$ip" 'myself'
+		} done
+
+		return 0
+	}
+
+	mkdir "$dir" 2>/dev/null && {
+		touch '/tmp/olsr_throttle.firstrun'
+
+		_log it $funcname daemon info "initial setup"
+		$IPT -N OLSR
+		$IPT -N OLSR_MYSELF
+		$IPT -I INPUT  -p udp --dport 698 -j OLSR
+		$IPT -I OUTPUT -p udp --dport 698 -j OLSR
+		$IPT -I OLSR -j OLSR_MYSELF
+	}
+
+	if _net dev_is_valid "$ip_or_dev"; then
+		ip="$( _net dev2ip "$ip_or_dev" )"	# e.g. eth0 -> 10.10.8.33
+	else
+		ip="$ip_or_dev"
+	fi
+
+	[ -z "$ip" ] && _log it $funcname daemon alert "emtpy ip - call: ip_or_dev: $ip_or_dev option: $option"
+
+	if [ "$option" = 'myself' ]; then
+		_log it $funcname daemon info "ip: $ip ($option)"
+		$IPT -I OLSR_MYSELF -s $ip -j DROP
+		$IPT -I OLSR_MYSELF -s $ip -m limit --limit '20/s' --limit-burst 25 -j ACCEPT
+	else
+		_log it $funcname daemon info "ip: $ip"
+		$IPT -I OLSR -s $ip -j DROP
+		$IPT -I OLSR -s $ip -m limit --limit '10/s' --limit-burst 15 -j ACCEPT
+
+		# destination is normally 255.255.255.255
+		dev="$( _net ip2dev "$ip" )"
+		[ -e "$dir/outgoing_dev-$dev" ] || {
+			touch "$dir/outgoing_dev-$dev"
+			$IPT -I OLSR -i $dev		# just measuring
+			$IPT -I OLSR -o $dev -j DROP
+			$IPT -I OLSR -o $dev -m limit --limit '50/s' --limit-burst 50 -j ACCEPT
+		}
+	fi
+
+	# remote useless complains from dmesg:
+	. /usr/sbin/cron.check_klog
+	sed -i "/.* OLSR: unknown: .* SRC=$( _sanitizer run "$ip" escape_dots ) DST=255.255.255.255.*/d" '/tmp/dmesg.log'
+
+	touch "$dir/$ip_or_dev" "$dir/myself_dev-$ip"
 }
 
-_olsr_remoteip2metric ()	# need OLSR_ROUTES
+_olsr_force_static_arp()	# ATTENTION: a fixed arp-entry leads to strange effects
+{				#	     when we replug wired routers from e.g. lan to wan
+	local funcname='olsr_force_static_arp'
+	local ip="$1"
+	local local_ip="$2"
+	local marker="$TMPDIR/OLSR/fixed_arp_$ip"
+	local mac dev
+	local max_try=1
+
+	[ -e "$marker" ] || {
+		mac="$( _net ip2mac "$ip" )" && {
+			dev="$( _net ip2dev "$local_ip" )"
+			_net dev_is_wifi "$dev" && max_try=10
+
+			arping -c $max_try -s "$local_ip" -I "$dev" "$ip" >/dev/null || {
+				_log it $funcname daemon info "arping failed $max_try times: $local_ip -> $dev -> $ip"
+				return 1
+			}
+
+			_netfilter set_arp permanent "$mac" "$ip" "$dev" && {
+				touch "$marker"
+			}
+		}
+	}
+}
+
+_olsr_remoteip2metric()
 {
 	local ip="$1"
-	local file="/tmp/OLSR/ALL"	# fixme! make ROUTES
+	local file='/tmp/OLSR/ALL'
+	local metric ip_escaped
 
-	ip="$( echo $ip | sed 's/\./\\\./g' )\/32"	# hiding dots for next regex and sed-safe append /32
+	ip_escaped="$( _sanitizer run "$ip" escape_dots )"
+	explode $( grep ^"$ip_escaped/32" "$file" )
+	metric="$3"
 
-	sed -n "/^$ip/{s/^$ip	[0-9\.]*	\([0-9]*\)	.*/\1/p;q}" "$file"
+	test -n "$metric" && echo "$metric"
 }
 
 _olsr_daemon()
@@ -147,42 +811,67 @@ _olsr_daemon()
 	local funcname="olsr_daemon"
 	local ACTION="$1"
 	local REASON="${2:-no_reason_given}"
-	local LOGPRIO="alert"
-	local LIST
+	local LOGPRIO='alert'
+	local LIST ip
 
 	case "$REASON" in
-		olsrd_restart_scheduler_controlled|plausi_check_failed|"becoming hna-master"*)
-			LOGPRIO=info
+		'batman_active_now'|'olsrd_restart_scheduler_controlled'|'plausi_check_failed'|'becoming hna-master'*)
+			LOGPRIO='info'
+		;;
+		*'hna4-slave'*|*'hotplug: ifup.wan.'*)
+			LOGPRIO='info'
+		;;
+		'olsr_uptime'*)
+			[ -n "$LOWMEM" ] && LOGPRIO='info'
 		;;
 	esac
 
 	case "$ACTION" in
 		start|stop|restart)
+			_olsr uptime mark_restart
 
 			case "$ACTION" in
+				stop)
+					# is generated via olsr_version() which is called from build_tables()
+					# without this file we refuse to be an OLSR-master for slaves
+					rm '/tmp/OLSR/daemon_version'
+
+					for ip in "/tmp/OLSR/fixed_arp_"*; do {
+						ip="${ip#*arp_}"
+						_net ip4_is_private "$ip" || continue
+						_netfilter set_arp reachable 'mac?' "$ip"
+					} done
+				;;
 				start|restart)
-					_olsr uptime mark_restart
-					echo >>/tmp/OLSR/restart_reasons "$( date ): $REASON"
+					mkdir -p '/tmp/OLSR'
+					echo >>'/tmp/OLSR/restart_reasons' "$( date ): $REASON"
 
 					[ "$ACTION" = "start" ] && {
 						pidof olsrd >/dev/null && {
-							ACTION="restart"
+							ACTION='restart'
+						}
+					}
+
+					[ -e '/sbin/netifd' ] && {
+						pidof netifd >/dev/null || {
+							_system crashreboot 'olsr_no_netifd'
 						}
 					}
 				;;
 			esac
 
-			if [ "$ACTION" = "restart" ]; then
-				LIST="stop start"
+			if [ "$ACTION" = 'restart' ]; then
+				LIST='stop start'
 			else
 				LIST="$ACTION"
 			fi
 
 			for ACTION in $LIST; do {
 				_log it $funcname daemon $LOGPRIO "$ACTION: $REASON"
-				
-				if [ -e /etc/init.d/*olsrd ]; then
-					/etc/init.d/*olsrd $ACTION | logger -s
+
+				if [ -e '/etc/init.d/olsrd' ]; then
+					# TODO: . /etc/rc.common /etc/init.d/olsrd restart
+					/etc/init.d/olsrd $ACTION | logger -s
 				else
 					# on vpn-server:
 					# ln -s /root/olsrd1/olsrd-0.6.7/olsrd /usr/sbin/olsrd
@@ -210,8 +899,18 @@ _olsr_daemon()
 						}
 					;;
 					start)
-						_scheduler add "sleep 300"
-						_scheduler add "_net refresh_dnshosts"
+						pidof olsrd >/dev/null  || {
+							# config is fresh generated?
+							_file age "$olsrd_config" -lt 10 && {	# [10 sec]
+								_watch coredump "after: $funcname start" || {
+									# we had NO crash, but e.g. a missing ubus -> no ifnames
+									# ignore on VPN-server:
+									[ $OPENWRT_REV -eq 0 ] || _system crashreboot 'olsrd_missing'
+								}
+							}
+						}
+
+						echo >>$SCHEDULER '_net refresh_dnshosts'
 					;;
 				esac
 			} done
@@ -219,86 +918,1108 @@ _olsr_daemon()
 	esac
 }
 
-_olsr_uptime ()		# in seconds
+_olsr_version()
 {
-	local KEYWORD="$1"		# string: "is_short", "mark_restart", "restarts_get", "restart_time" or <empty> = get
-	local FUNC="olsr_uptime"
+	local version
+	local file='/tmp/OLSR/daemon_version'
+
+	if cat "$file" 2>/dev/null; then
+		return 0
+	else
+		mkdir -p "$( dirname "$file" )"
+	fi
+
+	case "$( _file hash '/usr/sbin/olsrd' )" in
+		0e2e2a7075ab294e1f784bf1191e099a) version='pre-0.6.0_2010-04-10_ff1.6.38' ;;
+		0f5db811586d06a2eddd84e7d83f14e4) version='pre-0.5.6-r7_2009-10-27_ff1.6.37' ;;
+		64a7b006218164827df8c43e4a5574d4) version='pre-0.5.6-r4_2009-01-02_ff1.6.36' ;;
+		033811480fbd2cf9801a10f0112c5987) version='pre-0.5.7-tip_2008-12-28_ff1.x.x' ;;
+		*)
+			if [ -e '/etc/olsrd-release' ]; then
+				while read -r version; do printf '%s' "$version "; done <'/etc/olsrd-release'
+				version="unknown build: $version"
+			else
+				# exstract everything between *** [...] *** and strip spaces
+				version="$( olsrd -v | grep -F ' olsr.org ' | sed 's/[* ]//g' )"
+
+				case "$version" in
+					*'git_6485b2e'*)
+						version='olsr.org-0.9.0.2-release'
+					;;
+				esac
+			fi
+		;;
+	esac
+
+	[ -n "$version" ] && echo "$version" >"$file"
+	echo "${version:-unknown}"
+}
+
+_olsr_uptime()			# in seconds
+{
+	local option="$1"	# string: "is_short", "mark_restart", "restarts_get", "restart_time" or <empty> = get
+	local funcname='olsr_uptime'
+
 	local FILE_RESTART_TIME="/tmp/STATS_OLSR_RESTART_LAST"
 	local FILE_RESTARTS="/tmp/STATS_OLSR_RESTARTS"
-	local TIME_LAST_START TIME_NOW DIFF I
+	local TIME_LAST_START TIME_NOW DIFF
+	local I=
 
-	TIME_NOW="$( _system uptime )"
+	TIME_NOW="$( _system uptime sec )"
 
-	if [ -e $FILE_RESTART_TIME ]; then
-		read TIME_LAST_START <$FILE_RESTART_TIME
+	if [ -e "$FILE_RESTART_TIME" ]; then
+		read -r TIME_LAST_START <"$FILE_RESTART_TIME"
 	else
-		echo "$TIME_NOW" >$FILE_RESTART_TIME
+		echo "$TIME_NOW" >"$FILE_RESTART_TIME"
 		TIME_LAST_START="$TIME_NOW"
 	fi
 
-	DIFF="$(( $TIME_NOW - ${TIME_LAST_START:-0} ))"
+	DIFF=$(( TIME_NOW - ${TIME_LAST_START:-0} ))
 
-	case "$KEYWORD" in
-		is_short)
-			if [ $DIFF -lt 30 ]; then
+	case "$option" in
+		'is_short')
+			if [ $DIFF -lt 90 ]; then
+				_log it $funcname daemon info "$option: yes = $DIFF sec"
+
+				pidof olsrd >/dev/null || {
+					[ $TIME_NOW -gt 600 ] && {
+						_olsr daemon restart "$funcname() no running daemon"
+					}
+				}
 				return 0
 			else
 				return 1
 			fi
 		;;
-		mark_restart)
-			echo "$TIME_NOW" >$FILE_RESTART_TIME
-			
-			read I 2>/dev/null <$FILE_RESTARTS
-			echo $(( ${I:-0} + 1 )) >$FILE_RESTARTS
-		;;
-		restarts_get)
-			read I 2>/dev/null <$FILE_RESTARTS
+		'mark_restart')
+			echo "$TIME_NOW" >"$FILE_RESTART_TIME"
 
-			[ ${I:-0} -gt 300 ] && {
-				_log it $FUNC daemon alert "busybox bug: restarts_get: $I"
+			read -r I 2>/dev/null <"$FILE_RESTARTS"
+			echo $(( ${I:-0} + 1 )) >"$FILE_RESTARTS"
+		;;
+		'restarts_get')
+			if [ -e "$FILE_RESTARTS" ]; then
+				read -r I 2>/dev/null <"$FILE_RESTARTS"
+
+				if isnumber "$I" ; then
+					[ $I -gt 300 -a $OPENWRT_REV -gt 0 ] && {
+						_log it $funcname daemon alert "busybox bug: restarts_get: $I"
+						I=0
+					}
+				else
+					_log it $funcname daemon alert "not a number: I: '$I' from '$FILE_RESTARTS'"
+					I=0
+				fi
+			else
 				I=0
-			}
+			fi
 
 			echo ${I:-0}
 		;;
-		restart_time)
-			DIFF="$(( $TIME_NOW - ${TIME_LAST_START:-0} ))"
-			echo "$(( $( _system date unixtime ) - $DIFF ))"
+		'restart_time')
+			DIFF=$(( TIME_NOW - ${TIME_LAST_START:-0} ))
+			echo "$(( $( _system date unixtime ) - DIFF ))"
 		;;
-		*)
-			echo -n $DIFF
+		'get'|*)
+			printf '%s' "$DIFF"
 		;;
 	esac
 }
 
-_olsr_restarts_are_suspicious_often ()
+_olsr_gateways_get()		# OUT: list with each HNA4-0.0.0.0/0-announcing IP line by line
 {
-	local func="olsr_restarts_are_suspicious_often"
+	local file='/tmp/OLSR/ALL'	# TODO make ROUTES
+	local line
+
+	# e.g.:
+	# 0.0.0.0/0       10.63.21.97
+	grep ^'0\.0\.0\.0/0' "$file" | while read -r line; do explode $line; test -n "$3" || echo $2; done
+}
+
+_olsr_neigh_random_get()
+{
+	local funcname='olsr_neigh_random_get'
+	local file='/tmp/OLSR/LINKS.sh'
+	local LOCAL REMOTE LQ NLQ COST COUNT random
+	local COUNT=0
+
+	# LOCAL=10.63.2.1;REMOTE=10.63.89.129;LQ=1.000;NLQ=1.000;COST=1.000;COUNT=$(( COUNT + 1 ))
+	while read -r line; do {
+		eval $line
+	} done <"$file"			# check REMOTE and COUNT
+
+	if [ -n "$REMOTE" ]; then
+		random="$( _math random_integer 1 $COUNT )"
+		eval $( sed -n "${random}p" "$file" )
+
+		_log it $funcname daemon debug "$LOCAL;$REMOTE;$LQ;$NLQ;$COST;$COUNT;random=$random"
+		echo "$REMOTE"
+		return 0
+	else
+		_log it $funcname daemon info 'no neighbour, no random neighour'
+		return 1
+	fi
+}
+
+_olsr_neigh_random_pair_from_mesh_evalable ()		# OUT: 'LOCAL={ip};REMOTE={ip};LQ=...;NLQ=...;COST=...'
+{
+	local file='/tmp/OLSR/ALL'		# use TOPOLOGY
+
+	local lines="$( sed -e '/./{H;$!d;}' -e "x;/^Table: Topology/!d;" "$file" | sed -n '$=' )"
+	local random="$( _math random_integer 4 $lines )"
+
+	sed -e '/./{H;$!d;}' -e "x;/^Table: Topology/!d;" "$file" |
+	 sed -n "${random}p" |
+	  sed -n 's/^\([0-9\.]*\)[^0-9]*\([0-9\.]*\)[^0-9]*\([0-9\.]*\)[^0-9]*\([0-9\.]*\)[^0-9]*\([0-9\.]*\).*/\LOCAL=\1\nREMOTE=\2\nLQ=\3\nNLQ=\4\nCOST=\5/p'
+}
+
+_olsr_best_inetoffer()
+{
+	local file="${1:-/tmp/OLSR/ALL}"
+	local line parse
+
+	while read -r line; do {
+		case "${parse}${line}" in
+			'Table: Routes')
+				parse='true-'
+			;;
+			'true-0.0.0.0/0'*)
+				explode $line
+				echo "GATEWAY=$2;METRIC=$3;ETX=$4;INTERFACE=$5"
+				return
+			;;
+		esac
+	} done <"$file"
+}
+
+_olsr_node_evalable ()
+{
+	local NODE="$1"
+	local FILE="/tmp/OLSR/ALL"		# use ROUTES
+
+	sed -e '/./{H;$!d;}' -e "x;/^Table: Routes/!d;" $FILE |
+	 grep ^"${NODE}/32" |
+	  sed -n 's/^[0-9\.]*\/32[^0-9]*\([0-9\.]*\)[^0-9]*\([0-9]*\)[^0-9]*\([0-9\.]*\).*/GATEWAY=\1\nMETRIC=\2\nCOST=\3/p'
+}
+
+_olsr_neigh_check_for_nonwifi ()
+{
+	local FUNC="olsr_check_if_any_nonwifi_neigh"
+	local FILE="/tmp/OLSR/LINKS.sh"
+
+	while read -r LINE; do {
+		eval $LINE
+
+		DEVTYPE="$( _net dev_type $( _net ip2dev "$LOCAL" ) )"
+		[ -n "$DEVTYPE" ] && {
+			[ "$DEVTYPE" != "wifi" ] && {
+				_log it $FUNC daemon debug "found nonwifi neigh: '$REMOTE'"
+				return 0
+			}
+		}
+	} done <"$FILE"
+
+	_log it $FUNC daemon debug "found only wifi neighbours"
+	return 1
+}
+
+_olsr_neigh_check_for_wifi ()
+{
+	local FUNC="olsr_check_for_wifi_neigh"
+	local FILE="/tmp/OLSR/LINKS.sh"
+
+	while read -r LINE; do {
+		eval $LINE
+
+		DEVTYPE="$( _net dev_type $(_net ip2dev "$LOCAL" ) )"
+		[ "$DEVTYPE" = "wifi" ] && {
+			_log it $FUNC daemon debug "found wifi neigh: '$REMOTE'"
+			return 0
+		}
+
+	} done <"$FILE"
+
+	_log it $FUNC daemon debug "found only non-wifi neighbours"
+	return 1
+}
+
+_olsr_neigh_nlq()
+{
+	local file='/tmp/OLSR/LINKS.sh'
+	local neigh_ip="$1"
+	local option="$2"	# FIXME! speedtest
+	local nlq lq cost line
+
+	# LOCAL=10.63.2.1;REMOTE=10.63.89.129;LQ=1.000;NLQ=1.000;COST=1.000;COUNT=$(( COUNT + 1 ))
+	while read -r line; do {
+		eval $line
+
+		if [ "$REMOTE" = "$neigh_ip" ]; then
+			break
+		else
+			nlq=
+			lq=
+			cost=
+		fi
+	} done <"$file"
+
+	if [ -z "$nlq" ]; then
+		return 1
+	else
+		_sanitizer include
+
+		nlq="$(  _sanitizer run "$nlq"  numeric )"
+		lq="$(   _sanitizer run "$lq"   numeric )"
+		cost="$( _sanitizer run "$cost" numeric )"
+
+		if [ -z "$option" ]; then
+			echo "${nlq:-0}"
+		else
+			echo "NLQ=${nlq:-0};LQ=${lq:-0};COST=${cost:-0};"
+		fi
+	fi
+}
+
+_olsr_neigh_nlq_best_wifi ()
+{
+	local FILE="/tmp/OLSR/LINKS.sh"
+	local NLQ_MAX=
+
+	while read -r LINE; do {
+		eval $LINE
+
+		DEVTYPE="$( _net dev_type $(_net ip2dev "$LOCAL" ) )"
+		[ "$DEVTYPE" = "wifi" ] && {
+			NLQ="$( echo ${NLQ:=0.000} | sed -ne 's/\.//' -e 's/^[0]*\([0-9]*\)/\1/p' )"		# 0.056 -> 56
+
+			[ ${NLQ_MAX:=0} -lt ${NLQ:=0} ] && {
+				NLQ_MAX="$NLQ"					# theoretical best value is 1.000 -> '1000'
+				echo $REMOTE >/tmp/WIFI_OPTIMIZE_NEIGH		# for RRD-tool
+			}
+		}
+
+	} done <"$FILE"
+
+	[ -z "$NLQ_MAX" ] && return 1
+
+	echo $NLQ_MAX
+}
+
+_olsr_neigh_check_for_good_non_tunnel ()
+{
+	local FUNC="olsr_check_for_good_non_tunnel_neigh"
+	local FILE="/tmp/OLSR/LINKS.sh"
+#	local BORDER=10		# maximum suitable COST
+
+	while read -r LINE; do {
+		eval $LINE
+		DEVTYPE="$( _net dev_type $(_net ip2dev "$LOCAL" ) )"
+		[ -n "$DEVTYPE" ] && {
+			[ "$DEVTYPE" != "tunnel" ] && {
+				[ -n "$COST" ] && {
+					[ ${COST%[\.]*} -lt 10 ] && {
+						_log it $FUNC daemon debug "found suitable neigh: '$LINE'"
+						return 0
+					}
+				}
+			}
+		}
+
+	} done <"$FILE"
+
+	_log it $FUNC daemon debug "found nothing suitable"
+	return 1
+}
+
+_olsr_txtinfo()
+{
+	local funcname='olsr_txtinfo'
+	local option="${1:-lin}"		# <empty> or 'all'
+	local idx=0				# see: lib/txtinfo/src/olsrd_txtinfo.c - isCommand()
+	local plugin port url
+
+	while plugin="$( uci -q get olsrd.@LoadPlugin[$idx].library )"; do {
+		case "$plugin" in
+			'olsrd_txtinfo.'*)
+				port="$( uci -q get olsrd.@LoadPlugin[$idx].port )"
+				break
+			;;
+			*)
+				idx=$(( idx + 1 ))
+			;;
+		esac
+	} done
+
+	isnumber "$port" || port=2006
+
+	case "$( _olsr version )" in
+		'olsr.org-0.9.0.3-'*)
+			_log it $funcname daemon info "option: '$option' using 'netcat'->nc"
+			# suppress first 3 lines
+			echo "/$option" | nc 127.0.0.1 $port | tail -n +4
+		;;
+		*)
+			url="http://127.0.0.1:$port/$option"
+			_curl it "$url" 2>/dev/null
+		;;
+	esac
+}
+
+_olsr_restarts_are_suspicious_often()
+{
+	local funcname='olsr_restarts_are_suspicious_often'
 	local daemon_restarts="$( _olsr uptime restarts_get )"
-	local basecount="30"
+	local basecount=30
 	local percent border
 
-	border="$(( $( _system uptime days ) * 3 ))"	# normally we hard restart 3 times a day:
-	border="$(( $border + $basecount ))"		# 1 x cron.minutely + at 4 and 6 o'clock
+	bool_true 'olsrd.@meta[0].ignore_restarts' && return 1
 
-	percent="$(( $daemon_restarts * 100 ))"
-	percent="$(( $percent / $border ))"
+	border=$(( $( _system uptime days ) * 3 ))	# normally we hard restart 3 times a day:
+	border=$(( border + basecount ))		# 1 x cron.minutely + at 4 and 6 o'clock
 
-	_log it $func daemon debug "percent from border: ${percent}% restarts: $daemon_restarts border: $border"	
+	divisor_valid "$border" || border=1
+	percent=$(( daemon_restarts * 100 ))
+	percent=$(( percent / border ))		# divisor_valid
+
+	_log it $funcname daemon debug "percent from border: ${percent}% restarts: $daemon_restarts border: $border"
 
 	if [ $percent -gt 100 ]; then
-		_log it $func daemon alert "[ERR] olsr restarts > normality (${percent}%: $daemon_restarts > $border)"
+		_log it $funcname daemon alert "[ERR] ${percent}%: $daemon_restarts > $border"
 
-		if [ $percent -gt 300 ]; then	# seems to be a busybox-bug of v1.19.4
-			return 0		# sometimes we see values of 35148643% (large restart count)
+		if [ $percent -gt 300 -a $OPENWRT_REV -gt 0 ]; then	# seems to be a busybox-bug of v1.19.4
+			return 1		# sometimes we see values of 35148643% (large restart count)
 		else
-			return 1
+			return 0
 		fi
 	else
 		return 1
 	fi
 }
 
+_olsr_check_plausi()				# test 1/7: is each non-infinite neighbour in routing-table? + at least 1 non-infinite?
+{						# test 2/7: each local/remote-pair has only one neighbor/link entry?
+	local FUNC="olsr_plausi_check"		# test 3/7: are minimum-cost neighbours linklocal? + metric seems believeable (<100)
+	local LINE				# test 4/7: each node in mesh has only 1 route?
+	local LASTLINE				# test 5/7: are wired neighbours LQ/NLQ nearly synchronous?
+	local FILE="/tmp/OLSR/LINKS.sh"		# test 6/7: ping to inet-gateway works?
+	local option="$1"			# test 7/7: strong change to more worse values of wireless neighs
+	# option = force|deep			# test 0/7: olsr-plaintext plugin works? + too much restarts? + default route exists?
+						# idea: '10.63.176.193 ~~0~~ 10.63.62.1     LQ/NLQ/COST: 0.000 / 0.000 / ~      MAC+DNS: ??:??:??:??:??:?? 'unknown'
+						# idea:
+	[ "$option" = "force" ] || {
+		_olsr uptime is_short && {
+			_log it $FUNC daemon info "no check - olsr_uptime seems pretty low"
+			return 0
+		}
+	}
+
+	local forced_hash=
+
+	_olsr restarts_are_suspicious_often && _system crashreboot 'olsr_restart2much'
+
+	[ -z "$FILE" ] && {
+		_log it $FUNC daemon crit "[ERR] olsr-plaintext plugin has no output!"
+		return 1
+	}			# fixme! count lines of file?
+
+	_log it $FUNC daemon debug "[OK] (olsr-plaintext plugin outputs something)"
+
+	case "$CONFIG_PROFILE" in
+		hotello-K80*)
+			if [ "$NODENUMBER" = "2" ]; then
+				forced_hash="c510092fee3c5812d1afeb2cee7be7d6"
+			else
+				forced_hash=
+			fi
+		;;
+		hotello-B01*)
+			forced_hash="251e8bd0827f1455a382b13fd723f994"
+		;;
+		*)
+			forced_hash=
+		;;
+	esac
+
+	[ -n "$forced_hash" ] && {
+		case "$( cut -d';' -f5 "$FILE" | md5sum )" in		# hash over costs
+			"$forced_hash"*)
+				_log it $FUNC daemon info "[OK] neighbour hash: $forced_hash"
+			;;
+			*)
+				_log it $FUNC daemon alert "[ERR] surprising neighbour hash - rebooting"
+				_system crashreboot 'wrong_neighhash'
+			;;
+		esac
+	}
+
+	has_default_route()
+	{
+		grep -q ^default /tmp/OLSR/ROUTING_TABLE_MAIN
+	}
+
+	has_default_route || {
+		_log it $FUNC daemon crit "no default route - olsr error?"	# we have seen AP-routers, which do not send out olsr-packets over lan
+		return 1
+	}
+
+	ip_default_route()
+	{
+		_sanitizer run "$( grep ^default /tmp/OLSR/ROUTING_TABLE_MAIN | head -n1 )" ip4
+	}
+
+	local COUNT=0
+	local LOCAL REMOTE LQ NLQ COST METRIC DEVTYPE LINES1 LINES2
+
+	ip_is_in_routing_table()		# fixme! 'ip route list exact 1.2.3.4/32' does not work ATM in busybox's ip-applet
+	{
+		local ip="$1"
+		local line
+
+		while read -r line; do {
+			case "$line" in
+				"$ip "*)
+					return 0
+				;;
+			esac
+		} done </tmp/OLSR/ROUTING_TABLE_MAIN
+
+		return 1
+	}
+
+	local COUNT_NEIGHBORS_NON_INFINITE_COSTS=0
+	local mac good='true'
+
+	while read -r LINE; do {
+		eval -- $LINE
+
+		mac="$( _net ip2mac "$REMOTE" lazy )" && {
+			_netfilter set_arp permanent "$mac" "$REMOTE"
+		}
+
+		[ -e "/tmp/OLSR/isneigh_$REMOTE" ] || {
+			_log it $FUNC daemon info "detected yet unknown neigh $REMOTE"
+		}
+
+		[ -n "$COST" ] && {
+			[ "$COST" = "INFINITE" ] || {		# fixme! workaround for wrong neighs_evalable() abstraction
+
+				COUNT_NEIGHBORS_NON_INFINITE_COSTS=$(( COUNT_NEIGHBORS_NON_INFINITE_COSTS + 1 ))
+
+				ip_is_in_routing_table $REMOTE || {
+					_log it $FUNC daemon crit "[ERR] is each non-infinite neighbour in routing-table? '$REMOTE' (COST:'$COST') is not!"
+					good='false'
+					break
+				}
+			}
+		}
+	} done <"$FILE"
+
+	if [ "$good" = 'false' ]; then
+		rm "$FILE"
+		return 1
+	else
+		_log it $FUNC daemon debug "[OK] (is each non-infinite neighbour in routing-table?) COUNT: $COUNT"
+	fi
+
+	did_we_ever_had_a_neighbour()
+	{
+		ls -1 /tmp/OLSR/isneigh_* >/dev/null 2>/dev/null
+	}
+
+	did_we_ever_had_a_neighbour || {
+		COUNT_NEIGHBORS_NON_INFINITE_COSTS="really_alone"
+	}
+
+	if [ $COUNT_NEIGHBORS_NON_INFINITE_COSTS -eq 0 ]; then
+		_log it $FUNC daemon crit "[ERR] seeing $COUNT_NEIGHBORS_NON_INFINITE_COSTS neighs which are non-infinite"
+		return 1
+	else
+		_log it $FUNC daemon debug "[OK] seeing at least 1 neigh which is non-infinite (overall: $COUNT_NEIGHBORS_NON_INFINITE_COSTS)"
+	fi
 
 
+
+	# are wired neighbours LQ/NLQ nearly synchronous?
+
+	while read -r LINE; do {
+		eval $LINE
+
+		DEVTYPE="$( _net dev_type $( _net ip2dev "$LOCAL" ) )"
+
+		[ "$DEVTYPE" = "wire" ] && {
+
+			[ "$COST" = "INFINITE" ] && continue
+
+			LQ="$(  echo $LQ  | sed -ne 's/\.//' -e 's/^[0]*\([0-9]*\)/\1/p' )"
+			NLQ="$( echo $NLQ | sed -ne 's/\.//' -e 's/^[0]*\([0-9]*\)/\1/p' )"
+
+			case "${LQ:=0}-${NLQ:=0}" in
+				"1000-"|"0000-"|"1000-0000"|"0000-1000")
+					_log it $FUNC daemon crit "[ERR] are wired neighbours LQ/NLQ nearly synchronous? no! REMOTE/LQ/NLQ = '$REMOTE'/'$LQ'/'$NLQ'"
+					return 1
+				;;
+			esac
+
+			[ $LQ -lt 100 ] && {			# fixme! check user-defined lqmult
+				[ $NLQ -gt 900 ] && {
+					sleep 10		# waiting for getting stable
+
+					[ $NLQ -gt 900 -a $LQ -lt 100 ] && {
+						_log it $FUNC daemon crit "[ERR] are wired neighbours LQ/NLQ nearly synchronous? no! REMOTE/LQ/NLQ = '$REMOTE'/'$LQ'/'$NLQ'"
+						return 1
+					}
+				}
+			}
+
+			[ $NLQ -lt 100 ] && {			# fixme! check user-defined lqmult
+				[ $LQ -gt 900 ] && {
+					sleep 10		# waiting for getting stable
+
+					[ $LQ -gt 900 -a $NLQ -lt 100 ] && {
+						_log it $FUNC daemon crit "[ERR] are wired neighbours LQ/NLQ nearly synchronous? no! REMOTE/LQ/NLQ = '$REMOTE'/'$LQ'/'$NLQ'"
+						return 1
+					}
+				}
+			}
+
+			if _net ip_reachable "$REMOTE"; then
+				_log it $FUNC daemon debug "[OK] wired remote $REMOTE is reachable"
+			else
+				# e.g. switch fuckup
+				_system reboot_safe "wired remote $REMOTE unreachable"
+			fi
+		}
+	} done <"$FILE"
+
+	for LINE in $( _olsr show_hna4_slaves ); do {
+		REMOTE="$( ip -oneline route get "$LINE" | cut -d' ' -f3 )"
+
+		if _net ip_reachable "$REMOTE"; then
+			_log it $FUNC daemon debug "[OK] wired hna4-slave $REMOTE is reachable"
+		else
+			_system reboot_safe "wired hna4-slave $REMOTE unreachable"
+		fi
+	} done
+
+	_log it $FUNC daemon debug "[OK] (are wired neighbours LQ/NLQ nearly synchronous?)"
+
+	# each node in mesh has only 1 route?	// fixme! be more correct: is only an error,if in same routing table... (but we check "main")
+						#  fixme! maybe give some time and double check?
+						#  fixme! maybe it's not a big problem if only metric changes, but not gateway? (2 entrys with metric diff)
+
+	[ "$( uci get olsrd.@olsrd[0].FIBMetric )" = "flat" ] && {	# cat be approx, correct, flat
+		FILE_RT="/tmp/$FUNC-sorted_routing_table"
+		sed -n 's/^\([0-9]\)\([0-9\/\.]*\).*/\1\2/p' /tmp/OLSR/ROUTING_TABLE_MAIN | sort >$FILE_RT	# only "10.63.153.65/26"
+		LINES1=$( _file lines "$FILE_RT" )
+		LINES2=$( uniq "$FILE_RT" | wc -l )
+
+		[ "$LINES1" != "$LINES2" ] && {
+			while read -r LINE; do {
+				[ "$LINE" = "$LASTLINE" ] && {
+					case "$LINE" in
+						"$WIFINET/$WIFIPRE"*)
+							# fixme! only ignore when hybrid wifimode?
+							_log it $FUNC daemon debug "[ERR] each node in mesh has only 1 route? no - but ignoring wide mask ($( ip route list exact $LINE ))"
+						;;
+						*)
+							_log it $FUNC daemon crit "[ERR] each node in mesh has only 1 route? no!: ($( ip route list exact $LINE ))"
+							return 1
+						;;
+					esac
+				}
+				LASTLINE="$LINE"
+			} done <$FILE_RT
+		}
+
+		_log it $FUNC daemon debug "[OK] (each node in mesh has only 1 route? [checked $LINES1 routes])"
+	}
+
+	local lq_algo="$( uci get olsrd.@olsrd[0].LinkQualityAlgorithm )"
+
+	algo_is_ffeth_and_link_is_wireless()
+	{
+		local local_link_ip="$1"
+
+		case "$lq_algo" in
+			*ffeth)
+				local dev="$( _net ip2dev "$local_link_ip" )"
+				local devtype="$( _net dev_type "$dev" )"
+
+				[ "$devtype" = "wifi" ] && {
+					return 0
+				}
+			;;
+		esac
+
+		return 1
+	}
+
+	while read -r LINE; do {
+		eval $LINE
+		[ "$COST" = "1.000" -o "$COST" = "0.100" ] && {
+			METRIC="$( _olsr remoteip2metric $REMOTE )"
+
+			[ "$METRIC" -gt 100 ] && {
+				_log it $FUNC daemon crit "[ERR] strange metric: '$REMOTE' has metric '$METRIC'"
+				return 1
+			}
+
+			[ "$METRIC" != "1" ] && {
+
+				if algo_is_ffeth_and_link_is_wireless "$LOCAL" && [ "$METRIC" = "2" ]; then
+					:
+					# fixme! check also, if there _is_ a metric with 1 over a wired link
+				else
+					_log it $FUNC daemon crit "[ERR] are minimum-cost neighbours linklocal? '$REMOTE' is not! (metric: '$METRIC' cost: $COST)"
+					return 1
+				fi
+			}
+		}
+	} done <"$FILE"
+
+	[ -n "$METRIC" ] && _log it $FUNC daemon debug "[OK] (are minimum-cost neighbours linklocal?)"
+
+
+
+	LINES1=$( _file lines "$FILE" )
+	LINES2=$( sed -n 's/^\(LOCAL=[0-9\.]*;REMOTE=[0-9\.]*\);.*/\1/p' $FILE | sort -u | wc -l )
+
+	[ "$LINES1" != "$LINES2" ] && {
+		_log it $FUNC daemon crit "[ERR] each local/remote-pair has only one neighbour/link-entry? no! ('$LINES1' != '$LINES2')"
+
+		while read -r LINE; do {
+			_log it $FUNC daemon crit "[ERR] $LINE -> $( echo $LINE | sed -n 's/^\(LOCAL=[0-9\.]*;REMOTE=[0-9\.]*\);.*/\1/p' )"
+		} done <$FILE
+
+		return 1
+	}
+
+	_log it $FUNC daemon debug "[OK] (each local/remote-pair has only one neighbour/link-entry?)"
+
+
+	# is inet-nexthop metric1 ?
+	# sed -n 's/^.*NEXTHOP=\(.*\);.*/\1/p' /tmp/GATEWAY_CHECK_RECENT
+	# _olsr remoteip2metric
+
+	_net local_inet_offer >/dev/null || {
+		local REMOTE=
+		read -r REMOTE <'/tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY'
+		REMOTE="${REMOTE:-8.8.8.8}"
+
+		case "$( _wifi mode "$WIFIDEV" )" in
+			*'adhoc'*)
+			;;
+			*)
+				REMOTE='8.8.8.8'
+			;;
+		esac
+
+		case "$CONFIG_PROFILE" in
+			zumnorde*|marinapark*|satama*|fparkssee*|rehungen*|elephant*)
+				REMOTE='127.0.0.1'	# till we fix the net
+			;;
+		esac
+
+		ERROR=0
+		I=1				# try to ping overall-inet-gateway, if it does not work, reboot
+		while [ $I -ne 10 ]; do {
+			LOSS="$( ping -q -c 1 $REMOTE | sed -n 's/^.*packets received, \([0-9]*\)%.*/\1/p' )"
+
+			[ ${LOSS:-100} -eq 0 ] && {
+				[ "$ERROR" = "1" ] && _log it $FUNC daemon info "[OK] inet-gateway $REMOTE ping OK, after try $I"
+				break
+			}
+
+			_log it $FUNC daemon info "[ERR] inet-gateway $REMOTE FAIL (${LOSS}% packetloss with ping, after try $I)"
+			ERROR=1
+			sleep 10
+			I=$(( I + 1 ))
+		} done
+		[ $I -eq 10 ] && _system reboot_safe "inet-gateway $REMOTE FAIL (${LOSS}% packetloss with ping, after try $I)"
+
+		_log it $FUNC daemon debug "[OK] (ping to inet-gateway $REMOTE works)"
+	}
+
+
+	local sum_cost=0 sum_wireless_neighs=0 sum_cost_old sum_cost_min message
+	local percent_border="-35" percent_diff
+	COUNT=0
+
+	while read -r LINE; do {		# test 7/7: strong change to more worse values of wireless neighs / better check LQ only?
+		eval $LINE
+		[ "$LOCAL" = "$WIFIADR" ] && {
+			sum_wireless_neighs=$(( sum_wireless_neighs + 1 ))
+
+			if [ -n "$COST" ]; then
+				COST="${COST%.*}${COST#*.}"		# 1.123 -> 1123
+			else
+				COST=15000				# infinite -> high value
+			fi
+
+			sum_cost=$(( sum_cost + COST ))
+		}
+	} done <"$FILE"
+
+	[ -e "/tmp/OLSR/sum_cost_wireless" ] && {
+		read -r sum_cost_old <"/tmp/OLSR/sum_cost_wireless"
+		read -r sum_cost_min <"/tmp/OLSR/sum_cost_wireless_min"
+
+		[ $sum_cost -lt ${sum_cost_min:-999999} ] && {
+			echo "$sum_cost" >"/tmp/OLSR/sum_cost_wireless_min"
+			sum_cost_min="$sum_cost"
+		}
+
+		if [ $sum_cost_old -eq 0 ]; then
+			percent_diff=0
+		else
+			divisor_valid "$sum_cost_old" || sum_cost_old=1
+			percent_diff=$(( (sum_cost * 100) / sum_cost_old ))	# divisor_valid
+			percent_diff=$(( 100 - percent_diff ))
+		fi
+
+		message="$sum_cost_old -> $sum_cost (${percent_diff}%, best ever: $sum_cost_min)"
+
+		if [ $percent_diff -lt 0 ]; then
+			message="costs getting worse: $message"
+
+			if [ $percent_diff -le $percent_border ]; then
+				if [ "$option" = "deep" ]; then
+					_log it $FUNC daemon info "deep check: fixme: $message"
+					# _wifi phy_restart "$WIFIDEV" "$message"
+				else
+					_log it $FUNC daemon info "no deep check: $message"
+				fi
+			else
+				_log it $FUNC daemon info "$message"
+			fi
+		else
+			_log it $FUNC daemon info "costs getting better: $message"
+		fi
+	}
+
+	echo "$sum_cost" >"/tmp/OLSR/sum_cost_wireless"
+
+	return 0
+}
+
+_olsr_neighs_extended_evalable()
+{
+	local file='/tmp/OLSR/LINKS.sh'
+	local verbose="$1"
+	local COUNT=0
+	local LOCAL REMOTE LQ NLQ COST dev line
+
+	while read -r line; do {
+		eval $line
+
+		if [ -n "$verbose" ]; then
+			METRIC="$( _olsr remoteip2metric "$REMOTE" )"
+			dev="$( _net ip2dev "$LOCAL" )"
+			DEVTYPE="$( _net dev_type "$dev" )"
+
+			echo "LOCAL=$LOCAL;REMOTE=$REMOTE;LQ=$LQ;NLQ=$NLQ;COST=$COST;DEVTYPE=$DEVTYPE;METRIC=$METRIC"
+		else
+			echo "LOCAL=$LOCAL;REMOTE=$REMOTE;LQ=$LQ;NLQ=$NLQ;COST=$COST;COUNT=$COUNT"
+		fi
+	} done <"$file"
+}
+
+_olsr_neighs_meshrdf_evalable()		# e.g. ~ 422 : 10.63.2.1 : 10.63.3.65 : COST : 2.123 : 1.234 : 1.678 : 1 : 12 : 5.5 : 5180 : 5
+{							# 1+3+4+4+1+4+4+4+1+2+2 = 30 bytes / neigh
+	local FILE='/tmp/OLSR/LINKS.sh'	# see build_tables()
+	local json="$TMPDIR/links.json"	# FIXME! add _speedtest_stats()
+
+	case "$CONFIG_PROFILE" in
+		boltenhagendh*)
+			return 1	# FIXME! make it depend on 'too_much_neighs'
+		;;
+		monami*)
+			# allow even on lowmem
+		;;
+		*)
+			# TODO: write out wired olsr-neigh with default route (ignore the others) and all wifi-neighs
+			[ -n "$LOWMEM" ] && return 1
+		;;
+	esac
+
+	[ -e "$FILE" ] || return 1
+
+	local METHOD='COST'	# linkcost / etx / batadv / ...
+	local COUNT=0
+	local LOCAL REMOTE LQ NLQ COST DEVTYPE METRIC
+	local txrate txthroughput mac freq dev chanbw devname devmac
+	local hna4 route local_ip remote_ip remote_id olsr_wired_perfect devtype
+
+	echo >"$json" '"links": ['
+	while read -r LINE; do {
+		# LOCAL=...;REMOTE=...;LQ=...;NLQ=...;COST=...;COUNT=...
+		eval $LINE
+		isnumber "$COUNT" || continue
+
+		METRIC="$( _olsr remoteip2metric "$REMOTE" )"
+		REMOTE_ID="$( _ipsystem get "$REMOTE" )"
+		dev="$( _net ip2dev "$LOCAL" )"
+		freq="$( _wifi dev2freq "$dev" )"
+		chanbw="$( _wifi dev2chanbw "$dev" )"
+		DEVTYPE="$( _net dev_type "$dev" )"
+		DEVTYPE="$( _net devtype2symbol "$DEVTYPE" )"
+		devname="$( _net dev2name "$dev" )"
+		devmac="$( _net dev2mac "$dev" )"	# TODO: xx for inner 2 bytes
+		# TODO: COST should be integer?
+
+		mac="$( _net ip2mac "$REMOTE" lazy )"
+		txrate=; # efficiency=; # txtroughput=
+		# txrate=0;txthroughput=0;efficiency=0;system=;ip=
+		eval $( _wifi minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate "$mac" )
+
+		cat >>"$json" <<EOF
+	{
+	"olsr_ipv4": {
+		"localIP": "$LOCAL",
+		"linkQuality": $LQ,
+		"validityTime": 3600,
+		"remoteIP": "$REMOTE",
+		"neighborLinkQuality": $NLQ,
+		"linkCost": ${COST:-0}
+	},
+	"sourceAddr4": "$LOCAL",
+	"destAddr4": "$REMOTE",
+	"ifname": "$dev",
+	"id": "$HOSTNAME.olsr",
+	"mac": "$devmac",
+	"interface": "$devname",
+	"quality": ${COST:-0}
+	},
+EOF
+
+		printf '%s' "${DEVTYPE}$REMOTE_ID:$LOCAL:$REMOTE:$METHOD:$LQ:$NLQ:$COST:$METRIC:${txrate:-0}:${txthroughput:-0}:$freq:${chanbw}"
+	} done <"$FILE"
+
+	# replace last comma with ']'
+	sed -i '$s/,$/\n]/' "$json"
+
+	olsr_wired_perfect="$METHOD:1.000:1.000:1.000:1:0:0:0:0"	# lq/nlq/cost/metric/tx/tx/freq/chanbw
+	devtype="$( _net devtype2symbol 'wired' )"
+
+	for hna4 in $( _olsr show_hna4_slaves ); do {
+		route="$( ip -oneline route get "$hna4" )"
+		# broadcast 192.168.178.0 dev eth0.2  src 192.168.178.20 \    cache <local,brd>
+		# 10.63.27.0 via 10.63.27.33 dev eth0.0  src 10.63.24.33 \    cache
+		case "$route" in
+			'broadcast'*)
+				continue
+			;;
+		esac
+
+		local_ip="$( echo "$route" | cut -d' ' -f8 )"
+		remote_ip="$( echo "$route" | cut -d' ' -f3 )"
+		remote_id="$( _ipsystem get "$remote_ip" )"
+
+		printf '%s' "${devtype}${remote_id}:$local_ip:$remote_ip:$olsr_wired_perfect"
+	} done
+}
+
+_olsr_lqmultiplier()
+{
+	local remote="${1:-default}"
+#	local dev="$2"			# FIXME! we must be interface specific
+
+	if [ -e '/var/etc/olsrd.conf' ]; then
+		local file='/var/etc/olsrd.conf'
+	else
+		local file='/etc/olsrd.conf'
+	fi
+
+	sed -n "/LinkQualityMult[^0-9]*$remote/{s/^.*LinkQualityMult[^0-9]*$remote[^0-9]*\([0-9\.]*\).*/[LQ x\1]/p;q}" "$file"
+}
+
+_olsr_neighs_humanreadable()		# TODO: latitude/longitude/distance + speed
+{
+	local FILE='/tmp/OLSR/LINKS.sh'
+	local GATEWAY_IP="$( ip route list exact 0.0.0.0/0 | sed -n 's/^.* via \([0-9\.]*\) .*/\1/p;q' )" # FIXME! more abstraction, works
+	local minstrel minstrel_stats file value txrate txthroughput
+
+	[ "$( uci -q get wireless.radio0.type )" = "mac80211" ] && {
+		[ -d "/sys/kernel/debug/ieee80211/phy0/netdev:$WIFIDEV/stations" ] && {
+			minstrel="true"
+		}
+	}
+
+	local DNS METRIC LIST LINE DEVTYPE SPACER1 SPACER2 SPACER4 MAX1 MAX2 LQMULTI LQMULTI_ALL	# only for mesh-gateways
+	local COUNT=0 LOCAL REMOTE LQ NLQ COST
+
+	LIST="$( sed -n 's/^LOCAL=\([0-9\.]*\).*/\1/p' "$FILE" )"		# all local IP's
+	MAX1="$( _sanitizer run "$LIST" list_get_longest_string )"
+	LIST="$( sed -n 's/^.*;REMOTE=\([0-9\.]*\).*/\1/p' "$FILE" )"		# all remote IP's
+	MAX2="$( _sanitizer run "$LIST" list_get_longest_string )"
+	LQMULTI_ALL="$( _olsr lqmultiplier )"
+
+	[ $( echo $LIST | wc -w ) -gt 9 ] && SPACER3=" "  	# numbering layout
+
+	while read -r LINE; do {
+
+	  	eval $LINE
+
+		[ "$COST" = "INFINITE" ] && COST=
+
+		DEVTYPE="$( _net devtype2symbol $( _net dev_type $( _net ip2dev "$LOCAL" ) ) )"
+		DEVTYPE="${DEVTYPE}${DEVTYPE}"		# looks better
+
+		MAC="$( _net ip2mac "$REMOTE" lazy )"
+		SPACER1="$( _sanitizer run "$MAX1 $LOCAL"  add_length_diff_with_spaces )"			# ip's should always have
+		SPACER2="$( _sanitizer run "$MAX2 $REMOTE" add_length_diff_with_spaces )"			# the same length
+		DNS="$( _net ip2dns $REMOTE )"
+		METRIC="$( _olsr remoteip2metric $REMOTE )"
+		[ $COUNT -gt 9 ] && unset SPACER3					# 9 -> ' 9'; 10 = 10
+
+		if [ -n "$LQMULTI_ALL" ]; then
+			LQMULTI="$LQMULTI_ALL"
+		else
+			LQMULTI="$( _olsr lqmultiplier "$REMOTE" )"
+		fi
+
+		SPACER4="  "
+		[ "$REMOTE" = "$GATEWAY_IP" ] && SPACER4=">>"
+
+		if [ "$minstrel" = "true" -a "$DEVTYPE" = "~~" ]; then
+			file="/sys/kernel/debug/ieee80211/phy0/netdev:$WIFIDEV/stations/$MAC"
+
+			if [ -d "$file" ]; then
+
+				minstrel_stats="sig/mbytes_TX,RX/rate/throughput:"
+
+				value=
+				read -r value 2>/dev/null <"$file/last_signal"
+				minstrel_stats="$minstrel_stats ${value:-?}"
+
+				value=
+				read -r value 2>/dev/null <"$file/rx_bytes"
+				minstrel_stats="$minstrel_stats/$( _math bytes2unit "$value" mbytes dotted )"
+
+				value=
+				read -r value 2>/dev/null <"$file/tx_bytes"
+				minstrel_stats="$minstrel_stats/$( _math bytes2unit "$value" mbytes dotted )"
+
+				txrate=; txthroughput=; efficiency=
+				eval $( _wifi minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate $MAC )
+				minstrel_stats="$minstrel_stats/$txrate/${txthroughput}@${efficiency}%  "
+			else
+				minstrel_stats="sig/mbytes_TX,RX/rate/throughput: ?  "
+			fi
+		else
+			minstrel_stats=
+		fi
+
+		echo "${SPACER3}${COUNT}:${SPACER4}${LOCAL}${SPACER1} ${DEVTYPE}${METRIC:=0}${DEVTYPE} ${REMOTE}${SPACER2}  LQ/NLQ/COST: ${LQ} / ${NLQ} / ${COST:=~    }  ${minstrel_stats}MAC+DNS: ${MAC:=??:??:??:??:??:??} '${DNS:=unknown}' ${LQMULTI}"
+
+	} done <"$FILE"
+
+	local hna4 route local_ip remote_ip olsr_ignore
+	olsr_ignore="$( uci -q get firewall.@ignoreolsr[0].ip )"
+	[ -n "$olsr_ignore" ] && echo "ignored stations: $olsr_ignore"
+
+	for hna4 in $( _olsr show_hna4_slaves ); do {
+		route="$( ip -oneline route get "$hna4" )"
+		# 10.63.27.0 via 10.63.27.33 dev eth0.0  src 10.63.24.33 \    cache
+		local_ip="$( echo "$route" | cut -d' ' -f8 )"
+		remote_ip="$( echo "$route" | cut -d' ' -f3 )"
+
+		COUNT=$(( ${COUNT:-0} + 1 ))
+		echo "$COUNT:  $local_ip --1-- $remote_ip (HNA-slave $hna4)"
+	} done
+}
+
+_olsr_show_hna4_slaves()
+{
+	local netaddr mask hna4
+	local my_hna4="$( _ipsystem getvar 'OLSR_HNA' )"
+	local i=0
+
+	while netaddr="$( uci -q get olsrd.@Hna4[$i].netaddr )"; do {
+		mask="$( uci -q get olsrd.@Hna4[$i].netmask )"
+		hna4="$netaddr/$( _net mask2cidr "$mask" )"	# =0 if empty mask
+
+		case "$hna4" in
+			"$ROAMING_NET_LOCAL/$ROAMING_PRE_LOCAL"|"$my_hna4"|'0.0.0.0/0')
+			;;
+			*)
+				echo "$hna4"
+			;;
+		esac
+
+		i=$(( i + 1 ))
+	} done
+}
+
+_olsr_incoming_and_outgoing_olsr_traffic()
+{
+	local funcname='olsr_incoming_and_outgoing_olsr_traffic'
+	local option="$1"	# <empty> or 'cached'
+	local device dev_address
+	local cachefile="$TMPDIR/$funcname"
+
+	[ "$option" = 'cached' -a -e "$cachefile" ] && {
+		cat "$cachefile"
+		return 0
+	}
+
+	if [ -n "$( _wifi get anyfreq mode 'adhoc' )$( _wifi get anyfreq mode 'mesh' )" ]; then
+		device="$WIFIDEV"
+		dev_address="$WIFIADR"
+	else
+		device="$LANDEV"
+		dev_address="$LANADR"
+	fi
+
+	[ -z "$device" -o -z "$dev_address" ] && return 0
+	pidof olsrd >/dev/null || return 0
+
+	local interval=30
+	local port=698
+	local ruleset_in="INPUT -p udp -i $device ! -s $dev_address --dport $port"
+	local ruleset_out="OUTPUT -p udp -o $device --dport $port"
+	local bytes bytes_in bytes_out bytes_in_sec bytes_out_sec out
+
+	get_bytes()
+	{
+		$IPT -nxvL "$1" 1 | while read -r _ bytes _; do echo ${bytes:-0}; done
+	}
+
+	$IPT -I $ruleset_in
+	$IPT -I $ruleset_out
+
+	_log it $funcname daemon info "counting olsr-traff for $interval sec"
+	sleep $interval
+
+	bytes_in="$(  get_bytes 'INPUT' )"
+	bytes_out="$( get_bytes 'OUTPUT' )"
+
+	divisor_valid "$interval" || interval=1
+	bytes_in_sec=$((  bytes_in  / interval ))	# divisor_valid
+	bytes_out_sec=$(( bytes_out / interval ))	# divisor_valid
+
+	$IPT -D $ruleset_in
+	$IPT -D $ruleset_out
+
+	_log it $funcname daemon info "in: $bytes_in = $bytes_in_sec bytes/s out: $bytes_out = $bytes_out_sec bytes/s"
+	out="&t0=${bytes_in_sec}&t1=${bytes_out_sec}"
+	echo "$out" >"$cachefile"
+	echo "$out"
+}
+
+_olsr_plugin_filename_get()
+{
+	local name="$1"
+	local file
+
+	# sorts/prints highest number if multiple versions are installed (in one dir)
+	for file in "/usr/local/lib/olsrd_$name.so."* "/usr/lib/olsrd_$name.so."* "/lib/olsrd_$name.so."*; do {
+		[ -e "$file" ] && {
+			basename "$file"
+			return 0
+		}
+	} done
+
+	echo "not_found:olsrd_$name.so.0.0"
+	return 1
+}
