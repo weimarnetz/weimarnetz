@@ -2,46 +2,51 @@
 . /tmp/loader
 
 # here we guess the gateway and write some info for fast including in "/tmp/GATEWAY_CHECK_RECENT"
-# DATE=2011jan24_11:15; HOSTNAME=ejbw-mesh-dhcp-99.olsr; COST_INT=1000; GATEWAY=10.10.99.33; NEXTHOP=192.168.100.22; METRIC=1
+# DATE=2011jan24_11:15; GATEWAY_HOSTNAME=ejbw-mesh-dhcp-99.olsr; COST_INT=1000; GATEWAY=10.10.99.33; NEXTHOP=192.168.100.22; METRIC=1
 
-test   -e "/tmp/LOWMEM"				&& exit
-test   -n "$FAILSAFE"				&& exit
-test ! -e "/www/SOFTWARE_FULLY_INSTALLED"	&& exit
+_system fully_installed	|| exit
 
-_olsr uptime is_short && {
+if _olsr uptime is_short; then
 	_log it olsr_uptime_is_short daemon info "[OK] scheduling job"
-	echo >>$SCHEDULER "$0" force
-	exit
-}
+	echo >>$SCHEDULER "$0"
+	exit 0
+else
+	[ -d '/tmp/OLSR' ] || exit 0
+fi
 
-# starts NAT if needed (e.g. new WAN-lease)
-# later we move this to a hotplug script
-_netfilter masquerade_start
+if [ -e "/tmp/CHECK_INET_OFFER" ]; then
+	if _file age "/tmp/CHECK_INET_OFFER" -gt 3600 ; then
+		_log it lockfile daemon alert "ignoring old lockfile"
+	else
+		_log it lockfile daemon info "ignoring call, found lockfile '/tmp/CHECK_INET_OFFER'"
+		exit 1
+	fi
+else
+	touch "/tmp/CHECK_INET_OFFER"
+fi
 
 # first, get a list of all HNA4 0.0.0.0/0 = gateway offers
 # LIST_HNA4="10.63.8.1 10.63.9.1 ..."
-# output routes and compare which of these are gateways, 
+# output routes and compare which of these are gateways,
 # output them and sort by cost, lowest on top
 
-LIST_GATEWAYS="$( _olsr gateways_get )"
+LIST_GATEWAYS="$( neigh gateways )"
 MINCOST=99999
 OUT=
 
 FILE_OLSR_ROUTES="/tmp/olsr_output_recent_routesonly_$$"
-START="$( grep -n ^"Table: Routes"$ /tmp/OLSR/ALL | cut -d':' -f1 )"
-sed -n "$(( $START + 2 )),999999p" /tmp/OLSR/ALL >$FILE_OLSR_ROUTES
+LINESTART="$( grep -n ^'Table: Routes'$ '/tmp/OLSR/ALL' | cut -d':' -f1 )"
+sed -n "$(( LINESTART + 2 )),999999p" '/tmp/OLSR/ALL' >"$FILE_OLSR_ROUTES"
 
-while read LINE; do {
-
-	set ${LINE:-dummy}
-	GATEWAY=$1		# is "$IP/32"
-	NEXTHOP=$2
-	METRIC=$3
-	COST=$4
+while read -r LINE; do {
+	explode ${LINE:-dummy}
+	GATEWAY="$1"		# is "$IP/32"
+	NEXTHOP="$2"
+	METRIC="$3"
+	COST="$4"
 
 	for IP in $LIST_GATEWAYS; do {
 		[ "$IP/32" = "$GATEWAY" ] && {
-
 			if [ "${COST%.*}" = "0" ]; then			# 0.100 -> 100
 				COST_INT="${COST#*.}"
 			else						# 2.345 -> 2345
@@ -49,52 +54,84 @@ while read LINE; do {
 			fi
 
 			[ $COST_INT -lt $MINCOST ] && {
-				MINCOST=$COST_INT
-				OUT="COST_INT=$COST_INT; GATEWAY=$IP; NEXTHOP=$NEXTHOP; METRIC=$METRIC"
+				_ipsystem get "$NEXTHOP" >/dev/null || {
+					# e.g. ejbw = 192.168.111.183 -> 10.10.50.33
+					# or ibfleesensee = 10.99.201.1 (olsr over VLANs)
+					explode $( sed -n '/Table: MID/,/Table: Routes/ p' '/tmp/OLSR/ALL' | grep -F "$NEXTHOP" )
+					NEXTHOP="$1"
+				}
+
+				# do not take VPN-server into account (it announces HNA4 0/0)
+				NEXTHOP_NODENUMBER="$( _ipsystem get "$NEXTHOP" )"
+				NEXTHOP_VPNIP="$( _ipsystem getvar 'WIFIVPNSERVERADR' "$NEXTHOP_NODENUMBER" )"
+				[ "$NEXTHOP_VPNIP" = "$NEXTHOP" ] || {
+					MINCOST="$COST_INT"
+					OUT="COST_INT=$COST_INT; GATEWAY=$IP; NEXTHOP=$NEXTHOP; METRIC=$METRIC"
+				}
 			}
 		}
 	} done	
-
-} done <$FILE_OLSR_ROUTES
-rm $FILE_OLSR_ROUTES
+} done <"$FILE_OLSR_ROUTES"
+rm "$FILE_OLSR_ROUTES"
 
 [ -z "$OUT" ] && {
-	# gatewayip from routing table  // fixme! 'default dev tun0  scope link' -> no ip!
-	GW="$( _sanitizer run "$( grep ^default /tmp/OLSR/ROUTING_TABLE_MAIN | head -n1 )" ip4 )"
+	# default dev venet0  scope link
+	# default via 217.0.116.253 dev pppoe-wan  proto static
+	GW="$( grep ^'default' '/tmp/OLSR/ROUTING_TABLE_MAIN' | head -n1 )"
+	explode $GW
 
-	if   fgrep -sq "$GW;" /tmp/CLIENTS_LAN /tmp/CLIENTS_WAN ; then
+	if _net dev_is_valid "$3"; then
+		GW="$( _net dev2ip "$3" 'ip_but_noloopback' )"
+	else
+		GW="$( _sanitizer run "$GW" 'ip4' )"
+	fi
 
-		# metric = 0 ! (is in own subnet, without a router intermediate - so we take wifiadress
-		OUT="COST_INT=1; GATEWAY=$WIFIADR; NEXTHOP=$WIFIADR; METRIC=0"
+	if [ "$GW" = "$WANADR" -o "$GW" = "$LANADR" ]; then
+		# metric = 0 ! (is in own subnet, without a router intermediate - so we take wifiaddress
+		OUT="COST_INT=1; GATEWAY=$ANYADR; NEXTHOP=$ANYADR; METRIC=0"
 	elif [ -z "$GW" ]; then
-
-		read LAST_GATEWAY </tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY
+		read -r LAST_GATEWAY </tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY
 		# really no gateway, so we set cost ~INFINITE, invalid nexthop,
 		# but OLD gateway - so olsr_plausi_check() should not reboot the box
 		# and enforce soon a next test
 
 		OUT="COST_INT=99999; GATEWAY=${LAST_GATEWAY}; NEXTHOP=127.0.0.0; METRIC=-1"
 
-		_log it guess_gateway daemon info "empty default router, last inet-gateway was: $LAST_GATEWAY"
-		echo >>$SCHEDULER "$0" force
+		_log it guess_gateway daemon info "empty default route, last inet-gateway was: $LAST_GATEWAY"
+		echo >>$SCHEDULER "$0"
 	else
-		# provider-lan with subnet >/24 is not implemented yet (see /etc/init.d/S43...)
-		if [ "$WIFIADR" = "$GW" ]; then
-			_log it guess_gateway daemon alert "strange situation: olsr-nexthop != routing-table nexthop: $WIFIADR/$GW"
+		if [ $( _system uptime min ) -le 10 ]; then
+			LOGPRIO="info"
+		else
+			LOGPRIO="alert"
+		fi
+
+		# provider-lan with subnet >/21 is not implemented yet (see /etc/init.d/S43...)
+		if   [ "$WIFIADR" = "$GW" ]; then
+			_log it guess_gateway daemon $LOGPRIO "strange situation1: olsr-nexthop != routing-table nexthop: $WIFIADR/$GW"
 			OUT="COST_INT=10; GATEWAY=$WIFIADR; NEXTHOP=$WIFIADR; METRIC=0"
+		elif [ -e "/tmp/OLSR/DEFGW_$GW" ]; then
+			# FIXME! happens with wan-inet-offer over e.g. 192.168.x.x
+			_log it guess_gateway daemon info "strange situation3: nexthop is defaultgw"
+			OUT="COST_INT=10; GATEWAY=$ANYADR; NEXTHOP=$ANYADR; METRIC=0"
 		else
 			if [ -e "/tmp/$( basename $0 )_first_error" ]; then
-				OUT="COST_INT=10; GATEWAY=$WIFIADR; NEXTHOP=$WIFIADR; METRIC=0"
+				OUT="COST_INT=10; GATEWAY=$ANYADR; NEXTHOP=$ANYADR; METRIC=0"
 
-				case "${WIFIADR}_${CONFIG_PROFILE}" in
-					*)
-						_log it guess_gateway daemon alert "strange situation: olsr-nexthop != routing-table nexthop: $WIFIADR/$GW"
-						_olsr daemon restart "gateway: $GW nexthop: $WIFIADR"
+				if uci -q get network.@alias[0].gateway >/dev/null; then
+					:
+					# lan-inet-offer: fixme!
+				else
+					bool_true 'olsrd.@meta[0].no_watching' || {
+						[ "$( uci -q get network.mybridge.gateway )" = "${GW:-nogw}" ] || {
+							_log it guess_gateway daemon $LOGPRIO "strange situation2: olsr-nexthop != routing-table nexthop: $ANYADR/$GW"
+							[ "$LOGPRIO" = "alert" ] && _olsr daemon restart "gateway: $GW nexthop: $ANYADR"
 
-						/etc/init.d/S41build_static_netparam
-						/etc/init.d/S43ethers_fff+ build_network_clients
-					;;
-				esac
+							_netparam check
+							/etc/init.d/S43ethers_fff+ build_network_clients
+						}
+					}
+				fi
 			else
 				touch "/tmp/$( basename $0 )_first_error"
 			fi
@@ -102,29 +139,233 @@ rm $FILE_OLSR_ROUTES
 	fi
 }
 
-eval $OUT	# GATEWAY 
-GATEWAY="$( _sanitizer run "$GATEWAY" ip4 )"		# fixme! this is safer, we have seen something like "10.10.27.33/32" for output...
+eval $OUT	# GATEWAY
+GATEWAY="$( _sanitizer run "$GATEWAY" ip4 )"	# this is safer, we have seen something like "10.10.27.33/32" for output...
 
-[ -e "/tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY" ] || FIRST_RUN="true"
-[ -e "/tmp/USERDB_COPY" ] || FIRST_RUN="true"
-[ "$METRIC" = "0" ] && FIRST_RUN=
+[ -e '/tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY' ] || FIRST_RUN='true'
 
-echo "$COST_INT"	>/tmp/GATEWAY_CHECK_RECENT_COSTINT_ONLY
-echo "$GATEWAY"		>/tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY
+pidof bat_events >/dev/null && {
+	[ -e '/tmp/USERDB_COPY' ] || FIRST_RUN='true'
+}
 
-echo "DATE=$( _system date humanreadable ); HOSTNAME=$( _net ip2dns $GATEWAY ); $OUT"		>/tmp/GATEWAY_CHECK_RECENT
+# filesize = 0 should not happen
+if [ -s '/tmp/USERDB_COPY' ]; then
+	if   [ "$( head -n1 '/tmp/USERDB_COPY' )" = '# OK - FREE' ]; then
+		FIRST_RUN='true'
+	elif _file age '/tmp/USERDB_COPY' -gt 86400; then
+			touch '/tmp/USERDB_COPY'
+			FIRST_RUN='true'
+	fi
+else
+	FIRST_RUN='true'
+fi
+
+echo "$COST_INT" >'/tmp/GATEWAY_CHECK_RECENT_COSTINT_ONLY'
+echo "$GATEWAY"  >'/tmp/GATEWAY_CHECK_RECENT_GATEWAY_IP_ONLY'
+echo "$NEXTHOP"  >'/tmp/GATEWAY_CHECK_RECENT_NEXTHOP_IP_ONLY'
+
+echo "DATE=$( _system date humanreadable ); GATEWAY_HOSTNAME=$( _net ip2dns "$GATEWAY" ); $OUT" >'/tmp/GATEWAY_CHECK_RECENT'
 
 if [ -e "/tmp/service_ssh_nowatching" ]; then
 	cp "/tmp/GATEWAY_CHECK_RECENT" "/tmp/ARCHIV_TRACEINET"
 else
 	cat "/tmp/GATEWAY_CHECK_RECENT" >>"/tmp/ARCHIV_TRACEINET"
-	_watch archivsize "/tmp/ARCHIV_TRACEINET" 12 lines_max
+	_watch archivsize "/tmp/ARCHIV_TRACEINET" 250 lines_max
 fi
 
 _log it guess_gateway daemon debug "$OUT"
 
 [ "$FIRST_RUN" = "true" ] && {
-	MESSAGE="startup/$( uci -q get system.@system[0].hostname )/$( _system uptime humanreadable )"
-	MESSAGE="$( _sanitizer run "$MESSAGE" urlvalue )"
-	_weblogin login_check "" "" "" "$MESSAGE"
+	REASON='unknown'
+	[ -e '/tmp/REBOOT_REASON' ] && read -r REASON <'/tmp/REBOOT_REASON'
+
+	[ -e "$TMPDIR/STARTUP_MESSAGE_SEND" ] || {
+		MESSAGE="startup/${CONFIG_PROFILE#*_}/n$NODENUMBER/$HOSTNAME/$REASON/$( _system uptime humanreadable )"
+		MESSAGE="$( _sanitizer run "$MESSAGE" urlvalue )"
+		_weblogin login_check '' '' '' "$MESSAGE" && {
+			touch "$TMPDIR/STARTUP_MESSAGE_SEND"
+		}
+	}
+
+	userdb_copy_needed()
+	{
+		bool_true 'system.@weblogin[0].enabled' || return 1
+		bool_true 'system.@weblogin[0].db_localcopy' && return 0
+		[ -n "$LOWMEM" ] && return 1
+		_weblogin authserver is_myself && return 1
+
+		return 0
+	}
+
+	batman_measure_nexthop()
+	{
+		local funcname='batman_measure_nexthop'
+		local file_trace='/tmp/BATCTL_TRACEROUTE'
+		local file_all='/tmp/GATEWAY_CHECK_RECENT.batman'
+		local nexthop_mac='*'
+		local nexthop_interface
+		local gateway nexthop metric line
+
+		command -v batctl >/dev/null || nexthop_mac='no_batctl'
+
+		while [ "${nexthop_mac:-*}" = '*' ]; do {
+			# fixme! e.g. 10.63.99.1 -> 99 -> 192.168.99.1
+			gateway="$( _weblogin authserver )"
+			gateway="192.168.$( echo "$gateway" | cut -d'.' -f3 ).1"
+
+			# can throw 'rc != 0' when no hop was reachable
+			batctl translate  "$gateway" >/dev/null || break
+			batctl traceroute "$gateway" >"$file_trace"
+
+			# ' 1: 02:00:ca:b1:02:22  0.914 ms  1.788 ms  0.872 ms'
+			# or
+			# ' 1: *   *   *   *'
+			# or
+			# traceroute to 192.168.2.1 (96:55:3c:ec:09:2c), 50 hops max, 20 byte packets
+			# 192.168.2.1: Destination Host Unreachable
+
+			# e.g. non-batman-client, which is reachable via ARP
+			grep -q 'Destination Host Unreachable' "$file_trace" && break
+
+			nexthop_mac="$( grep ^' 1: ' "$file_trace" | cut -d' ' -f3 )"
+			nexthop_interface="$( batctl originators | grep ^"$nexthop_mac" | cut -d'[' -f2 | cut -d']' -f1 )"
+
+			[ -z "$nexthop_interface" ] && {
+				_log sleep "$funcname() empty nexthop - retry" 20 step 5
+			}
+
+			case "$nexthop_interface" in	# e.g.: '   eth0.1'
+				*"${LANDEV:-nolan}")   nexthop_interface='LAN' ;;
+				*"${WANDEV:-nowan}")   nexthop_interface='WAN' ;;
+				*"${WIFIDEV:-nowifi}") nexthop_interface='WIFI' ;;
+						    *) nexthop_interface='WIFI2' ;;
+			esac
+
+			while read -r line; do {
+				case "$line" in
+					*': *'*)
+						# measure again
+						nexthop_mac=
+					;;
+				esac
+			} done <"$file_trace"
+		} done
+
+		nexthop="$( _net mac2ip "$nexthop_mac" )"
+		metric=$( _file lines "$file_trace" )
+		metric=$(( metric - 1 ))		# headerline
+
+		echo "NEXTHOP_INTERFACE=$nexthop_interface" >>"$file_trace"
+		echo "GATEWAY=$gateway; NEXTHOP=$nexthop; METRIC=$metric" >"$file_all"
+	}
+
+	if userdb_copy_needed; then
+		bool_true 'system.@weblogin[0].respect_missing_db' || touch '/tmp/FREE'
+
+		_system maintenance_window_active && {
+			if [ -e '/tmp/OLSR/ROUTING_TABLE_MAIN' ]; then
+				ROUTES=$( wc -l <'/tmp/OLSR/ROUTING_TABLE_MAIN' )
+			else
+				if pidof bat_events >/dev/null ; then
+					ROUTES=$( batctl o | wc -l )
+				else
+					ROUTES=$( ip route list | wc -l )
+				fi
+			fi
+
+			_log sleep fetch_userdb_copy "$( _math random_integer 0 $ROUTES )" step 10
+		}
+
+		remote_server()
+		{
+			case "$CONFIG_PROFILE" in
+				schoeneck_adhoc)
+					# avoid traffic
+					echo '127.0.0.1'
+				;;
+				*)
+					_weblogin authserver
+				;;
+			esac
+		}
+
+		if   [ $OPENWRT_REV -lt 35300 ]; then
+			URL="http://$( remote_server )/cgi-bin-get_userdb.sh?OPT=bonehead"
+		elif [ $OPENWRT_REV -ge 48386 ]; then
+			URL="http://$( remote_server )/cgi-bin-get_userdb.sh?OPT=broken302redirect"
+		else
+			URL="http://$( remote_server )/cgi-bin-get_userdb.sh"
+		fi
+
+		WGET_START="$( _system uptime centisec )"
+		if _curl it "$URL" 240 >'/tmp/USERDB_COPY'; then
+#			[ -e '/tmp/node_catch' ] || {
+#				touch '/tmp/node_catch'
+#
+#				case "${NODENUMBER}-${CONFIG_PROFILE}" in
+#					'113-rehungen'*)
+#						_log it catch_node daemon sms "nexthop: $( ip route list exact '0.0.0.0/0' | head -n1 | cut -d' ' -f3 )"
+#					;;
+#				esac
+#			}
+
+			WGET_READY="$( _system uptime centisec )"
+
+			# FIXME! wget is ready, but file not fully written
+			sleep 10
+
+			_filetype gzip '/tmp/USERDB_COPY' && {
+				mv '/tmp/USERDB_COPY' '/tmp/USERDB_COPY.gz'
+				gzip -f -d '/tmp/USERDB_COPY.gz'	# autoremoves .gz
+			}
+
+			LASTLINE="$( tail -n1 '/tmp/USERDB_COPY' )"
+			case "$LASTLINE" in
+				"# OK"*)
+					touch '/tmp/USERDB_COPY'	# set time NOW - otherwise time from server
+					rm '/tmp/FREE'
+
+					_log it fetch_userdb_copy daemon info "[OK] in /tmp/USERDB_COPY from '$( remote_server )'"
+# fixme! wtf?
+#					[ "$( uci get system.@weblogin[0].authserver )" = "$REMOTE" ] || {
+#						uci set system.@weblogin[0].authserver="$REMOTE"
+#						uci commit system
+#					}
+
+					case "$LASTLINE" in
+						*'FREE')
+							_log it fetch_userdb_copy daemon info '[OK] server says: free for all'
+							touch '/tmp/FREE'
+						;;
+					esac
+
+					# maybe always calc this during wget()?
+					PATH_SPEED=$(( WGET_READY - WGET_START ))
+					divisor_valid "$PATH_SPEED" || PATH_SPEED=1
+					PATH_SPEED=$(( $( _file size '/tmp/USERDB_COPY' ) * 100 / PATH_SPEED ))	# divisor_valid
+					echo "$PATH_SPEED" >/tmp/USERDB_COPY.speed
+					_log it fetch_userdb_copy daemon info "speed was $PATH_SPEED bytes/sec"
+
+					pidof bat_events >/dev/null && {
+						batman_measure_nexthop
+					}
+
+					_wifi speed >/dev/null
+				;;
+				*)
+					rm "/tmp/USERDB_COPY"
+				;;
+			esac
+		else
+			rm "/tmp/USERDB_COPY"
+		fi
+	else
+		pidof bat_events >/dev/null && {
+			batman_measure_nexthop
+		}
+
+		echo '# OK - not_needed' >"/tmp/USERDB_COPY"
+	fi
 }
+
+rm "/tmp/CHECK_INET_OFFER"
