@@ -768,8 +768,9 @@ for radiocard in 0 1 2 3; do {
 	case "$PROFILE_MODE" in
 		hybrid)
 			local ssid_adhoc="ff.intern.$NODE.ch$CHANNEL"			# fixme! work with 'hidden'
-			local ssid_ap="$( uci get wireless.@wifi-iface[$(( radiocard + 1 ))].ssid )"
-			[ -z "$ssid_ap" ] || [ "$ssid_ap" = "LEDE" ] && ssid_ap="Weimarnetz Knoten $NODE"
+			#local ssid_ap="$( uci get wireless.@wifi-iface[$(( radiocard + 1 ))].ssid )"
+			#[ -z "$ssid_ap" ] || [ "$ssid_ap" = "LEDE" ] && 
+			local ssid_ap="weimar.freifunk.net"
 
 			cat >>"$temp" <<EOF
 config wifi-device radio${radiocard}
@@ -816,7 +817,7 @@ EOF
 		ap*)
 			local var="wireless.@wifi-iface[$radiocard].ssid"
 			local old_essid="$( uci get $var )"
-			local new_essid="Weimarnetz Knoten $NODE"
+			local new_essid="weimar.freifunk.net"
 
 			[ -n "$SSID_ENFORCED" ] && {
 				new_essid="$SSID_ENFORCED"
