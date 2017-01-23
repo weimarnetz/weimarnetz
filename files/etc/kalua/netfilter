@@ -59,6 +59,7 @@ _netfilter_stop()
 					continue
 				}
 			_netfilter user_del "$mac" "$funcname"
+			fi
 		} done >"/tmp/NETFILTER_AUTOADD"
 	}
 

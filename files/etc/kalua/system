@@ -2,7 +2,7 @@
 
 _system_architecture()
 {
-  local file='/tmp/system_architecture'
+	  local file='/tmp/system_architecture'
 	local arch DISTRIB_TARGET
 
 	[ -e "$file" ] || {
@@ -21,7 +21,6 @@ _system_architecture()
 			fi
 
 			echo "$arch" >"$file"
-		fi
 	}
 
 	cat "$file"
@@ -89,6 +88,7 @@ _system_version()	# fixme! use /etc/openwrt_version | /etc/openwrt_release
 			;;
 		esac
 	fi
+
 }
 
 _system_reboot_safe()				# fixme! maybe shutting down services like vpn, olsrd?
@@ -104,10 +104,7 @@ _system_reboot_safe()				# fixme! maybe shutting down services like vpn, olsrd?
 
 	_log it $FUNC daemon alert "scheduling reboot - reason: '$REASON'"
 
-	tail -n1 /tmp/ARCHIV_MONITORING | grep -q ^# || {			# found comment at fileend
-
 	if [ ! -e "/www/SOFTWARE_FULLY_INSTALLED" ]; then			# fixme! check free flash space?
-	
 		_log it $FUNC daemon info "safing syslog to '/www/SYSLOG_SAFED'"
 		grep -v "kern.err olsrd" /var/log/messages >/www/SYSLOG_SAFED		# we don't need the "add route/del route" errors
 	else
@@ -431,3 +428,4 @@ _system_flash_mounted_readonly ()	# SENS: check if data-partition is mounted rea
 	
 	return 1
 }
+

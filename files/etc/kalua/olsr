@@ -895,6 +895,7 @@ _olsr_daemon()
 						echo >>$SCHEDULER '_net refresh_dnshosts'
 					;;
 				esac
+			fi
 			} done
 		;;
 	esac
