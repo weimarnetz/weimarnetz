@@ -132,44 +132,6 @@ _watch_roaming()	# called every 60 secs
 	return 1
 }
 
-_watch_configchange()
-{
-	local funcname='watch_configchange'
-	local hashfile='/etc/openwrt_confighash'
-	local old_hash new_hash server_path server_file identity server
-
-	bool_true 'system.@monitoring[0].autoupload_config' || return 0
-
-	# we do not take temporary changes into account ("uci show"/"uci changes")
-	new_hash="$( cat /etc/config/* $HOME/.ssh/dropbear_*_key | md5sum )"
-	[ -e "$hashfile" ] && read -r old_hash <"$hashfile"
-
-	[ "$new_hash" = "$old_hash" ] || {
-		server='intercity-vpn.de'	# user 'root'
-		server_path="/var/www/networks/${CONFIG_PROFILE%_*}/settings"
-		server_file="config-$NODENUMBER-$( date +%s ).tar.gz"
-		identity="$( _ssh key_public_fingerprint_get keyfilename )"
-
-		# otherwise 'scp' will prompt for accepting fingerprint
-		grep -q ^"$server " "$HOME/.ssh/known_hosts" || return 1
-
-		_log it $funcname daemon alert "[OK] detected change"
-
-		# ~5 kilobytes
-		tar -czf "$TMPDIR/config.tar.gz" '/etc/config' $HOME/.ssh/dropbear_*_key
-
-		pidof scp && return 1
-		if scp -i "$identity" "$TMPDIR/config.tar.gz" "$server:$server_path/$server_file"; then
-			_log it $funcname daemon alert "[OK] upload to $server$server_path/$server_file"
-			echo "$new_hash" >"$hashfile"
-		else
-			_log it $funcname daemon info '[ERR] upload failed'
-		fi
-
-		rm "$TMPDIR/config.tar.gz"
-	}
-}
-
 _watch_wifi_cronactive()
 {
 #	local hour="$1"		# given from taskplanner

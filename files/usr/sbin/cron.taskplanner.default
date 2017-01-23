@@ -44,7 +44,6 @@ EOF
 
 # uptime.sec->minutes divideable (without rest) by 360? -> each 360 mins
 [ $(( $(( ${UP%.*} / 60 )) % 360 )) -eq 0 ] && {
-	echo '_watch configchange'
 	echo '_olsr incoming_and_outgoing_olsr_traffic'
 } >>$SCHEDULER
 
