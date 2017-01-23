@@ -243,8 +243,6 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 								gateway="$3"
 							;;
 						esac
-					else
-						echo >>$SCHEDULER_IMPORTANT '_net inet_seems_stable'
 					fi
 				;;
 			esac

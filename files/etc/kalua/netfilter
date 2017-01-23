@@ -1015,9 +1015,6 @@ _netfilter_walledgarden_list()
 		}
 	}
 
-	# include installation-specific entries:
-	_weblogin metadata_locationname default walled_garden
-
 	echo "$list"
 }
 
@@ -1507,9 +1504,6 @@ _netfilter_user_del()
 			message="mac: $mac ip: $ip traffic: $traffic mb comment: $comment"
 			_log it $funcname daemon alert "$message"
 
-			[ $traffic -gt 1000 ] && {
-				_weblogin authserver_message "$funcname() $message"
-			}
 		}
 
 		_netfilter traffic_control_user_del "$mac"

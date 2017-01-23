@@ -297,7 +297,6 @@ _wifi_change_essid_ap()
 
 			[ -e "$file" ] && {
 				age="$( _file age "$file" humanreadable)"
-				echo >>$SCHEDULER "_weblogin authserver_message '$funcname() $HOSTNAME: ${option:-inet_broken} after $age'"
 				rm -f "$file"
 			}
 		else
@@ -3008,7 +3007,6 @@ _wifi_longshot_report()
 			message="name: $name PHYup: $phy_up NEIGH: $ip RX-Speed: ${speed#*-} TX-$( pingstat "$ip" )"
 
 			_log it $funcname daemon alert "$message"
-			_weblogin authserver_message "$message"
 		}
 	}
 }
