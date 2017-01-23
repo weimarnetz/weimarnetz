@@ -5,6 +5,4 @@ START=99
 boot()
 {
         rm /tmp/BOOT
-
-        scheduler -a "cron.upgrade_packages; rm /tmp/DEBUG"
 }
