@@ -18,33 +18,9 @@ while getopts "S:a:A:rlpfOPHU" FLAG; do {
 			# HOUR   = 00...23
 			eval $( date '+MINUTE=%M; HOUR=%H; WEEKDAY=%A; DAYOFMONTH=%e;' )
 
-			echo >>$SCHEDULER '_watch monitoring'
-			echo >>$SCHEDULER '_watch coredump "during: cron.minutely"'
 			echo >>$SCHEDULER '_wifi watch_phy_problems'
 
 			case "$OPTARG" in
-				minimal)
-					case "$MINUTE" in
-						00|15|30|45)
-							echo >>$SCHEDULER '/etc/init.d/S69watch_olsrd_fff+'
-
-							case "$MINUTE" in
-								00)
-									case "$HOUR" in
-										04)
-											echo >>$SCHEDULER '_firmware update_pmu'
-										;;
-									esac
-								;;
-							esac
-
-							echo >>$SCHEDULER '_watch hanging_command usual_suspects'
-						;;
-					esac
-				;;
-				lazy)
-					_watch autorun
-				;;
 				newstyle)
 					# only compat-layer
 					. /usr/sbin/cron.taskplanner.default

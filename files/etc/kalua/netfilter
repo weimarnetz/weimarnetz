@@ -58,20 +58,6 @@ _netfilter_stop()
 					_log it $funcname daemon debug "ignore roaming ip '$ip'"
 					continue
 				}
-
-				hash="$( _db hash "$mac" )"
-				if [ -n "$( _db user login query hash2id "$hash" )" ]; then
-					mediatype="DB: mac allowed # non_wifi"
-				else
-					mediatype='wifi'
-				fi
-			else
-				mediatype='non_wifi'	# keyword for keeping over reboot
-			fi
-
-			echo "_log it $funcname daemon info 'trying to check previously stopped user $mac'	# $mediatype option: $option"
-			echo "/etc/dhcp-script.d/10dhcpscript add '$mac' '$ip' check_if_reachable		# $mediatype option: $option"
-
 			_netfilter user_del "$mac" "$funcname"
 		} done >"/tmp/NETFILTER_AUTOADD"
 	}
@@ -1055,7 +1041,6 @@ _netfilter_user_list()
 			} done
 
 			for mac in $list; do {
-				comment="$( _db user_macenabled_comment_get "$mac" )"
 				vendor="$( _net mac2vendor "$mac" short )"
 
 				read -r ip 2>/dev/null <"/tmp/NETFILTER/MAC2IP/$mac" || ip="$( _net mac2ip "$mac" )"
@@ -1087,7 +1072,7 @@ _netfilter_user_list()
 					last_action=
 				fi
 
-				echo "$mac : $ip : $dev - $traffic - $speed - ${hideandseek:+HIDE+SEEK} $vendor $last_action [$comment]"
+				echo "$mac : $ip : $dev - $traffic - $speed - ${hideandseek:+HIDE+SEEK} $vendor $last_action" 
 			} done
 		;;
 		*)
@@ -1497,14 +1482,6 @@ _netfilter_user_del()
 
 	[ -d "/tmp/NETFILTER/USER/$mac" ] && {
 		read -r ip <"/tmp/NETFILTER/MAC2IP/$mac"
-
-		bool_true 'system.@weblogin[0].logtraffic' && {
-			comment="$reason $( _db user_macenabled_comment_get "$mac" )"
-			traffic="$( _netfilter stats "$mac" megabytes )"
-			message="mac: $mac ip: $ip traffic: $traffic mb comment: $comment"
-			_log it $funcname daemon alert "$message"
-
-		}
 
 		_netfilter traffic_control_user_del "$mac"
 		_netfilter user_dataretention_del "$mac" "$ip"
