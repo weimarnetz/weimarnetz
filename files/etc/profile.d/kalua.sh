@@ -1,7 +1,7 @@
 #!/bin/sh
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
-[ -n "$FFF_VERSION" ] && echo "Welcome to your Weimarnetz router! You are running kalua revision $FFF_VERSION" 
+[ -n "$FFF_VERSION" ] && echo "Welcome to your Weimarnetz router! You are running kalua revision $FFF_VERSION from $FFF_SOURCE_URL! " 
 printf "\n" 
 
 
