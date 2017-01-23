@@ -152,8 +152,6 @@ case "$LOAD" in
 		case "$I" in
 			''|'#'*)
 				. /tmp/loader
-				_watch topusage_task "cron.minutely: load = $LOAD"
-				_watch monitoring
 				rm '/tmp/CRON_OVERLOAD'
 				[ -e '/tmp/CRON.wifidown' ] && {
 					_wifi phy_restart "$WIFIDEV" force
@@ -310,7 +308,6 @@ case "$LOAD" in
 					;;
 					6|7|8|9|10|1*|2*)
 						_watch space_tmpfs
-						_watch topusage_task "cron.minutely: load = $LOAD I=$I"
 						[ -n "$LOWMEM" ] && echo '#' >"/tmp/CRON_OVERLOAD"
 
 						echo "ALERT: overload_$I - $LOAD - up: $UP" >>$PERMLOG

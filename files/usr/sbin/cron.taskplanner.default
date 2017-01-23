@@ -158,26 +158,6 @@ case "$MINUTE" in
 			echo >>$SCHEDULER '_cisco cdpsend'
 		}
 
-		bool_true 'system.@vds[0].enabled' && {
-			echo '/usr/sbin/cron.evaluate_ulogd_syslogemu_fff+'
-
-			# only call if needed
-			[ -e '/tmp/COLLECT_DATA' ] && echo 'cron.add_collected_userdata_into_db'
-
-			# wait for process (=http to master) if we are not the master/authserver
-			# this should help against too much load on master
-			# TODO: _weblogin_authserver "isme?"
-			[ -e "$DIR_DATABASE/USER/device/stats" ] || {
-				echo '_log sleep jitter_user_stats_process networksize step 5'
-			}
-
-			echo '_netfilter user_stats_process'
-		} >>$SCHEDULER
-
-		bool_true 'system.@monitoring[0].statusprecache' && {
-			echo >>$SCHEDULER '_olsr build_overview_static /tmp/statuspage_neigh_pregenerated'
-		}
-
 		bool_true 'system.@monitoring[0].toggle_wifi' && {
 			MINUTEOFDAY=$(( ${HOUR#0} * 60 + MINUTE ))	# remove leading zeros
 
@@ -202,7 +182,6 @@ case "$MINUTE" in
 		cat >>$SCHEDULER <<EOF
 /usr/sbin/cron.check_inet_gw_fff+
 _watch wifi_mode
-_watch webserver
 _watch hanging_command usual_suspects
 _watch flash_free_space
 _watch system_time
