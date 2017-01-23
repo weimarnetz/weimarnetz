@@ -1,0 +1,68 @@
+#!/bin/sh
+
+[ -e '/tmp/firmware_burn' ] && ACTION=
+
+case "$ACTION" in
+	ifup)
+		[ -s '/tmp/loader' ] || /etc/kalua_init "$ACTION"
+		. /tmp/loader
+
+		echo >>$SCHEDULER '_netparam check'
+
+		DEVICE="${DEVICE:-unset_DEVICE}"	# fool shellcheck
+
+		# if unconfigured: disable lan-DHCP
+		if   [ -e '/etc/init.d/apply_profile' -a "$INTERFACE" = 'lan' ]; then
+			uci set dhcp.lan.ignore='1'
+			grep -sq ^'dhcp-range=lan,' '/var/etc/dnsmasq.conf' && {
+				/etc/init.d/dnsmasq restart
+				logger -s '[OK] no LAN-dhcp on virgin boots'
+			}
+		elif [ "$INTERFACE" = 'loopback' ]; then
+			I=10
+			while [ $I -gt 0 ]; do {
+				if grep -q ^'[a-z]' '/etc/resolv.conf'; then
+					break
+				elif [ $I -eq 0 ]; then
+					_log it $ACTION.$INTERFACE daemon alert 'empty resolv.conf'
+					/etc/init.d/dnsmasq restart
+				fi
+
+				I=$(( I - 1 ))
+				sleep 1
+			} done
+		fi
+
+		# TODO: move to olsr-hotplug
+		echo >>$SCHEDULER_IMPORTANT "_olsr throttle_traffic '$DEVICE' myself"
+		echo >>$SCHEDULER_IMPORTANT '_net local_inet_offer update_cache'
+
+		_net active_ap_devices >"$TMPDIR/WIFI_DEVS_AP"
+
+		# e.g. 'wan' or 'wan2'
+		case "$INTERFACE" in
+			'wlan'*)
+				bool_true 'system.@system[0].leds_ignore' || _wifi led on "$DEVICE"
+
+				test -e '/tmp/PHYRESTART' && {
+					# see wifi_phy_restart()
+					# TODO: this is only the 1st interface
+					_log it $ACTION.$INTERFACE daemon info "[OK] acking $INTERFACE/$DEVICE"
+					rm '/tmp/PHYRESTART'
+				}
+			;;
+			'mastergate')
+				_net roaming_eventlistener start 'hotplug: mastergate comes up'
+
+				$IPT -t nat --new 'NAT_ALIEN_ROAMERS' && {
+					# FIXME! -i is empty in POSTROUTING, so restrict to 'br-mastergate' does not work
+#					$IPT -t nat -I 'NAT_ALIEN_ROAMERS' -s "$ROAMING_NET/$ROAMING_PRE" ! -d "$ROAMING_NET/$ROAMING_PRE" -j MASQUERADE
+					# do not NAT our own OLSR-HNA4-range:
+#					$IPT -t nat -I 'NAT_ALIEN_ROAMERS' -s "$ROAMING_NET_LOCAL/$ROAMING_PRE_LOCAL" -j RETURN
+					$IPT -t nat -I POSTROUTING -j 'NAT_ALIEN_ROAMERS'
+				}
+			;;
+		esac
+		;;
+esac
+
