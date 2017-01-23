@@ -305,20 +305,7 @@ _vpn_tunnel_start ()
 
 	vtund -f "$VTUN" -P "$PORT" "Node$KNOT" "$SERV" 2>/dev/null || {
 
-		_log it $FUNC daemon debug "error"	
-		
-		if _software package_is_not_installed vtun ; then
-		
-			_log it $FUNC daemon debug "vtund and/or kmod-tun not installed"
-		
-		else
-			vtund - 2>/dev/null | grep -q -i vtun || {
-			
-				_log it $FUNC daemon debug "vtund is installed, but has an serious problem"
-
-			}
-		fi
-		
+		_log it $FUNC daemon debug "error vtun missing or problem"	
 		return 1	# cron trys later a vpn-restart
 	}
 }

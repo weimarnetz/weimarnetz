@@ -15,17 +15,6 @@ _system_architecture()
 	local arch DISTRIB_TARGET
 
 	[ -e "$file" ] || {
-		# prevents chicken/egg problem with software_opkg_raminstaller()
-		which $OPKG >/dev/null && {
-			# e.g. Architecture: ramips_24kec
-			arch="$( _software package_status kernel | grep ^'Architecture:' )"
-			arch="${arch#*: }"
-			arch="${arch%%_*}"
-		}
-
-		if [ -n "$arch" ]; then
-			echo "$arch" >"$file"
-		else
 			# DISTRIB_TARGET='ar71xx/generic'
 			# DISTRIB_TARGET='brcm47xx/generic'
 			# DISTRIB_TARGET="rb532/generic"
