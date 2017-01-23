@@ -1,0 +1,51 @@
+#!/bin/sh
+
+. /lib/functions/network.sh 
+
+[ "$ACTION" = 'ifup' -a "$INTERFACE" = 'wan' ] && {
+
+
+	[ $(uci -q get system.weblogin.restrict_local) -eq 1 ] && {
+
+		local physdev 
+		local wan_subnet
+		local wan_subnet6
+
+		network_get_subnets wan_subnet  $INTERFACE
+		network_get_subnets6 wan_subnet6 $INTERFACE 
+		network_get_physdev physdev $INTERFACE	 
+
+		# fixme - is this correct? 
+		[ -n "$wan_subnet" ]  && {
+			iptables -N paranoia-local
+			iptables -A paranoia-local -s $wan_subnet -i $physdev -j REJECT
+			iptables -A FORWARD -j paranoia-local
+		}
+		[ -n "$wan_subnet6" ] && { 
+			ip6tables -N paranoia-local6
+			ip6tables -A paranoia-local6 -s $wan_subnet6 -i $physdev -j REJECT
+			ip6tables -A FORWARD -j paranoia-local6
+		} 
+	}
+
+	[ $(uci -q get system.vpn.enable) = 'on' ] && {
+		
+		network_get_physdev physdev $INTERFACE
+		iptables -N paranoia-vpn
+		iptables -A paranoia-vpn -i wlan+ -o $physdev -j REJECT
+		iptables -A paranoia-vpn -i br-mastergate -o $physdev -j REJECT
+		iptables -A FORWARD -j paranoia-vpn	
+	}
+}
+
+[ "$ACTION" = 'ifdown' -a "$INTERFACE" = 'wan' ] && {
+
+	[ $(uci -q get system.weblogin.restrict_local) -eq 1 ] && {
+		iptables -X paranoia-local
+		ip6tables -X paranoia-local6
+	}
+
+	[ $(uci -q get system.vpn.enable) = 'on' ] && {
+		iptables -X paranoia-vpn
+	}
+}
