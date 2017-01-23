@@ -2,6 +2,26 @@
 
 # uci helper functions from override_uci_vars
 
+
+_uci_already_added()
+{
+	local config="$1"	# e.g. network
+	local section="$2"	# e.g. alias
+	local item="$3"		# e.g. ipaddr or 'interface'
+	local wish="$4"		# e.g. 10.10.43.33 or 'lan'
+	local value i=0
+
+	while value="$( uci -q get $config.@$section[$i].$item )"; do {
+		if [ "$wish" = "$value" ]; then
+			return 0
+		else
+			i=$(( i + 1 ))
+		fi
+	} done
+
+	return 1
+}
+
 _uci_config_add_alias()
 {
 	local network="$1"		# e.g. 'lan'
@@ -13,7 +33,7 @@ _uci_config_add_alias()
 	mask="${ip_and_mask#*/}"
 	mask="$( _net cidr2mask "$mask" )"
 
-	uci_already_added 'network' 'alias' 'interface' "$network" || {
+	_uci already_added 'network' 'alias' 'interface' "$network" || {
 		uci add network alias >/dev/null
 		uci set network.@alias[-1].interface="$network"
 		uci set network.@alias[-1].proto='static'
@@ -116,24 +136,5 @@ _uci_remove_section()
 			uci delete "${p1}[$i]"
 		} done
 	} done
-}
-
-_uci_already_added()
-{
-	local config="$1"	# e.g. network
-	local section="$2"	# e.g. alias
-	local item="$3"		# e.g. ipaddr or 'interface'
-	local wish="$4"		# e.g. 10.10.43.33 or 'lan'
-	local value i=0
-
-	while value="$( uci -q get $config.@$section[$i].$item )"; do {
-		if [ "$wish" = "$value" ]; then
-			return 0
-		else
-			i=$(( i + 1 ))
-		fi
-	} done
-
-	return 1
 }
 
