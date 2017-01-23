@@ -9,9 +9,6 @@ HOST="${4:-unset}"
 [ "$MODE" = 'old' -a -e '/tmp/CRON_OVERLOAD' ] && exit 0
 
 case "$MAC" in
-	'00:00:00:00:00:00')
-		MODE='cron-watchdog'
-	;;
 	*'-'*)
 		_log it dhcp_script daemon info "ignore non-ethernet events: $MAC"
 		exit 0
@@ -49,11 +46,6 @@ case "$DEV" in
 
 		case "$MODE" in
 			'add'|'old')
-				bool_true 'system.@monitoring[0].report_lan_dhcp' && {
-					SHOW_HOST="$HOST"
-					[ "$SHOW_HOST" = 'unset' ] && SHOW_HOST="$( _net mac2vendor "$MAC" short )"
-					echo >>$SCHEDULER_IMPORTANT "_log remote 'lan_dhcp: date: $( date ) CLIENT: mac: $MAC ip: $IP hostname: $SHOW_HOST ROUTER: $HOSTNAME'"
-				}
 			;;
 		esac
 	;;

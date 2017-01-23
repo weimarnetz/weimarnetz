@@ -1937,7 +1937,7 @@ _wifi_reduce_txpower_if_compatible_roaming_nodes_are_near()
 			_log it $funcname daemon info "[RESCHEDULE] reduced to: $txpower_milliwatt_result mW"
 			echo >>$SCHEDULER_NEXTRUN "_wifi reduce_txpower_if_compatible_roaming_nodes_are_near $ifindex $txpower_milliwatt $ssid"
 		else
-			_log remote "[READY] txpower: $txpower_milliwatt_result mW (signal: $signal ssid: $ssid)"
+			_log it $funcname daemon info "[READY] txpower: $txpower_milliwatt_result mW (signal: $signal ssid: $ssid)"
 			debug="ready: txpower_fixed: $txpower_milliwatt"
 		fi
 	else

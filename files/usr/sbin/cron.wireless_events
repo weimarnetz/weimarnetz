@@ -236,28 +236,9 @@ worker()
 			# if the condition is old (e.g. 5mins) we should judge new
 			_file age "$kickmarker" -gt 300 && rm -f "$kickmarker"
 
-			if [ "$mac" = '50:f5:da:e6:1d:51' ]; then
-				parameter="PREROUTING -p udp --dport 53 -m mac --mac-source $mac -j MARK --set-mark 0x15"
-				$IPT -t mangle -I $parameter
-				log "$txt DASH-BUTTON: redirect DNS"	# amazon
-
-				( _curl it 'http://10.63.96.193/cgi-bin-tool.sh?OPT=chickendoor_toggle' >/dev/null ) &
-
-				_log remote "DASH-BUTTON: $mac"
-
-				{
-					echo "log 'DASH-BUTTON gone: $mac'"
-					echo "$IPT -t mangle -D $parameter"
-					echo "_log remote 'DASH-BUTTON gone: $mac'"
-				} >>"$TMPDIR/ROAMING_remove_host_route_$mac"
-
-				signal="$( _wifi signal_get "$wifidev" "$mac" 'debug' )"
-				echo >>$SCHEDULER "_net roaming_debug $mode $unixtime $mac '' $freq $signal $wifidev"
-				signal=-3
-			elif [ -e "$kickmarker" ]; then
+			if [ -e "$kickmarker" ]; then
 				signal="$( _wifi signal_get "$wifidev" "$mac" 'debug' )"
 				log "$txt found kickmarker, simulating good signal, real is: $signal"
-
 				echo >>$SCHEDULER "_net roaming_debug $mode $unixtime $mac '' $freq $signal $wifidev"
 				signal=-2
 			else
