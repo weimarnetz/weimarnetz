@@ -132,31 +132,6 @@ _watch_roaming()	# called every 60 secs
 	return 1
 }
 
-_watch_wifi_cronactive()
-{
-#	local hour="$1"		# given from taskplanner
-#	local minute="$2"
-#	local cron_timeslot cron_start cron_end
-#	local now_minutes_of_day start_minutes_of_day end_minutes_of_day
-
-return 0
-
-	# e.g. 18:00 - 08:00
-#	cron_timeslot="$( uci -q get wireless.radio0.cronactive )" || return 0
-#	explode $timeslot
-#	cron_start="$1"
-#	cron_end="$2"
-
-	# TODO: we cannot calc with 08:00!
-#	start_minutes_of_day=$(( $( echo "$cron_start" | cut -d':' -f1 ) * 60 ) + $( echo "$cron_start" | cut -d':' -f2 ) ))
-#	end_minutes_of_day=$((   $( echo "$cron_end"   | cut -d':' -f1 ) * 60 ) + $( echo "$cron_end"   | cut -d':' -f2 ) ))
-#	now_minutes_of_day=$((   ( $hour * 60 )                                +   minute                              ))
-
-	# e.g. 18:03 = after 18:00
-
-	# build a list of
-}
-
 _watch_reanimate_dead_neighbour()
 {
 	local dev ifname
@@ -398,14 +373,11 @@ _watch_hanging_command()
 
 	[ "$COMMAND" = 'usual_suspects' ] && {
 		_$funcname mv
-		_firmware get_usecase 'NAS' || _$funcname scp	# FIXME! why is scp (on NAS to other server) killed?
 		_$funcname wget
 		_$funcname nc
 
 		return 0
 	}
-
-	_system maintenance_window_active 'pppoe_reconnect' && prio='info'
 
 	if [ -z "$COMMAND_PID" ]; then
 		for COMMAND_PID in $( pidof "$COMMAND" ); do {
@@ -541,95 +513,6 @@ _watch_flash_free_space()	# find / -xdev | while read L; do echo "$( _file size 
 			_log it $funcname daemon info "only $flash_free kb free - removed '$file' with $size bytes"
 		}
 	} done
-}
-
-_watch_sshd_or_telnet()
-{
-	local funcname='watch_sshd_or_telnet'
-	local option="$1"	# force or <empty>
-	local pid_ssh pid_telnetd ssh_binary ssh_name ssh_pidname
-
-	# e.g. called with 'force' in cgi-mode or on vpn-server regulary
-	[ "$option" = 'force' ] || {
-		[ -e '/tmp/service_ssh_nowatching' ] && return
-	}
-
-	if   [ -e '/usr/sbin/dropbear' ]; then		# OpenWrt
-		ssh_binary='/usr/sbin/dropbear'
-		ssh_name='dropbear'
-		ssh_pidname='dropbear'
-	elif [ -e '/usr/sbin/sshd' ]; then		# debian
-		ssh_binary='/usr/sbin/sshd'
-		ssh_name='ssh'
-		ssh_pidname='sshd'
-	fi
-
-	restart_sshd()
-	{
-		_log it restart_sshd daemon alert "reason: $1"
-
-		# FIXME: how can this happen? (e.g. wagenplatz)
-		logread | grep -F 'authpriv.warn dropbear' | grep -F "User 'root' has blank password, rejected" && {
-			sh -c "echo admin; sleep 1; echo admin" | passwd
-		}
-
-		[ -n "$pid_ssh" ] && {
-			_watch hanging_command $( basename "$ssh_binary" )
-			_watch hanging_command $( basename "$ssh_binary" )
-		}
-
-		/etc/init.d/$ssh_name start >/dev/null
-		pidof $ssh_pidname >/dev/null && return 0
-
-		$ssh_binary
-		pidof $ssh_pidname >/dev/null
-	}
-
-	if pid_ssh="$( pidof $ssh_pidname )"; then
-		pid_telnetd="$( pidof telnetd )" && {
-			_log it $funcname daemon alert "[OK] ssh running $pid_ssh, killing telnet $pid_telnetd"
-			kill $pid_telnetd
-		}
-
-		[ "$option" = 'force' -a -z "$LOWMEM" ] && {
-			/usr/sbin/cron.reverse_ssh_tunnel no_check_ssh
-		}
-
-		# content e.g.:
-		# 'SSH-2.0-dropbear_2012.55'
-		# 'SSH-2.0-OpenSSH_6.1p1 Debian-4'
-		if _net tcp_port_reachable '127.0.0.1' '22' 'SSH-2.0' 2>/dev/null; then
-			_log it $funcname daemon info "[OK] $ssh_name seems to run"
-			return 0
-		else
-			_log it $funcname daemon alert "[ERR] $ssh_name seems to hang - restarting"
-			restart_sshd 'hangs' && return 0
-		fi
-	else
-		if [ "$option" = 'force' ]; then
-			restart_sshd 'force:nopid1' && return 0
-		else
-			if [ -x "/etc/rc.d/$ssh_name" ]; then	# oldstyle
-				restart_sshd 'nopid2' && return 0
-			elif [ ! -e '/etc/rc.common' ]; then
-				# vpn-server?
-				return 0
-			elif . /etc/rc.common /etc/init.d/dropbear enabled; then
-				restart_sshd 'nopid3'&& return 0
-			fi
-		fi
-	fi
-
-	pidof telnetd >/dev/null || {
-		_log it $funcname daemon info "telnetd not running - restarting"
-
-		# without pass: telnetd -l /bin/ash
-		if telnetd -l /bin/login.sh <> /dev/null 2>&1 ; then
-			_log it $funcname daemon alert "telnetd PID now: '$( pidof telnetd )'"
-		else
-			_log it $funcname daemon alert 'dropbear nor telnetd not startable'
-		fi
-	}
 }
 
 _watch_random_node_id()		# check if nodenumber/id is from random pool
@@ -1237,15 +1120,6 @@ _watch_olsrstuff()
 					_log it $funcname daemon info "first successful OLSR-query"
 				}
 			}
-
-			[ -n "$LOWMEM" ] && {
-				if [ -e '/www/SIMPLE_MESHNODE' ]; then
-					# TODO: neigh? + (potential olsr-master = slave on the other side) -> wait till we are master
-					[ $( _system uptime min ) -gt 60 ] && _watch lowmem_freemem
-				else
-					_watch lowmem_freemem
-				fi
-			}
 		}
 
 		_olsr restarts_are_suspicious_often && {
@@ -1303,87 +1177,6 @@ _watch_olsrstuff()
 			_olsr daemon start 'no running daemon'
 		fi
 	fi
-}
-
-_watch_lowmem_freemem()
-{
-	local markerfile="$TMPDIR/watch_lowmem_freemem"
-
-	[ -e "$markerfile" ] && return 0
-
-	killall klogd
-	killall hotplug2
-	killall syslogd
-	/etc/init.d/log stop
-
-	[ -e /www/SIMPLE_MESHNODE ] && {
-		touch /tmp/service_ulog_nowatching
-		killall ulogd
-
-		list_ip_from_dhcp_leases()
-		{
-			cut -d' ' -f3 /tmp/dhcp.leases
-		}
-
-		list_ip_from_arp_cache()
-		{
-			ip neigh show | cut -d' ' -f1
-		}
-
-		can_see_lan_clients()
-		{
-			local ip
-
-			for ip in $( list_ip_from_dhcp_leases ) $( list_ip_from_arp_cache ); do {
-				grep -Fq "$ip;" "/tmp/CLIENTS_LAN" && return 0
-			} done
-
-			test -e "/www/SIMPLE_MESHNODE_FORCE_DHCP_LAN"
-		}
-
-		uci set dhcp.wlan.ignore=1
-		uci delete dhcp.@dnsmasq[0].dhcpscript
-
-		if can_see_lan_clients; then
-			/etc/init.d/dnsmasq restart
-		else
-			uci set dhcp.lan.ignore=1
-			/etc/init.d/dnsmasq stop
-			echo "nameserver $( uci get dhcp.@dnsmasq[0].server )" >"/etc/resolv.conf"
-		fi
-	}
-
-	ROOTETHERNET="$( echo $LANDEV | cut -d'.' -f1 )"	# eth0.1 -> eth0
-	ip link set dev $ROOTETHERNET txqueuelen 32
-
-	touch "/tmp/service_ssh_nowatching"
-	killall dropbear
-
-	[ "$( pidof procd )" = "1" ] || {
-		killall netifd
-
-		if [ -e '/etc/rc.d/watchdog' ]; then
-			/etc/init.d/watchdog stop
-			/etc/init.d/watchdog disable
-			_system crashreboot 'watchdog_disable'
-		else
-			# older revisions start the watchdog not via init-file
-			pidof watchdog >/dev/null && {
-				rm $( command -v watchdog )
-				_system crashreboot 'watchdog_disable'
-			}
-		fi
-
-		killall procd
-
-		if pidof hostapd >/dev/null; then
-			grep -q "ubus_connect" /usr/sbin/hostapd || killall ubusd
-		else
-			killall ubusd
-		fi
-	}
-
-	touch "$markerfile"
 }
 
 _watch_vpn()
