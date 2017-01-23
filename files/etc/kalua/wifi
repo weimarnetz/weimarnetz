@@ -131,59 +131,6 @@ _wifi_mac_assoclist()
 	iw dev "$dev" station dump | grep ^'Station ' | cut -d' ' -f2
 }
 
-_wifi_longrange_tweak_values()
-{
-	return 0
-
-	# TODO: convert ap-interfaces to adhoc if no 'adhoc' yet
-	_wifi set adhoc 2ghz mcast_rate '1000'
-	_wifi set adhoc 2ghz chanbw '5'
-	_wifi set adhoc 2ghz channel '1'
-	_wifi set adhoc 2ghz bssid '02:ca:ff:ee:05:05'
-
-	_wifi set adhoc 5ghz mcast_rate '6000'
-	_wifi set adhoc 5ghz chanbw '5'
-	_wifi set adhoc 5ghz channel '36'
-	_wifi set adhoc 5ghz bssid '0a:ca:ff:ee:05:36'
-}
-
-_wifi_nightly_longrange()
-{
-	local funcname='wifi_nightly_longrange'
-	local option="$1"			# set|unset
-	local markerfile="$TMPDIR/$funcname"
-	local backup_changes="$TMPDIR/$funcname.changes"
-	local hash_initial hash_after line
-
-	case "$option" in
-		set)
-			hash_initial="$( uci show wireless | md5sum )"
-			cp '/tmp/.uci/wireless' "$backup_changes"
-			_wifi longrange_tweak_values
-			hash_after="$( uci show wireless | md5sum )"
-
-			# only work if we changed something:
-			if [ "$hash_initial" = "$hash_after" ]; then
-				rm "$backup_changes"
-			else
-				uci export wireless >"$markerfile"
-				_wifi phy_restart "$WIFIDEV" "$funcname:set" 'info'
-			fi
-		;;
-		*)
-			[ -e "$markerfile" ] && {
-				uci revert wireless
-				uci import <"$markerfile"
-				mv "$backup_changes" '/tmp/.uci/wireless'
-
-				_olsr txtinfo >"$backup_changes"	# ugly
-				_wifi phy_restart "$WIFIDEV" "$funcname:unset" 'info'
-				rm "$markerfile"
-			}
-		;;
-	esac
-}
-
 _wifi_dev2freq()	# TODO: code duplication with wifi_channel()
 {			# TODO: on multiband cards this can be senseless
 	local dev="$1"
@@ -266,62 +213,6 @@ EOF
 	} done
 
 	_log it $funcname daemon info "did not found mac '$mac' on dev '$dev' reason: $reason"
-}
-
-_wifi_change_essid_ap()
-{
-	local funcname='wifi_change_essid_ap'
-	local option="$1"	# e.g. <empty> OR 'original'
-	local file="$TMPDIR/$funcname"
-	local i essid age hash1 hash2	# TODO: find $i -> WIFIDEV and restart these via phy_restart()
-
-	if [ "$option" = 'original' ]; then
-		# do not work, when it was never changed
-		[ -e "$file" ] || return 0
-	else
-		# go into 'maintenance_mode', but do not set it twice
-		[ -e "$file" ] && return 0
-	fi
-
-	hash1="$( uci show wireless | md5sum )"
-	for i in $( _wifi get any mode ap ); do {
-		if [ "$option" = 'original' ]; then
-			essid="$( uci -q get "wireless.@wifi-iface[$i].ssid_old" )" || continue
-			uci delete "wireless.@wifi-iface[$i].ssid_old"
-			uci set "wireless.@wifi-iface[$i].ssid=${essid:-$CONFIG_PROFILE-$NODENUMBER}"
-
-			[ -e "$file.ap_forced_on.$i" ] && {
-				rm -f "$file"
-				_wifi set ap "$i" 'off'
-			}
-
-			[ -e "$file" ] && {
-				age="$( _file age "$file" humanreadable)"
-				rm -f "$file"
-			}
-		else
-			touch "$file"
-			essid="$( uci get "wireless.@wifi-iface[$i].ssid" )"
-			uci set "wireless.@wifi-iface[$i].ssid_old=$essid"
-			uci set "wireless.@wifi-iface[$i].ssid=$( _i18n get "$LANG" maintenance_mode "$NODENUMBER/$i" )"
-
-			# FIXME! this should go to another function and switched back, if net is OK again
-			_wifi set anymode 2ghz txpower '20'
-			_wifi set anymode 5ghz txpower '20'
-
-			_wifi longshot_name >/dev/null && {
-				_wifi check_disabled "$i" && {
-					_wifi set ap "$i" 'on'
-					touch "$file.ap_forced_on.$i"
-				}
-			}
-		fi
-	} done
-
-	hash2="$( uci show wireless | md5sum )"
-	[ "$hash1" = "$hash2" ] || {
-		_wifi phy_restart "$WIFIDEV" "force: mode: '${option:-inet_broken}' $funcname"
-	}
 }
 
 _wifi_get_station_param()

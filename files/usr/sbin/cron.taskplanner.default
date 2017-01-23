@@ -80,17 +80,6 @@ case "$HOUR:$MINUTE" in
 	;;
 	05:00)
 		rm "$TMPDIR/wifi_scan_geolocation" 2>/dev/null
-
-		bool_true 'system.@monitoring[0].nightly_longrange' && {
-			echo >>$SCHEDULER '_wifi nightly_longrange set'
-		}
-	;;
-	06:00)
-		echo >>$SCHEDULER '_wifi nightly_longrange unset'
-	;;
-
-	06:25)
-		echo >>$SCHEDULER '_wifi nightly_longrange unset'
 	;;
 esac
 

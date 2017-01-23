@@ -1,13 +1,4 @@
-_system_maintenance_window_active()
-{
-	case "$( date +%H )" in
-		02|03|04)
-			return 0
-		;;
-	esac
-
-	test -e /tmp/MAINTENANCE
-}
+#!/bin/sh 
 
 _system_architecture()
 {
@@ -108,11 +99,6 @@ _system_reboot_safe()				# fixme! maybe shutting down services like vpn, olsrd?
 
 	[ -e  "$LOCKFILE" ] && return
 	touch "$LOCKFILE"
-
-	[ -e "/tmp/outgoing_mail_"* ] && {
-		mkdir -p "/www/cgi-bin/mail"
-		mv "/tmp/outgoing_mail_"* "/www/cgi-bin/mail"
-	}
 
 	/usr/sbin/owm.lua
 
