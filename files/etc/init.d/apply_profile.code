@@ -1439,6 +1439,7 @@ EOF
 
 _config_roaming()
 {
+	. /tmp/loader
 	local wired_networks="$1"		# e.g. 'lan' or 'lan wan'
 	local special_ssid="weimar.freifunk.net"
 	local index network list list_ap has_5ghz has_2ghz is_hybrid milliwatt disassoc_low_ack
@@ -1461,7 +1462,7 @@ _config_roaming()
 	[ -e "/lib/modules/$( uname -r )/macvlan.ko" ] || return 1
 	modprobe 'macvlan'
 
-	uci_remove_section 'network.@alias[].interface' 'mastergate'
+	_uci remove_section 'network.@alias[].interface' 'mastergate'
 	uci set network.mastergate='interface'			# here we collect all interfaces, see below
 	uci set network.mastergate.type='bridge'		# bridge needed for multiple interfaces
 	uci set network.mastergate.proto='static'		# list of ifnames is added below
@@ -1542,13 +1543,13 @@ _config_roaming()
 		esac
 	} done
 
-	uci_already_added 'olsrd' 'Hna4' 'netaddr' "$ROAMING_NET_LOCAL" || {
+	_uci already_added 'olsrd' 'Hna4' 'netaddr' "$ROAMING_NET_LOCAL" || {
 		uci add olsrd Hna4 >/dev/null
 		uci set olsrd.@Hna4[-1].netaddr="$ROAMING_NET_LOCAL"
 		uci set olsrd.@Hna4[-1].netmask="$( _net cidr2mask "$ROAMING_PRE_LOCAL" )"
 	}
 
-	config_add_alias 'mastergate' "$ROAMING_ADR_LOCAL/$ROAMING_PRE_LOCAL"
+	_uci config_add_alias 'mastergate' "$ROAMING_ADR_LOCAL/$ROAMING_PRE_LOCAL"
 
 	# TODO: hostapd: band-steering
 	# https://forum.openwrt.org/viewtopic.php?id=33335
