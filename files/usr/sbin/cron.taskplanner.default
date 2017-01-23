@@ -104,8 +104,7 @@ case "$MINUTE" in
 				}
 			;;
 			*)
-				# collect only, do not send
-				test -z "$LOWMEM" && echo >>$SCHEDULER 'cron.monitoring'
+				owm.lua
 			;;
 		esac
 
