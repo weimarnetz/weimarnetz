@@ -162,7 +162,6 @@ case "$LOAD" in
 	0.9*|0.8*)
 		. /tmp/loader
 		. /usr/sbin/cron.check_klog
-		_watch monitoring
 
 		[ -e '/tmp/CRON_OVERLOAD' ] && {
 			read -r I <'/tmp/CRON_OVERLOAD'
@@ -204,7 +203,6 @@ case "$LOAD" in
 					_olsr daemon start 'no running daemon'
 				}
 			}
-			pidof uhttpd  >/dev/null || _watch webserver
 
 			case "$LOAD" in
 				0.00|0.01|0.02)
@@ -236,13 +234,6 @@ case "$LOAD" in
 								mv '/tmp/scheduler.log.debug' "/tmp/scheduler.log.debug.$$"
 								APPEND="$APPEND, debug: '/tmp/scheduler.log.debug.$$'"
 							}
-
-							if _watch coredump 'during: cron.minutely' ; then
-								_log it old_lockfile daemon alert "removing after coredump, $APPEND"
-							else
-								ps >>"$PERMLOG"
-								_log it old_lockfile daemon alert "removing, coredump not found, $APPEND"
-							fi
 
 							# TODO:
 							# normally we must also remove '/tmp/scheduler.log',
@@ -296,16 +287,6 @@ case "$LOAD" in
 				printf '#' >>'/tmp/CRON_OVERLOAD'
 
 				case ${#I} in
-					0|1|2|3|4)
-					;;
-					5)
-						[ -e '/tmp/cron.webcam' ] || {
-							# maybe a login-script attack
-							killall dropbear && echo "ALERT: overload_$I - $LOAD - up: $UP - killed dropbear" >/dev/console
-						}
-
-						[ -e '/tmp/CRON.wifidown' ] && rm '/tmp/CRON.wifidown'
-					;;
 					6|7|8|9|10|1*|2*)
 						_watch space_tmpfs
 						[ -n "$LOWMEM" ] && echo '#' >"/tmp/CRON_OVERLOAD"
@@ -329,8 +310,6 @@ case "$LOAD" in
 				esac
 			;;
 		esac
-
-		_watch monitoring
 	;;
 esac
 
