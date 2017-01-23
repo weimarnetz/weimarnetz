@@ -3,29 +3,15 @@
 START=70
 
 start() {
-    [ -n "$FAILSAFE" ] && exit
+	[ -n "$FAILSAFE" ] && exit
+	[ -e /www/SOFTWARE_FULLY_INSTALLED ] || exit
 
-    . /tmp/loader
-
-	[ -e "/etc/init.d/apply_profile" ] || {
-		[ "$( _firmware updatemode )" = "testing" ] && {
-			_firmware update_pmu
-		}
+	# write latlong into file 
+	[ -n "$( uci -q get system.@system[0].latitude )" ] && {
+	echo "$( uci -q get system.@system[0].latitude ),$( uci -q get system.@system[0].longitude )">/var/run/latlon.txt
 	}
-
-    # fix cron on sysupgrade
-    [ -e "/etc/init.d/deactivated_cron_daemon" ] && {
-        mv /etc/init.d/deactivated_cron_daemon /etc/init.d/S51crond_fff+
-        /etc/init.d/S51crond_fff+ start
-    }
-
-    # write latlong into file 
-    [ -n "$( uci -q get system.@system[0].latitude )" ] && {
-        echo "$( uci -q get system.@system[0].latitude ),$( uci -q get system.@system[0].longitude )">/var/run/latlon.txt
-    }
-
 	# register first time
-	/usr/sbin/cron.registrator_client.sh
+   	/usr/sbin/cron.registrator_client.sh
 	# draw on map first time
 	/usr/sbin/owm.lua
 }

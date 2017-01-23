@@ -195,13 +195,6 @@ _scheduler_run()
 #				echo "$line - $time" >>'/tmp/PROFILER.data'
 
 				_log it $funcname daemon debug "[READY] '$line'"
-
-				case "$line" in
-					'_firmware check_forced_upgrade'|'_firmware burn')
-						_log it $funcname daemon info "[OK] premature exit after '$line'"
-						break
-					;;
-				esac
 			fi
 		} done <"$file"
 		rm "$file" 2>/dev/null
