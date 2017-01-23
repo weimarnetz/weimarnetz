@@ -113,11 +113,7 @@ mac2ipv4()	# TODO: better name
 						_netfilter user_probe "$mac" || {
 							signal="$( _wifi signal_get "$wifidev" "$mac" 'debug' )"
 
-							if   _weblogin login_check  "$mac" ''          "$mac" "$signal"; then
-								_netfilter user_add "$mac" "$ip"
-							elif _weblogin login_check  "$mac" "$HOSTNAME" "$mac" "$signal"; then
-								_netfilter user_add "$mac" "$ip"
-							fi
+							_netfilter user_add "$mac" "$ip"
 						}
 				# client alien: IP from another node
 				elif _net both_ipv4_in_same_subnet "$ip/32" "$ROAMING_NET/$ROAMING_PRE"; then

@@ -1261,7 +1261,6 @@ _wifi_phy_restart()
 		return 1
 	}
 
-	_watch coredump 'hostapd' ignore	# known crash during shutdown, at least with r37011
 
 	_system uptime sec >"/tmp/STATS_WIFI_RESTARTS.$wifi_dev.time"
 	# PHYRESTART

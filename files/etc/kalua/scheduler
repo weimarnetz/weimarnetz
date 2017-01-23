@@ -195,7 +195,6 @@ _scheduler_run()
 #				echo "$line - $time" >>'/tmp/PROFILER.data'
 
 				_log it $funcname daemon debug "[READY] '$line'"
-				_watch coredump "after: $line"
 
 				case "$line" in
 					'_firmware check_forced_upgrade'|'_firmware burn')
