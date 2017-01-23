@@ -32,10 +32,6 @@ also visit: https://github.com/weimarnetz/weimarnetz
             https://github.com/bittorf/kalua
 	    https://weimarnetz.de 
 
-# some handy tools:
-# start a 'careful' sysupgrade with your own file at '/tmp/fw'
-echo >>\$SCHEDULER_IMPORTANT '_firmware check_forced_upgrade'
-
 # show active users:
 _netfilter user_list verbose
 EOF

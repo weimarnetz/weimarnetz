@@ -77,157 +77,6 @@ _net_get_rxtx()
 	} done <'/proc/net/dev'
 }
 
-_net_sensor_type()
-{
-	local funcname='net_sensor_type'
-	local ip="$1"
-	local port="${2:-80}"
-	local line url proto
-
-	case "$port" in
-		443)
-			proto='https'
-		;;
-		*)
-			proto='http'
-		;;
-	esac
-
-	url="$proto://$ip:$port"
-	line="$( wget -qO - "$url" | grep '<title>' )"
-	case "$line" in
-		*'>Sunny WebBox<'*|*'>SMA Energy Meter<'*|*'>FRITZ!Box<'*|*'>Web Image Monitor<'*|\
-		*'>SMA .::. Power Reducer Box<'*|*'>Web Server<'*|*'>Solar-Log...<'*)
-			echo "$line" | sed -n 's|^.*<title>\(.*\)</title>.*|\1|p'
-		;;
-		*'>Solar-Log'*)
-			echo 'Solar-Log'
-		;;
-		'')
-			# FIXME!
-			_log it $funcname daemon info "url1: $url unknown: '$line'"
-
-			url="$proto://$ip:$port/html/en/selectKind.html"
-			line="$( wget -qO - "$url" | grep '<title>' )"
-			case "$line" in
-				*'>WEB&#8217;log Pro Unlimited '*)
-					echo 'WebLog Pro Unlimited'
-				;;
-				'')
-					_log it $funcname daemon info "url2: $url unknown: '$line'"
-					return 1
-				;;
-			esac
-		;;
-		*)
-			echo 'generic_webserver'
-		;;
-	esac
-}
-
-_net_list_webservers()		# helper for extrawatt, needs ~26 mins for a /24
-{
-	local funcname='net_list_webservers'
-	local pre="${1:-$WANPRE}"	# FIXME! unused - http://stackoverflow.com/questions/16986879/bash-script-to-list-all-ips-in-prefix
-	local octet123="${2:-$WANNET}"	# e.g. 192.168.178.0 or 10.63.4.33
-	local range="$pre"
-	local ip port mac message sensor_type
-
-# root@EG-labor-AP:~ ipcalc.sh 10.63.4.33 27
-# IP=10.63.4.33
-# NETMASK=255.255.255.224
-# BROADCAST=10.63.4.63
-# NETWORK=10.63.4.32
-# PREFIX=27
-# root@EG-labor-AP:~ ipcalc.sh 10.63.4.0 24
-# IP=10.63.4.0
-# NETMASK=255.255.255.0
-# BROADCAST=10.63.4.255
-# NETWORK=10.63.4.0
-# PREFIX=24
-
-
-
-	[ -z "$octet123" ] && return
-	octet123="${octet123%.*}"	# 192.168.178.0 -> 192.168.178
-
-	name='extrawatt'
-	range="$( seq 1 254 )"	# FIXME!
-	echo "$( date ) - $octet123/$pre"
-
-	for i in $range; do {
-		ip="$octet123.$i"
-
-		for port in 22 80 443; do {
-			_log it $funcname daemon info "scan '$ip' for port '$port'"
-			_net tcp_port_reachable "$ip" "$port" && {
-				if [ "$port" = '22' ]; then
-					sensor_type='SSH'
-				else
-					sensor_type="$( _net sensor_type "$ip" "$port" )" || continue
-				fi
-
-				mac="$( _net ip2mac "$ip" )"
-				message="$name ip: $ANYADR type: $sensor_type"
-				echo "OK $ip:$port $message"
-
-				_netfilter portforwarding_add "$WANDEV" "$mac-$port" "$port" "$ip" "$mac" "$message"
-			}
-		} done
-	} done
-
-	echo "$( date ) - ready"
-}
-					# http://stackoverflow.com/questions/81520/how-to-suppress-terminated-message-after-killing-in-bash
-_net_tcp_port_reachable()		# please call with 2>/dev/null otherwise you
-{					# always see the 'killed' message from background job
-	local funcname='net_tcp_port_reachable'
-	local server="$1"		# e.g. 127.0.0.1
-	local port="$2"			# e.g. 80
-	local check_output="$3"		# pattern or <empty>
-
-	local file="$TMPDIR/$funcname"
-	local rc=0
-	local pid i
-
-	command -v nc >/dev/null || {
-		_log it $funcname daemon info '[ERR] no netcat'
-		return 0
-	}
-
-	# we can't rely on '-w3' or '-z' because of lobotomized busybox netcat
-	( nc "$server" "$port" 2>/dev/null >"$file" || touch "$file.error" ) &
-	pid=$!
-
-	if [ -n "$check_output" ]; then
-		for i in $( seq 5 -1 1 ); do {
-			grep -sq -- "$check_output" "$file" && break
-			sleep 1
-		} done
-
-		[ $i -gt 0 ] || {
-			_log it $funcname daemon info "[ERR] '$( cat "$file" )'"
-			rc=1
-		}
-	else
-		i=5
-		while [ $i -gt 0 ]; do {
-			[ -e "$file.error" ] && {
-				rc=1
-				break
-			}
-
-			sleep 1
-			i=$(( i - 1 ))
-		} done
-	fi
-
-	kill ${pid:-empty_pid} 2>/dev/null
-	rm "$file" "$file.error" 2>/dev/null
-
-	return $rc
-}
-
 _net_roaming_eventlistener()
 {
 	local funcname='net_roaming_eventlistener'
@@ -313,58 +162,6 @@ _net_roaming_eventlistener()
 	esac
 }
 
-_net_roaming_debug()
-{
-	local mode="$1"		# new|del
-	local unixtime="$2"
-	local mac="$3"
-	local ip="$4"
-	local freq="$5"
-	local signal="$6"	# -80 or 'early'
-	local wifidev="$7"
-	#
-	local server="$( _weblogin authserver )"
-	local query='action=roaming_mac_action'
-	local url="http://$server/cgi-bin-collect.sh?$query"
-	local params="&mode=$mode&unixtime=$unixtime&mac=$mac&ip=$ip&freq=$freq&signal=$signal&wifidev=$wifidev&node=$NODENUMBER&hostname=$HOSTNAME"
-	local answer="$( _curl it "${url}${params}" )"
-
-	case "$answer" in
-		'OK')
-		;;
-		*)
-			echo >>$SCHEDULER_NEXTRUN "_net roaming_debug $mode $unixtime $mac '$ip' $freq $signal $wifidev"
-		;;
-	esac
-}
-
-_net_roaming_fetch_cache()
-{
-	local file="$TMPDIR/roaming"
-	local url authserver query ip
-
-	# only if roaming enabled
-	_net dev_is_valid 'br-mastergate' || return 0
-
-	if _weblogin authserver is_myself; then
-		[ -e "$file" ] || {
-			ip="$( _olsr neigh_random_get )" && {
-				query='action=roaming_getlist'
-				url="http://$ip/cgi-bin-collect.sh?$query"
-				_curl it "$url" >"$file.tmp"
-
-				grep -n '' "$file.tmp" | sort -rn | cut -d: -f2- >"$file"
-				rm "$file.tmp"
-			}
-		}
-	else
-		authserver="$( _weblogin authserver )"
-		query='action=roaming_getlist'
-		url="http://$authserver/cgi-bin-collect.sh?$query"
-		_curl it "$url" >"$file"
-	fi
-}
-
 _net_roaming_mac2ip()
 {
 	local funcname='net_roaming_mac2ip'
@@ -375,7 +172,7 @@ _net_roaming_mac2ip()
 	local file_dhcp="$TMPDIR/roaming_dhcp"
 	local line url authserver query method
 
-	[ -e "$file" ] || _net roaming_fetch_cache
+	[ -e "$file" ] || return 1 
 
 	get_local()
 	{
@@ -403,20 +200,6 @@ _net_roaming_mac2ip()
 		echo "$ip"
 	elif [ "$action" = 'local_only' ]; then
 		return 1
-	else
-		_weblogin authserver is_myself || {
-			authserver="$( _weblogin authserver )"
-			query="action=roaming_querymac&mac=$mac"
-			url="http://$authserver/cgi-bin-collect.sh?$query"
-
-			ip="$( _curl it "$url" )"
-			test -n "$ip" && {
-				_log it $funcname daemon info "[OK] mac->IP: $mac -> $ip from '$url'"
-				echo "$ip"
-			}
-		}
-
-		# TODO: normal waiting for ARP
 	fi
 }
 
@@ -452,26 +235,9 @@ _net_roaming_report_new()
 	# TODO: signal? channel?
 
 	local file="$TMPDIR/roaming"
-	local authserver url query answer
 
-	if _weblogin authserver is_myself; then
-		echo "$mac $ip $expires" >>"$file"
-		echo >>$SCHEDULER '_net roaming_cleanup_cache'
-	else
-		authserver="$( _weblogin authserver )"
-		query="action=roaming_add&mac=$( _sanitizer run "$mac" urlvalue )&ip=$ip&expires=$expires"
-		url="http://$authserver/cgi-bin-collect.sh?$query"
-		answer="$( _curl it "$url?$query" )"
-
-		case "$answer" in
-			'OK'*)
-				# TODO: fetch recent list
-			;;
-			*)
-				echo >>$SCHEDULER_NEXTRUN "_net roaming_report_new $mac $ip $expires"
-			;;
-		esac
-	fi
+	echo "$mac $ip $expires" >>"$file"
+	echo >>$SCHEDULER '_net roaming_cleanup_cache'
 }
 
 _net_track_ap()		# helper/debug for a roaming laptop -> move to _wifi()?
@@ -529,7 +295,6 @@ _net_track_ap()		# helper/debug for a roaming laptop -> move to _wifi()?
 	get_hostname()
 	{
 		local mac="$1"
-		local url="$2"
 		local bandroam="$3"
 		local i=10
 		local hostname mac_after
@@ -579,7 +344,6 @@ _net_track_ap()		# helper/debug for a roaming laptop -> move to _wifi()?
 	while true; do {
 		bandroam=
 		gateway_ip="$( get_gateway_ip )"
-		url="http://$gateway_ip/cgi-bin-tool.sh?OPT=hostname"
 		apmac="$( get_apmac "$@" )"	# SC2119/SC2120
 
 		if [ "$apmac" = 'unconnected' ]; then

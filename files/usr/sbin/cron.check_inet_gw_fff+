@@ -314,10 +314,6 @@ _log it guess_gateway daemon debug "$OUT"
 			# FIXME! wget is ready, but file not fully written
 			sleep 10
 
-			_filetype gzip '/tmp/USERDB_COPY' && {
-				mv '/tmp/USERDB_COPY' '/tmp/USERDB_COPY.gz'
-				gzip -f -d '/tmp/USERDB_COPY.gz'	# autoremoves .gz
-			}
 
 			LASTLINE="$( tail -n1 '/tmp/USERDB_COPY' )"
 			case "$LASTLINE" in
