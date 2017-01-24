@@ -24,12 +24,6 @@ boot()
 	fi
 	date -s @$(( unixtime + 30 ))
 
-	grep -q ^'debugfs /sys/kernel/debug' '/proc/mounts' || {
-		grep -q 'debugfs'$ '/proc/filesystems' && {
-			mount -o noatime -t debugfs debugfs '/sys/kernel/debug'
-		}
-	}
-
 	reason_long()
 	{
 		local reason="$1"
@@ -105,49 +99,10 @@ boot()
 		echo "# [READY] $PERMLOG"
 	} >/dev/console
 
-	read -r REBOOTS <'/www/REBOOT_COUNTER'		# _system reboots
-	[ ${REBOOTS:-0} -gt 500 ] && {
-		read -r HW <'/etc/HARDWARE'
-
-		case "$HW" in
-			'toomuchreboots'*)
-			;;
-			*)
-				# prevents system_crashreboot()
-				echo "toomuchreboots-$HW" >'/etc/HARDWARE'
-			;;
-		esac
-	}
-
-#	if /usr/sbin/memtester 22M 1 >'/tmp/MEMTESTER'; then
-#		rm -f '/tmp/MEMTESTER'
-#	else
-#		local file="/www/MEMTESTER.$( cat /www/REBOOT_COUNTER ).$?"	# _system reboots
-#		mv -f '/tmp/MEMTESTER' "$file"
-#		echo "Error during memtester: $file" >>"$PERMLOG"
-#	fi
-
 	touch '/tmp/BOOT'
 	touch '/tmp/DEBUG'
 
-	for _ in 1 2 3 4 5 6 7 8 9; do {
-		/etc/kalua_init "generate_loader.loop:$_"
-
-		# enforce error if 'no file' or 0 bytes
-		[ -s '/tmp/loader' ] || echo ';' >'/tmp/loader'
-
-		if sh -n 2>/dev/null '/tmp/loader'; then
-			[ -e '/www/loader.backup' ] || {
-				cp '/tmp/loader' '/www/loader.backup'
-			}
-
-			break
-		else
-			[ -e '/www/loader.backup' ] && {
-				cp '/www/loader.backup' '/tmp/loader'
-			}
-		fi
-	} done
+	/etc/init.d/kalua_init
 	. /tmp/loader
 
 	# e.g. reboot-on-panic
@@ -155,61 +110,6 @@ boot()
 	_watch counter '/www/REBOOT_COUNTER' increment 1
 	sync
 
-	# a hack, needed for override_uci_vars
-	# TODO: netparam_check() does not work during early boot
-	_netparam generate >>/tmp/loader
-
-	# zram is included since r35033
-	grep -q ^'zram ' '/proc/modules' || /etc/init.d/zram start
-
 	# see scheduler_run()
 	touch "$TMPDIR/scheduler_keep_running"
-
-	# remove trash:
-	rm -fR /*0*
-	rm -fR /*1*
-	rm -fR /*2*
-	rm -fR /*3*
-	rm -fR /*4*
-	rm -fR /*5*
-	rm -fR /*6*
-	rm -fR /*7*
-	rm -fR /*8*
-	rm -fR /*9*
-	rm -f /root/core	# file seen in monami
-	rm -fR /tmp?*		# seen in festscheune-bh
-
-	# really needed?
-	/etc/init.d/override_uci_vars enabled || {
-		/etc/init.d/override_uci_vars boot
-		/etc/init.d/override_uci_vars enable
-	}
-
-	_watch archivsize "$PERMLOG" 400 500
-	_watch archivsize '/www/PINGCHECK' 1000 2000
-
-	[ -n "$LOWMEM" ] && {
-		[ -e "/etc/init.d/apply_profile" ] && {
-			/etc/init.d/telnet disable
-			/etc/init.d/dropbear disable
-			/etc/init.d/dnsmasq disable
-			uci set network.wan.proto='static'	# do not start udhcpc
-			uci set dhcp.@dnsmasq[0].disabled=1
-
-			case "$CONFIG_PROFILE" in
-				*adhoc)
-				;;
-				*)
-					uci set wireless.radio0.disabled=1
-				;;
-			esac
-		}
-	}
-
-	# FIXME! why does it hang? with plain OpenWrt this does not happen
-	[ -e '/etc/init.d/rcS' ] && {
-		grep -Fq 'killall logger' '/etc/init.d/rcS' || {
-			echo 'killall logger' >>'/etc/init.d/rcS'
-		}
-	}
 }
