@@ -4,6 +4,19 @@
 [ -n "$FFF_VERSION" ] && echo "Welcome to your Weimarnetz router! You are running kalua revision $FFF_VERSION from $FFF_SOURCE_URL! " 
 printf "\n" 
 
+check_weak_passwd() 
+{
+
+	command -V mkpasswd || return 
+
+	salt=$(awk -F"$" '/^root/ { print $3}' < /etc/shadow)
+	pass=admin
+	weakhash=$(mkpasswd -5 -S $salt $pass) 
+	hash=$(awk -F":" '/^root/ { print $2}' < /etc/shadow)
+	[ "$weakhash" = "$hash" ] && { 
+		echo "[ATT] Weak default password! Please change the password with 'passwd' now!"
+	}
+}
 
 prompt_set()
 {
@@ -73,10 +86,7 @@ unset UP REST
 
 case "$USER" in
 	'root'|'')
-		# FIXME! needs 'mkpasswd'
-		grep -qs ^"root:\$1\$b6usD77Q\$XPs6VECsQzFy9TUuQUAHW1:" '/etc/shadow' && {
-			echo "[ERROR] change weak password ('admin') with 'passwd'"
-		}
+		check_weak_passwd
 
 		grep -qs ^'root:\$' '/etc/shadow' || {
 			echo "[ERROR] unset password, use 'passwd'"
