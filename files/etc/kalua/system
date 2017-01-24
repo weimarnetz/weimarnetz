@@ -421,18 +421,8 @@ _system_reboot_safe()				# fixme! maybe shutting down services like vpn, olsrd?
 	local reason="$1"			# first word must be valid for crashreboot()
 	local lockfile="/tmp/$funcname-active"
 
-	_linklocal wifi_users "$WIFIDEV" >/dev/null && {
-		_log it $funcname daemon info "waiting till all wifi-clients disconnect, rescheduling myself"
-		echo >>$SCHEDULER "_system reboot_safe '$reason'"
-		return
-	}
-
 	[ -e  "$lockfile" ] && return
 	touch "$lockfile"
-
-	_mail stash_for_later_resend
-
-	cron.monitoring send_alive_message no_antenna_test	# maybe the last feedback can be helpful
 
 	[ -e '/www/CRASHLOG_WORKS' -a "$reason" = 'nightly_reboot' ] || {
 		_log it $funcname daemon alert "scheduling reboot - reason: '$reason'"
