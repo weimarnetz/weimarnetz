@@ -1660,11 +1660,10 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron 
 /etc/init.d/S43ethers_fff+ enable
 /etc/init.d/S41build_static_netparam enable
 # disable zram until https://github.com/weimarnetz/weimarnetz/issues/251 is solved
-/etc/init.d/zram disable
+[ -e /etc/init.d/zram ] && /etc/init.d/zram disable
 /etc/init.d/S99vpn enable
 /etc/init.d/netfilter enable
 /etc/init.d/crashlog_apport enable
-/etc/init.d/S90olsr-prio disable
 
 
 [ -e "/etc/init.d/olsrd6" ] && {
@@ -1681,9 +1680,9 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron 
 	/etc/init.d/freifunk disable
 	}
 
-#[ -e "/etc/init.d/S90olsr-prio" -a -x "/usr/sbin/tc" ] && {
-#  /etc/init.d/S90olsr-prio enable
-#}
+[ -e "/etc/init.d/S90olsr-prio" ] && {
+  /etc/init.d/S90olsr-prio disable
+}
 
 # webserver-related stuff
 uci set uhttpd.main.index_page="weimar-splash-index.sh"
