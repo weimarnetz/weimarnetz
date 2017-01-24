@@ -33,10 +33,10 @@ case "$ACTION" in
 			set -- $( iw dev "$DEVICE" info | grep 'wiphy ' )	# FIXME: explode
 			PHY="$2"
 
-			if bool_true 'system.@system[0].wifi_no_predistortion'; then
-				_wifi phy_amp_predistortion "$PHY" 'off'
-			else
+			if bool_true 'system.@system[0].wifi_predistortion'; then
 				_wifi phy_amp_predistortion "$PHY" 'on'
+			else
+				_wifi phy_amp_predistortion "$PHY" 'off'
 			fi
 
 			echo "phy$PHY" >"/var/run/interfaces/dev2radio_$DEVICE"
