@@ -7,7 +7,7 @@ printf "\n"
 check_weak_passwd() 
 {
 
-	command -V mkpasswd || return 
+	command -V mkpasswd > /dev/null || return 
 
 	salt=$(awk -F"$" '/^root/ { print $3}' < /etc/shadow)
 	pass=admin
