@@ -11,7 +11,7 @@ check_weak_passwd()
 
 	salt=$(awk -F"$" '/^root/ { print $3}' < /etc/shadow)
 	pass=admin
-	weakhash=$(mkpasswd -5 -S $salt $pass) 
+	weakhash=$(mkpasswd -S $salt $pass) 
 	hash=$(awk -F":" '/^root/ { print $2}' < /etc/shadow)
 	[ "$weakhash" = "$hash" ] && { 
 		echo "[ATT] Weak default password! Please change the password with 'passwd' now!"
