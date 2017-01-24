@@ -4,22 +4,212 @@ START=00
 
 boot()
 {
-	# /proc/sys/vm/panic_on_oom = 1
-	# /proc/sys/kernel/panic_on_oops = 1
-	# /proc/sys/kernel/panic = 10
+	local line unixtime reason
+	local crashlog='/sys/kernel/debug/crashlog'
+	PERMLOG='/www/everlasting_syslog.txt'		# FIXME! later known via loader
 
-	for ENTRY in "vm.panic_on_oom=1" "kernel.panic_on_oops=1" "kernel.panic=10"; do {
-		/sbin/sysctl -w $ENTRY
-		grep -q ^"$ENTRY" "/etc/sysctl.conf" || {
-			echo "$ENTRY" >>"/etc/sysctl.conf"
+	export TZ="$( uci -q get system.@system[0].timezone )"
+	# https://lists.openwrt.org/pipermail/openwrt-devel/2014-January/023196.html
+	if   [ -e '/dev/rtc0' ]; then
+		# root@CubieNAS:~ :) hwclock -r -f /dev/rtc0
+		# Mon Nov  7 12:59:49 2016  0.000000 seconds
+		set -- $( hwclock -r -f '/dev/rtc0' )
+		unixtime="$( _system date 2unixtime "$1 $2 $3 $4 $5" )"
+	elif [ -e "$PERMLOG" ]; then
+		unixtime="$( date +%s -r "$PERMLOG" )"
+	elif [ -e '/www/switch.txt' ]; then
+		unixtime="$( date +%s -r '/www/switch.txt' )"
+	else
+		unixtime="$( date +%s -r '/etc/banner' )"	# build-date
+	fi
+	date -s @$(( unixtime + 30 ))
+
+	grep -q ^'debugfs /sys/kernel/debug' '/proc/mounts' || {
+		grep -q 'debugfs'$ '/proc/filesystems' && {
+			mount -o noatime -t debugfs debugfs '/sys/kernel/debug'
 		}
+	}
+
+	reason_long()
+	{
+		local reason="$1"
+		local reason_long
+
+		reason_long="$( grep "reason=$reason " '/etc/kalua/system' | cut -d')' -f1 | cut -d'|' -f2 )"
+		set -- $reason_long
+
+		echo "${1:-unknown_reason}"
+	}
+
+	[ -e '/www/CRASHLOG_WORKS' ] || {
+		grep -sq 'Modules:' "$crashlog" && touch '/www/CRASHLOG_WORKS'
+	}
+
+	if [ -e '/www/CRASHLOG_WORKS' ]; then
+		if line="$( grep -s ' ux.,' "$crashlog" )"; then			# see system_crashreboot()
+			# <4>[29071.240000] CPU: 0 PID: 7201 Comm: ux0,1388632927, Not tainted 3.10.24 #18
+			# <4>[ 9071.240000] CPU: 0 PID: 7201 Comm: ux0,1388632927, Not tainted 3.10.24 #18
+			# or on kernel 3.3.8:
+			# <4>[ 1436.952000] Process uxL,1403754286, (pid: 9633, threadinfo=80446000, task=80cdb978, tls=77691440)
+			set -- $line
+
+			while shift; do {
+				case "$1 $2" in
+					'Comm: ux'*|'Process ux'*)
+						reason="$(   echo "$2" | cut -b3 )"
+						unixtime="$( echo "$2" | cut -d',' -f2 )"
+						break
+					;;
+					' ')
+						break
+					;;
+				esac
+			} done
+
+			date --set @$unixtime
+			reason="$( reason_long "$reason" )"
+			echo "$( date ) [OK] reboot reason: '$reason'" >>"$PERMLOG"
+			echo "$reason" >'/tmp/REBOOT_REASON'
+		else
+			if [ -e "$crashlog" ]; then
+				if   grep -q 'SysRq : Trigger a crash' "$crashlog"; then
+					# e.g. in cron.minutely PSWORK()
+					# CPU: 0 PID: 28069 Comm: sh Not tainted 3.18.14 #1
+					echo "$( date ) [ERROR] emergency_triggered crash detected in '$crashlog'" >>"$PERMLOG"
+					echo 'emergency_trigger' >'/tmp/REBOOT_REASON'
+				elif grep -q 'device closed unexpectedly, watchdog timer will not stop!' "$crashlog"; then
+					echo "$( date ) [ERROR] watchdog action detected in '$crashlog'" >>"$PERMLOG"
+					echo 'kernel_watchdog' >'/tmp/REBOOT_REASON'
+				elif grep -q ' invoked oom-killer' "$crashlog"; then
+					echo "$( date ) [ERROR] oom action detected in '$crashlog'" >>"$PERMLOG"
+					echo 'out-of-memory' >'/tmp/REBOOT_REASON'
+				else
+					echo "$( date ) [ERROR] crash detected in '$crashlog'" >>"$PERMLOG"
+					echo "realcrash" >'/tmp/REBOOT_REASON'
+				fi
+			else
+				echo "$( date ) [ERROR] reboot without reason/crash" >>"$PERMLOG"
+				echo 'nocrash' >'/tmp/REBOOT_REASON'
+			fi
+		fi
+	else
+		reason="$( tail -n1 "$PERMLOG" | grep 'system_crashreboot' | cut -d'=' -f2 )"
+		reason="$( reason_long "$reason" )"
+		echo "${reason:-nocrash}" >'/tmp/REBOOT_REASON'
+		echo "$( date ) (crashlog not working) BOOTUP: reason: ${reason:-nocrash}" >>"$PERMLOG"
+	fi
+
+	{
+		echo "# [START] $PERMLOG"
+		tail -n5 "$PERMLOG"
+		echo "# [READY] $PERMLOG"
+	} >/dev/console
+
+	read -r REBOOTS <'/www/REBOOT_COUNTER'		# _system reboots
+	[ ${REBOOTS:-0} -gt 500 ] && {
+		read -r HW <'/etc/HARDWARE'
+
+		case "$HW" in
+			'toomuchreboots'*)
+			;;
+			*)
+				# prevents system_crashreboot()
+				echo "toomuchreboots-$HW" >'/etc/HARDWARE'
+			;;
+		esac
+	}
+
+#	if /usr/sbin/memtester 22M 1 >'/tmp/MEMTESTER'; then
+#		rm -f '/tmp/MEMTESTER'
+#	else
+#		local file="/www/MEMTESTER.$( cat /www/REBOOT_COUNTER ).$?"	# _system reboots
+#		mv -f '/tmp/MEMTESTER' "$file"
+#		echo "Error during memtester: $file" >>"$PERMLOG"
+#	fi
+
+	touch '/tmp/BOOT'
+	touch '/tmp/DEBUG'
+
+	for _ in 1 2 3 4 5 6 7 8 9; do {
+		/etc/kalua_init "generate_loader.loop:$_"
+
+		# enforce error if 'no file' or 0 bytes
+		[ -s '/tmp/loader' ] || echo ';' >'/tmp/loader'
+
+		if sh -n 2>/dev/null '/tmp/loader'; then
+			[ -e '/www/loader.backup' ] || {
+				cp '/tmp/loader' '/www/loader.backup'
+			}
+
+			break
+		else
+			[ -e '/www/loader.backup' ] && {
+				cp '/www/loader.backup' '/tmp/loader'
+			}
+		fi
 	} done
+	. /tmp/loader
 
-    touch /tmp/BOOT
-    touch /tmp/DEBUG
-    /etc/kalua_init 
+	# e.g. reboot-on-panic
+	_system sysctl_tweaks
+	_watch counter '/www/REBOOT_COUNTER' increment 1
+	sync
 
-    . /tmp/loader
-    _watch flash_free_space
+	# a hack, needed for override_uci_vars
+	# TODO: netparam_check() does not work during early boot
+	_netparam generate >>/tmp/loader
+
+	# zram is included since r35033
+	grep -q ^'zram ' '/proc/modules' || /etc/init.d/zram start
+
+	# see scheduler_run()
+	touch "$TMPDIR/scheduler_keep_running"
+
+	# remove trash:
+	rm -fR /*0*
+	rm -fR /*1*
+	rm -fR /*2*
+	rm -fR /*3*
+	rm -fR /*4*
+	rm -fR /*5*
+	rm -fR /*6*
+	rm -fR /*7*
+	rm -fR /*8*
+	rm -fR /*9*
+	rm -f /root/core	# file seen in monami
+	rm -fR /tmp?*		# seen in festscheune-bh
+
+	# really needed?
+	/etc/init.d/override_uci_vars enabled || {
+		/etc/init.d/override_uci_vars boot
+		/etc/init.d/override_uci_vars enable
+	}
+
+	_watch archivsize "$PERMLOG" 400 500
+	_watch archivsize '/www/PINGCHECK' 1000 2000
+
+	[ -n "$LOWMEM" ] && {
+		[ -e "/etc/init.d/apply_profile" ] && {
+			/etc/init.d/telnet disable
+			/etc/init.d/dropbear disable
+			/etc/init.d/dnsmasq disable
+			uci set network.wan.proto='static'	# do not start udhcpc
+			uci set dhcp.@dnsmasq[0].disabled=1
+
+			case "$CONFIG_PROFILE" in
+				*adhoc)
+				;;
+				*)
+					uci set wireless.radio0.disabled=1
+				;;
+			esac
+		}
+	}
+
+	# FIXME! why does it hang? with plain OpenWrt this does not happen
+	[ -e '/etc/init.d/rcS' ] && {
+		grep -Fq 'killall logger' '/etc/init.d/rcS' || {
+			echo 'killall logger' >>'/etc/init.d/rcS'
+		}
+	}
 }
-
