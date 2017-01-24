@@ -1664,7 +1664,7 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron 
 /etc/init.d/S99vpn enable
 /etc/init.d/netfilter enable
 /etc/init.d/crashlog_apport enable
-
+/etc/init.d/S90olsr-prio disable
 
 
 [ -e "/etc/init.d/olsrd6" ] && {
