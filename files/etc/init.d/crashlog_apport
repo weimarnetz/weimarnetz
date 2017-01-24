@@ -4,7 +4,7 @@ START=99
 
 uniq_machine_id()
 {
-	dropbearkey -y -f "/etc/dropbear/dropbear_dss_host_key" |
+	dropbearkey -y -f "/etc/dropbear/dropbear_rsa_host_key" |
 	 fgrep "Fingerprint:" |
 	  cut -d' ' -f3
 }
@@ -43,28 +43,18 @@ openwrt_revision()
 	fi
 }
 
-build_http_postdata()
+build_data()
 {
 	local file="$1"
-	local target_ip="$2"
-	local size="$( wc -c <"$file" )"
 	local id="$( uniq_machine_id )"
 	local version="$( openwrt_revision )"
 	local kernel="$( kernel_version )"
-	local path="crashlog/index.php"
 	local usecase="$( box_usecase )"
 	local hardware="$( box_hardware )"
 
-	size=$(( ${#version} + ${#kernel} + ${#id} + ${#usecase} + ${#hardware} + 5 + $size ))
 
-	logger "build_http_postdata: preparing send to 'http://$target_ip/$path' ($size bytes)"
 
-	echo "POST /$path HTTP/1.1"
-	echo "Host: $target_ip"
-	echo "Content-Type: application/x-www-form-urlencoded"
-	echo "Content-Length: $size"
-	echo
-
+	echo "crashlog $(cat /proc/sys/kernel/hostname)-$hardware"
 	echo "$version"
 	echo "$kernel"
 	echo "$id"
@@ -78,7 +68,8 @@ start()
 {
 	local funcname="crashlog_apport"		# enforce a crash with 'echo c >/proc/sysrq-trigger'
 	local file="/sys/kernel/debug/crashlog"		# crashlog.o works since r32788
-	local server_ip="84.38.67.43"
+	local server_addr="weimarnetz.segfault.gq"
+	local server_port="2323"
 	local answer="false"
 	local maxtry=10
 	local pause=30
@@ -86,10 +77,10 @@ start()
 	if [ -e "$file" ]; then
 		while [ $maxtry -gt 0 ]; do {
 			logger "$funcname: found log in $file, reporting to server $server_ip"
-			answer="$( build_http_postdata "$file" "$server_ip" | nc "$server_ip" 80 )"
+			answer="$( build_data "$file" | nc "$server_addr" "$server_port" )"
 
 			case "$answer" in
-				*OK)
+				*ok)
 					break
 				;;
 				*)
