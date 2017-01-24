@@ -19,6 +19,11 @@ case "$ACTION" in
 
 		# TODO: history up/down?
 
+		grep -q '^sch_cake' '/proc/modules' && {
+			command -V tc > /dev/null || return 
+			tc qdisc replace dev $DEVICE root cake
+		}
+
 		MAC="$( _net dev2mac "$DEVICE" )" && {
 			[ -e "$PERMDIR/netparam_iface-$INTERFACE-mac" ] && {
 				read -r MAC_OLD <"$PERMDIR/netparam_iface-$INTERFACE-mac"
