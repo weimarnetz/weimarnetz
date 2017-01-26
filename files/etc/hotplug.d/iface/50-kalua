@@ -1,7 +1,5 @@
 #!/bin/sh
 
-[ -e '/tmp/firmware_burn' ] && ACTION=
-
 case "$ACTION" in
 	ifup)
 		[ -s '/tmp/loader' ] || /etc/kalua_init "$ACTION"
@@ -9,32 +7,7 @@ case "$ACTION" in
 
 		echo >>$SCHEDULER '_netparam check'
 
-		DEVICE="${DEVICE:-unset_DEVICE}"	# fool shellcheck
-
-		# if unconfigured: disable lan-DHCP
-		if   [ -e '/etc/init.d/apply_profile' -a "$INTERFACE" = 'lan' ]; then
-			uci set dhcp.lan.ignore='1'
-			grep -sq ^'dhcp-range=lan,' '/var/etc/dnsmasq.conf' && {
-				/etc/init.d/dnsmasq restart
-				logger -s '[OK] no LAN-dhcp on virgin boots'
-			}
-		elif [ "$INTERFACE" = 'loopback' ]; then
-			I=10
-			while [ $I -gt 0 ]; do {
-				if grep -q ^'[a-z]' '/etc/resolv.conf'; then
-					break
-				elif [ $I -eq 0 ]; then
-					_log it $ACTION.$INTERFACE daemon alert 'empty resolv.conf'
-					/etc/init.d/dnsmasq restart
-				fi
-
-				I=$(( I - 1 ))
-				sleep 1
-			} done
-		fi
-
 		# TODO: move to olsr-hotplug
-		echo >>$SCHEDULER_IMPORTANT "_olsr throttle_traffic '$DEVICE' myself"
 		echo >>$SCHEDULER_IMPORTANT '_net local_inet_offer update_cache'
 
 		_net active_ap_devices >"$TMPDIR/WIFI_DEVS_AP"
