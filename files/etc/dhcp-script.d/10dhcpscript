@@ -6,8 +6,6 @@ MAC="${2:-ff:00:00:00:00:00}"		# FIXME! this enforces an invalid mac, see saniti
 IP="${3:-127.0.0.1}"
 HOST="${4:-unset}"
 
-[ "$MODE" = 'old' -a -e '/tmp/CRON_OVERLOAD' ] && exit 0
-
 case "$MAC" in
 	*'-'*)
 		_log it dhcp_script daemon info "ignore non-ethernet events: $MAC"
@@ -63,65 +61,10 @@ case "$DEV" in
 	;;
 esac
 
-case "$HOST" in
-	'reanimateV2')
-		# seed watch_reanimate_dead_neighbour()
-		MODE='invalid'
-	;;
-esac
-
 if [ "$MODE" = 'old' ]; then
 	_log it dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV HOST: $HOST"
 else
 	_log it dhcp_$MODE daemon info "'$MAC' is from '$DEV' = ${TYPE}-DEV HOST: $HOST"
-
-	case "$MODE-$HOST" in
-		'add-check_if_reachable')
-			MODE="$HOST"
-			_log it dhcp_add_check_if_reachable daemon info "MAC: $MAC IP: $IP DEV: $DEV"
-			_netfilter user_add "$MAC" "$IP"
-		;;
-	esac
 fi
-
-case "$MODE" in
-	add|old)
-		bool_true 'system.@weblogin[0].enabled' && {
-			case "$MODE" in
-				'old')
-					_netfilter user_probe "$MAC" && exit 0
-					# maybe unknown after unscheduled reboot, so go further
-				;;
-				'add')
-					case "$TYPE" in
-						'roaming')
-							echo >>$SCHEDULER_IMPORTANT "_net roaming_report_new $MAC $IP $DNSMASQ_LEASE_EXPIRES"
-						;;
-					esac
-				;;
-			esac
-
-			USER="$MAC"
-			SIGNAL="${HOSTNAME}_dhcp-${MODE}"				# keyword 'dhcp' is important for login_check()
-			export REMOTE_ADDR="$IP"
-
-			# for "very fast unsplashing" and not showing 'please use credentials'
-			$IPT -t mangle -I PREROUTING -j ACCEPT
-			_log it $SIGNAL daemon info "[OK] login $USER"
-			_netfilter user_add "$MAC" "$IP"
-			# remove the hack for "very fast unsplashing"
-			$IPT -t mangle -D PREROUTING -j ACCEPT
-		}
-
-		echo >>$SCHEDULER "_netfilter portforwarding_request $IP $MAC $HOST"
-	;;
-	del)
-#		if bool_true 'system.@weblogin[0].dhcpautologout'; then
-			echo >>$SCHEDULER "_netfilter user_del $MAC dhcp_del"
-#		else
-#			_netfilter set_arp reachable "$MAC" "$IP" "$DEV"
-#		fi
-	;;
-esac
 
 true
