@@ -14,14 +14,7 @@ eval $( date '+MINUTE=%M; HOUR=%H; WEEKDAY=%A; DAYOFMONTH=%d; UNIXTIME=%s;' )
 [ -z "$UP" ] && read -r UP REST </proc/uptime		# normally done during cron.minutely
 
 if [ -e "$TMPDIR/firstrun" ]; then
-	[ -e "$TMPDIR/.autorun" ] && _watch autorun		# direct call
-
-	bool_true 'olsrd.@meta[0].watch_gateway' && {
-		read -r REST <'/tmp/OLSR/DEFGW_NOW' || REST='8.8.8.8'
-		test $( _net ping_getlatency "$REST" || echo '100' ) -gt 99 && {
-			_system crashreboot wifiphy_probs
-		}
-	}
+	# do nothing
 else
 	touch "$TMPDIR/firstrun"
 
@@ -48,9 +41,6 @@ EOF
 } >>$SCHEDULER
 
 case "$HOUR:$MINUTE" in
-	17:00)
-#		echo >>$SCHEDULER_IMPORTANT '_wifi longshot_test 17:10:00 36...40 "719 670" >/www/BLUBB'
-	;;
 	04:00)
 		{
 			echo '_watch archivsize "/tmp/messages" 5000'	# e.g. VPN-server
@@ -94,47 +84,11 @@ case "$MINUTE" in
 					echo '_wifi scan_geolocation'
 					echo '_wifi longshot_name && _rrd upload'
 				} >>$SCHEDULER
-
-				bool_true 'system.@monitoring[0].cisco_collect' && {
-					echo >>$SCHEDULER '_cisco collect'
-				}
-
-				_system maintenance_window_active 'pppoe_reconnect' || {
-					echo >>$SCHEDULER 'cron.monitoring send_alive_message'
-				}
 			;;
 			*)
 				owm.lua
 			;;
 		esac
-
-		# check if enough ram is available
-#		echo >>$SCHEDULER '_rrd show'
-
-		bool_true 'system.@monitoring[0].cdp_send' && {
-			echo >>$SCHEDULER '_cisco cdpsend'
-		}
-
-		bool_true 'system.@monitoring[0].toggle_wifi' && {
-			MINUTEOFDAY=$(( ${HOUR#0} * 60 + MINUTE ))	# remove leading zeros
-
-			uci2minuteofday()
-			{
-				local value="$( uci get "$1" )"		# e.g. 06:15
-				local hour="${value%:*}"
-				local min="${value#*:}"
-
-				echo $(( ${hour#0} * 60 + ${min#0} ))	# remove leading zeros
-			}
-
-			if [ -n "$WIFIDEV" ]; then
-				WISH=$( uci2minuteofday 'system.@monitoring[0].toggle_wifi_off' )
-				[ $MINUTEOFDAY -ge $WISH ] && echo >>$SCHEDULER '_wifi toggle off'
-			else
-				WISH=$( uci2minuteofday 'system.@monitoring[0].toggle_wifi_on' )
-				[ $MINUTEOFDAY -ge $WISH ] && echo >>$SCHEDULER '_wifi toggle on'
-			fi
-		}
 
 		cat >>$SCHEDULER <<EOF
 /usr/sbin/cron.check_inet_gw_fff+
@@ -147,7 +101,5 @@ _watch dhcp_space
 _net refresh_dnshosts
 _net roaming_cleanup_cache
 EOF
-
-		[ -z "$LOWMEM" ] && echo >>$SCHEDULER '/usr/sbin/cron.reverse_ssh_tunnel'
 	;;
 esac

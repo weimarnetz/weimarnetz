@@ -95,13 +95,6 @@ _scheduler_run()
 	_scheduler allow_run "$logfile" || return 1
 	touch "$logfile" '/tmp/scheduler.mark_starttime'
 
-	case "$CONFIG_PROFILE" in
-		liszt28*)
-			[ -z "$LOWMEM" -a $OPENWRT_REV -gt 0 ] && strong_debug='true'
-#			[ -e '/tmp/LOG_FIRST_RUN' ] && { rm '/tmp/LOG_FIRST_RUN'; LOG_FIRST_RUN=1; }
-		;;
-	esac
-
 	# SCHEDULER_QUEUE includes IMPORTANT (e.g. important_*) and
 	# NORMAL job-queue (e.g. job_*) - via globbing *i*mportant comes before *j*ob
 	for file in $SCHEDULER_QUEUE; do {

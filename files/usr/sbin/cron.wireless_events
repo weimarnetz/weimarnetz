@@ -8,10 +8,6 @@ log()
 
 	case "$1" in
 		'rotate')
-			bool_true 'system.@monitoring[0].roaming_stats' && {
-				cp '/tmp/IWLOG' "/www/IWLOG.$( _system date unixtime )"
-			}
-
 			_watch archivsize '/tmp/IWLOG' 1000 2000
 		;;
 		*)
@@ -431,8 +427,6 @@ fi
 		}
 	}
 
-	if [ -e "$TMPDIR/firmware_burn" ]; then
-		rm '/tmp/IWLOG'
 	else
 		[ -e "$TMPDIR/iwloop_stopping" ] || {
 			echo >>$SCHEDULER_IMPORTANT '_net roaming_eventlistener start scheduled_after_end_of_eventloop'
