@@ -40,9 +40,6 @@ EOF
 } >>$SCHEDULER
 
 case "$HOUR:$MINUTE" in
-	17:00)
-#		echo >>$SCHEDULER_IMPORTANT '_wifi longshot_test 17:10:00 36...40 "719 670" >/www/BLUBB'
-	;;
 	04:00)
 		{
 			echo '_watch archivsize "/tmp/messages" 5000'	# e.g. VPN-server

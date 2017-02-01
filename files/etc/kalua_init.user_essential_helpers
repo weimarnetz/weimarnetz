@@ -9,11 +9,3 @@ bool_true(){ case \$(uci -q get "\$1") in 1|on|true|yes|en*);;*)false;;esac;}
 alias explode='set -f;set +f --'
 
 EOF
-
-command -v killall >/dev/null || {
-	logger -s -- "$0: [ERR] command 'killall' missing, try to install package 'psmisc'"
-}
-
-command -v nslookup >/dev/null || {
-	logger -s -- "$0: [ERR] command 'nslookup'  missing, try to install package 'dnsutils'"
-}

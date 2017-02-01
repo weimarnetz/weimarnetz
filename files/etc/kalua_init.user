@@ -11,15 +11,6 @@ TIMEZONE_BERLIN="CET-1CEST,M3.5.0,M10.5.0/3"
 TIMEZONE="$( uci -q get system.@system[0].timezone )"
 TIMEZONE="${TIMEZONE:-$TIMEZONE_BERLIN}"
 
-# TODO: on VPN-server autoset/change the uci-var if needed
-HOSTNAME="$( uci -q get system.@system[0].hostname )"
-HOSTNAME="${HOSTNAME:-$( cat '/etc/hostname' )}"
-HOSTNAME="${HOSTNAME:-$( hostname 2>/dev/null || echo 'anonymous' )}"
-
-MONITORING_SERVERIP="$( uci -q get system.@monitoring[0].serverip )"
-MONITORING_SERVERIP="${MONITORING_SERVERIP:-84.38.67.43}"
-
-
 # each node has it's own "nearly uniq" DHCP-range
 # which must be valid across the whole network,
 # e.g. 192.168.8.0/16 on node 8
@@ -55,8 +46,6 @@ NODENUMBER=\${NODENUMBER:-$( uci -q get system.@profile[0].nodenumber )}
 CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get system.@profile[0].name )}
 HARDWARE='$HARDWARE'
 HOSTNAME='$HOSTNAME'
-OPKG=$OPKG
-MONITORING_SERVERIP=$MONITORING_SERVERIP
 export HOME=$( grep ^${USER:-root}: /etc/passwd | cut -d: -f6 )
 FFF_PLUS_VERSION=$FFF_PLUS_VERSION;OPENWRT_REV=$OPENWRT_REV
 PERMDIR=$PERMDIR
