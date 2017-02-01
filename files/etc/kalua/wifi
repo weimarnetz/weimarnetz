@@ -938,7 +938,6 @@ _wifi_toggle()
 				_log it $funcname daemon info "working: $mode"
 				_wifi set anymode anyfreq off
 				wifi
-				_netparam check
 			else
 				_log it $funcname daemon debug "already $mode"
 			fi
@@ -950,7 +949,6 @@ _wifi_toggle()
 
 				# TODO: name guessed - WIFIDEV is empty here
 				_wifi phy_restart 'wlan0' "force:$funcname"
-				_netparam check
 			else
 				_log it $funcname daemon debug "already $mode"
 			fi

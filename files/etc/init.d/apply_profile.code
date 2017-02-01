@@ -1621,9 +1621,6 @@ _config_roaming()
 		/etc/kalua_init
 		. /tmp/loader
 	fi
-
-
-	/etc/init.d/S41build_static_netparam start # it's essential for ipsystem()
 }
 
 # enforce settings delivered by meshkit
@@ -1658,7 +1655,6 @@ for SECTION in softwareinstall wireless network system freifunk olsrd dhcp cron 
 /etc/init.d/set_etc_hardware enable
 /etc/init.d/S70prepare_fff+ enable
 /etc/init.d/S43ethers_fff+ enable
-/etc/init.d/S41build_static_netparam enable
 # disable zram until https://github.com/weimarnetz/weimarnetz/issues/251 is solved
 [ -e /etc/init.d/zram ] && /etc/init.d/zram disable
 /etc/init.d/S99vpn enable

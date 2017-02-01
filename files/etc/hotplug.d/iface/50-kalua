@@ -7,7 +7,6 @@ case "$ACTION" in
 		[ -s '/tmp/loader' ] || /etc/kalua_init "$ACTION"
 		. /tmp/loader
 
-		echo >>$SCHEDULER '_netparam check'
 
 		DEVICE="${DEVICE:-unset_DEVICE}"	# fool shellcheck
 
