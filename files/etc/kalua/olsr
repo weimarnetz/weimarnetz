@@ -559,11 +559,6 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 			echo "LOCAL=$1;REMOTE=$2;LQ=$4;NLQ=$5;COST=${cost};COUNT=1"
 		fi
 
-		# accidentally added to netfilter?
-		[ -e "/tmp/NETFILTER/IP2MAC/$2" ] && {
-			_netfilter user_del "$( _net ip2mac "$2" )"
-		}
-
 		_olsr throttle_traffic "$2"
 
 		[ -f "/tmp/OLSR/fixed_arp_$2" ] || {
@@ -686,32 +681,6 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 	return 0
 }
 
-_olsr_force_static_arp()	# ATTENTION: a fixed arp-entry leads to strange effects
-{				#	     when we replug wired routers from e.g. lan to wan
-	local funcname='olsr_force_static_arp'
-	local ip="$1"
-	local local_ip="$2"
-	local marker="$TMPDIR/OLSR/fixed_arp_$ip"
-	local mac dev
-	local max_try=1
-
-	[ -e "$marker" ] || {
-		mac="$( _net ip2mac "$ip" )" && {
-			dev="$( _net ip2dev "$local_ip" )"
-			_net dev_is_wifi "$dev" && max_try=10
-
-			arping -c $max_try -s "$local_ip" -I "$dev" "$ip" >/dev/null || {
-				_log it $funcname daemon info "arping failed $max_try times: $local_ip -> $dev -> $ip"
-				return 1
-			}
-
-			_netfilter set_arp permanent "$mac" "$ip" "$dev" && {
-				touch "$marker"
-			}
-		}
-	}
-}
-
 _olsr_remoteip2metric()
 {
 	local ip="$1"
@@ -754,12 +723,6 @@ _olsr_daemon()
 					# is generated via olsr_version() which is called from build_tables()
 					# without this file we refuse to be an OLSR-master for slaves
 					rm '/tmp/OLSR/daemon_version'
-
-					for ip in "/tmp/OLSR/fixed_arp_"*; do {
-						ip="${ip#*arp_}"
-						_net ip4_is_private "$ip" || continue
-						_netfilter set_arp reachable 'mac?' "$ip"
-					} done
 				;;
 				start|restart)
 					mkdir -p '/tmp/OLSR'
