@@ -1,0 +1,19 @@
+#!/bin/sh
+
+. /lib/functions.sh
+. /usr/share/libubox/jshn.sh
+
+log() {
+	logger -s -t apply_profile $@
+}
+
+wdir="/etc/apply_profile.d"
+[ -d $wdir ] || return 0
+files="$(ls $wdir | sort)"
+[ -z "$files" ] && return 0
+for file in $files; do
+	log "procesing $file"
+	. "$wdir/$file"
+done
+
+ubus call uci "reload_config"
