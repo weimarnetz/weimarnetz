@@ -24,6 +24,22 @@ config vpn 'vpn'
         option disabled '0'
 	option lan_vpn '1'
 
+config ether 'lan' 
+	option enabled '1'
+	option mesh 'olsr'
+
+config wifi 'radio0' 
+	option enabled '1'
+	option mesh  'olsr'
+
+config wifi 'radio1' 
+	option enabled '1'
+	option mesh  'olsr' 
+
+config wifi 'roaming'
+	option enabled '1' 
+
+
 config monitoring 'monitoring'
         option url 'http://intercity-vpn.de/networks/ffweimar'
 
