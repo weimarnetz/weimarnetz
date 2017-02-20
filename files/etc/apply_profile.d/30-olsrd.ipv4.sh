@@ -1,6 +1,6 @@
 
 log_olsr4() {
-	logger -s -t ffwizard_olsrd $@
+	logger -s -t apply_profile_olsrd $@
 }
 
 setup_olsrbase() {

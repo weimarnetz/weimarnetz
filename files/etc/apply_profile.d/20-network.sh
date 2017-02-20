@@ -1,10 +1,10 @@
 
 log_net() {
-	logger -s -t apply_profile net $@
+	logger -s -t apply_profile_net $@
 }
 
 log_wifi() {
-	logger -s -t apply_profile wifi $@
+	logger -s -t apply_profile_wifi $@
 }
 
 setup_ip() {
@@ -17,16 +17,6 @@ setup_ip() {
 		eval "$(ipcalc.sh $ipaddr)"
 		uci_set network $cfg ipaddr "$IP"
 		uci_set network $cfg netmask "$NETMASK"
-	else
-		if [ "$cfg" == "lan" ] ; then
-			#Magemant Access via lan ipv4
-			uci_set network $cfg ipaddr "192.168.42.1"
-			uci_set network $cfg netmask "255.255.255.0"
-		else
-			#ipv6 only via ip6assign
-			uci_remove network $cfg ipaddr 2>/dev/null
-			uci_remove network $cfg netmask 2>/dev/null
-		fi
 	fi
 	uci_set network $cfg proto "static"
 	uci_set network $cfg ip6assign "64"
@@ -41,10 +31,6 @@ setup_bridge() {
 	local ipaddr="$2"
 	local ifc="$3"
 	setup_ip $cfg "$ipaddr"
-	#for batman
-	uci_set network $cfg mtu "1532"
-	uci_set network $cfg force_link "1"
-	#TODO
 	#uci_set network $cfg macaddr "$random"?
 	uci_set network $cfg type "bridge"
 	uci_set network $cfg ifname "$ifc"
@@ -237,7 +223,7 @@ setup_wifi() {
 		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "Virtual AP Not Supported"
-		#uci_set ffwizard $cfg vap "0"
+		#uci_set meshnode $cfg vap "0"
 	fi
 	if [ "$vap" == "1" ] ; then
 		log_wifi "Virtual AP"
@@ -266,8 +252,12 @@ setup_wifi() {
 
 regdomain() {
 	local cfg="$1"
-	uci_set wireless "$cfg" country "00"
-	uci_set wireless "$cfg" disabled "0"
+	uci_set wireless "$cfg" country "DE"
+}
+
+enable_wifi() {
+	local cfg="$1"
+	uci_set wireless "cfg" disabled "0"
 }
 
 remove_wifi() {
@@ -275,70 +265,38 @@ remove_wifi() {
 	uci_remove wireless "$cfg" 2>/dev/null
 }
 
-local br_ifaces
-local br_name="fflandhcp"
-local lan_iface="lan"
-local wan_iface="wan wan6"
+br_ifaces
+br_name="roam"
+lan_iface="lan"
+wan_iface="wan wan6"
 
 #Remove wireless config
-rm /etc/config/wireless
-/sbin/wifi detect > /etc/config/wireless
+#rm /etc/config/wireless
+#/sbin/wifi detect > /etc/config/wireless
 
 #Set regdomain
 config_load wireless
 config_foreach regdomain wifi-device
+config_foreach enable_wifi wifi-device 
 uci_commit wireless
 /sbin/wifi reload
 sleep 5
 
 #Remove wifi ifaces
+# FIXME leave disabled iface alone
 config_foreach remove_wifi wifi-iface
 uci_commit wireless
 
 
 #Setup ether and wifi
-config_load ffwizard
+config_load meshnode
 config_foreach setup_ether ether
 config_foreach setup_wifi wifi "$br_name"
 
-#Setup DHCP Batman Bridge
-config_get br ffwizard br "0"
-if [ "$br" == "1" ] ; then
-	config_get ipaddr ffwizard dhcp_ip
-	if [ -n "$ipaddr" ] ; then
-		eval "$(ipcalc.sh $ipaddr)"
-		OCTET_4="${NETWORK##*.}"
-		OCTET_1_3="${NETWORK%.*}"
-		OCTET_4="$((OCTET_4 + 1))"
-		ipaddr="$OCTET_1_3.$OCTET_4/$PREFIX"
-	fi
-	setup_bridge "$br_name" "$ipaddr" "$br_ifaces"
-else
-	uci_remove network "$br_name" 2>/dev/null
-fi
-
 #Setup IP6 Prefix
-config_get ip6prefix ffwizard ip6prefix
+config_get ip6prefix meshnode ip6prefix
 if [ -n "$ip6prefix" ] ; then
 	uci_set network loopback ip6prefix "$ip6prefix"
-fi
-
-#Add interface lan to Zone lan if not an freifunk interface
-if [ -n "$lan_iface" ] ; then
-	uci_set network lan type "bridge"
-	uci_set network lan proto "static"
-	uci_set network lan ipaddr "192.168.42.1"
-	uci_set network lan netmask "255.255.255.0"
-	uci_set network lan ip6assign '64'
-fi
-
-#Add interface wan to Zone wan if not an freifunk interface
-if [ -n "$wan_iface" ] ; then
-	uci_remove network wan ipaddr 2>/dev/null
-	uci_remove network wan netmask 2>/dev/null
-	uci_remove network wan ip6assign 2>/dev/null
-	uci_set network wan proto "dhcp"
-	uci_set network wan6 proto "dhcpv6"
 fi
 
 uci_commit network
