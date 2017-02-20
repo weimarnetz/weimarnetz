@@ -1,5 +1,7 @@
 #!/bin/sh
 
+HARDWARE=""
+
 if [ ! -s /etc/HARDWARE ]; then
     read HARDWARE < /tmp/sysinfo/model
     [ -z "$HARDWARE" ] && { 
@@ -8,9 +10,10 @@ if [ ! -s /etc/HARDWARE ]; then
     [ -z "$HARDWARE" ] && {
     	if $(grep -qc ^"model name" /proc/cpuinfo); then 
     		HARDWARE=$(uname -m)-$(grep ^"model name" /proc/cpuinfo | sed 's/.*: \(.*\)/\1/')
-    	elif 
+    	else 
 		HARDWARE=$(uname -m)-unknown
     	fi
     }
     echo "$HARDWARE" > /etc/HARDWARE
 fi
+
