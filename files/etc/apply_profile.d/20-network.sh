@@ -67,6 +67,7 @@ setup_wifi() {
 	local device="radio$idx"
 	log_wifi "Setup $cfg"
 	#get valid hwmods
+	local hw_ac=0
 	local hw_a=0
 	local hw_b=0
 	local hw_g=0
@@ -86,16 +87,18 @@ setup_wifi() {
 	}
 	for i in $hw_res ; do
 		case $i in
-			a) hw_a=1 ;;
-			b) hw_b=1 ;;
-			g) hw_g=1 ;;
-			n) hw_n=1 ;;
+			a)  hw_a=1 ;;
+			ac) hw_ac=1 ;;
+			b)  hw_b=1 ;;
+			g)  hw_g=1 ;;
+			n)  hw_n=1 ;;
 		esac
 	done
 	[ "$hw_a" == 1 ] && log_wifi "HWmode a"
 	[ "$hw_b" == 1 ] && log_wifi "HWmode b"
 	[ "$hw_g" == 1 ] && log_wifi "HWmode g"
 	[ "$hw_n" == 1 ] && log_wifi "HWmode n"
+	[ "$hw_ac" == 1 ] && log_wifi "HWmode ac"
 	#get valid channel list
 	local channels
 	local valid_channel

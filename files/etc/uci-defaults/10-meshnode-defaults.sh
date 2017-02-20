@@ -29,7 +29,7 @@ config vpn 'vpn'
 
 config ether 'lan' 
 	option enabled '1'
-	option mesh 'olsr'
+	option olsr_mesh '1' 
 
 config ether 'wan'
 	option restrict '1'

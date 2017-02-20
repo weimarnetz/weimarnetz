@@ -66,21 +66,17 @@ zone_iface_del() {
 	fi
 }
 
-local br_name="fflandhcp"
-local ff_ifaces=""
-local lan_iface="lan"
-local wan_iface="wan wan6"
+command -V fw3 || return
+
+br_name="vap"
+ff_ifaces=""
+lan_iface="lan"
+wan_iface="wan wan6"
 
 #Setup ether and wifi
-config_load ffwizard
+config_load meshnode
 config_foreach setup_ether ether
 config_foreach setup_wifi wifi
-
-#Add Bridge interface to Zone freifunk
-config_get br ffwizard br "0"
-if [ "$br" == "1" ] ; then
-	ff_ifaces="$br_name $ff_ifaces"
-fi
 
 #Add interfaces to Zone freifunk
 config_load firewall

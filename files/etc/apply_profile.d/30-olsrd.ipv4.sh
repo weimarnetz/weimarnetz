@@ -1,4 +1,6 @@
+
 . /lib/functions/weimarnetz/ipsystem.sh
+. /lib/functions/network.sh
 
 log_olsr4() {
 	logger -s -t apply_profile_olsrd $@
@@ -51,10 +53,10 @@ setup_Plugins() {
 			setup_Plugin_json $cfg
 			olsr_json=1
 		;;
-		*watchdog*)
-			setup_Plugin_watchdog $cfg
-			olsr_watchdog=1
-		;;
+		#*watchdog*)
+		#	setup_Plugin_watchdog $cfg
+		#	olsr_watchdog=1
+		#;;
 		*nameservice*)
 			setup_Plugin_nameservice $cfg
 			olsr_nameservice=1
@@ -67,22 +69,29 @@ setup_Plugins() {
 
 setup_ether() {
 	local cfg="$1"
+	local nodenumber="$2"
+
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" == "0" ] && return
 	config_get olsr_mesh $cfg olsr_mesh "0"
+	log_olsr4 "$cfg $enabled"
 	[ "$olsr_mesh" == "0" ] && return
-	config_get device $cfg device "0"
+
+        nodedata=$(node2nets_json $nodenumber)                    
+        json_load "$nodedata"                    
+        json_get_var ipaddr "$cfg" 
+
+	log_olsr4 "setup_ether: $cfg $device"
 	[ "$device" == "0" ] && return
 	log_olsr4 "Setup ether $cfg"
 	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-	uci_set olsrd "$iface_sec" interface "$device"
+	uci_set olsrd "$iface_sec" interface "$cfg"
 	uci_set olsrd "$iface_sec" ignore "0"
 	# only with LinkQualityAlgorithm=etx_ffeth
-	#uci_set olsrd "$iface_sec" Mode "ether"
+	uci_set olsrd "$iface_sec" Mode "ether"
 	# only with LinkQualityAlgorithm=etx_ff
-	uci_set olsrd "$iface_sec" Mode "mesh"
+	#uci_set olsrd "$iface_sec" Mode "mesh"
 	olsr_enabled=1
-	config_get ipaddr $cfg dhcp_ip 0
 	if [ "$ipaddr" != 0 ] ; then
 		eval "$(ipcalc.sh $ipaddr)"
 		uci_add olsrd Hna4 ; hna_sec="$CONFIG_SECTION"
@@ -93,22 +102,25 @@ setup_ether() {
 
 setup_wifi() {
 	local cfg="$1"
+	local nodenumber="$2"
+
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" == "0" ] && return
 	config_get olsr_mesh $cfg olsr_mesh "0"
+	log_olsr4 "$cfg $enabled"
 	[ "$olsr_mesh" == "0" ] && return
-	config_get mesh_ip $cfg mesh_ip "0"
-	[ "$mesh_ip" == "0" ] && return
-	config_get idx $cfg phy_idx "-1"
+	config_get idx $cfg idx "-1"
 	[ "$idx" == "-1" ] && return
 	local device="radio"$idx"_mesh"
-	log_olsr4 "Setup wifi $cfg"
+        nodedata=$(node2nets_json $nodenumber)                
+        json_load "$nodedata"                                 
+        json_get_var ipaddr "radio"$idx"_mesh"  
+	log_olsr4 "Setup wifi $cfg $ipaddr"
 	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
 	uci_set olsrd "$iface_sec" interface "$device"
 	uci_set olsrd "$iface_sec" ignore "0"
 	uci_set olsrd "$iface_sec" Mode "mesh"
 	olsr_enabled=1
-	config_get ipaddr $cfg dhcp_ip 0
 	if [ "$ipaddr" != 0 ] ; then
 		eval "$(ipcalc.sh $ipaddr)"
 		uci_add olsrd Hna4 ; hna_sec="$CONFIG_SECTION"
@@ -131,25 +143,16 @@ config_foreach remove_section Interface
 #Remove Hna's
 config_foreach remove_section Hna4
 
-local olsr_enabled=0
-local olsr_json=0
-local olsr_watchdog=0
-local olsr_nameservice=0
+olsr_enabled=0
+olsr_json=0
+olsr_watchdog=0
+olsr_nameservice=0
 
 #Setup ether and wifi
-config_load meshnode 
-config_foreach setup_ether ether
-config_foreach setup_wifi wifi
-config_get br ffwizard br "0"
-if [ "$br" == "1" ] ; then
-	config_get ipaddr ffwizard dhcp_ip "0"
-	if [ "$ipaddr" != 0 ] ; then
-		eval "$(ipcalc.sh $ipaddr)"
-		uci_add olsrd Hna4 ; hna_sec="$CONFIG_SECTION"
-		uci_set olsrd "$hna_sec" netmask "$NETMASK"
-		uci_set olsrd "$hna_sec" netaddr "$NETWORK"
-	fi
-fi
+config_load meshnode
+config_get nodenumber settings nodenumber 
+config_foreach setup_ether ether "$nodenumber"
+config_foreach setup_wifi wifi "$nodenumber"
 
 if [ "$olsr_enabled" == "1" ] ; then
 	#If olsrd is disabled then start olsrd before write config
@@ -171,12 +174,12 @@ if [ "$olsr_enabled" == "1" ] ; then
 		uci_set olsrd "$sec" library "$library"
 		setup_Plugin_json $sec
 	fi
-	if [ "$olsr_watchdog" == 0 -a -n "$(opkg status olsrd-mod-watchdog)" ] ; then
-		library="$(find /usr/lib/olsrd_watchdog.so* | cut -d '/' -f 4)"
-		uci_add olsrd LoadPlugin ; sec="$CONFIG_SECTION"
-		uci_set olsrd "$sec" library "$library"
-		setup_Plugin_watchdog $sec
-	fi
+	#if [ "$olsr_watchdog" == 0 -a -n "$(opkg status olsrd-mod-watchdog)" ] ; then
+	#	library="$(find /usr/lib/olsrd_watchdog.so* | cut -d '/' -f 4)"
+	#	uci_add olsrd LoadPlugin ; sec="$CONFIG_SECTION"
+	#	uci_set olsrd "$sec" library "$library"
+	#	setup_Plugin_watchdog $sec
+	#fi
 	if [ "$olsr_nameservice" == 0 -a -n "$(opkg status olsrd-mod-nameservice)" ] ; then
 		library="$(find /usr/lib/olsrd_nameservice.so* | cut -d '/' -f 4)"
 		uci_add olsrd LoadPlugin ; sec="$CONFIG_SECTION"
@@ -185,7 +188,7 @@ if [ "$olsr_enabled" == "1" ] ; then
 		crontab -l | grep -q 'dnsmasq' || crontab -l | { cat; echo '* * * * * killall -HUP dnsmasq'; } | crontab -
 	fi
 	#TODO remove it from freifunk-common luci package
-	crontab -l | grep -q 'ff_olsr_watchdog' && crontab -l | sed -e '/.*ff_olsr_watchdog.*/d' | crontab -
+	#crontab -l | grep -q 'ff_olsr_watchdog' && crontab -l | sed -e '/.*ff_olsr_watchdog.*/d' | crontab -
 	uci_commit olsrd
 else
 	/sbin/uci revert olsrd
