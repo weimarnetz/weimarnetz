@@ -1,13 +1,16 @@
 #!/bin/sh 
 
 uci -m import meshnode <<EOF
-config public 'community'
-	option name 'weimar'
+config node 'settings'
+	option hostname ''
 	option nodenumber ''
 	option ipschema 'ffweimar'
 	option wifimode 'hybrid'
+	option location ''
+	option latitude ''
+	option longitutde ''
 
-config public 'contact'
+config node 'contact'
         option nickname ''
         option name ''
         list homepage ''
@@ -27,6 +30,9 @@ config vpn 'vpn'
 config ether 'lan' 
 	option enabled '1'
 	option mesh 'olsr'
+
+config ether 'wan'
+	option restrict '1'
 
 config wifi 'radio0' 
 	option enabled '1'
