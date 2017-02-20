@@ -1,3 +1,4 @@
+. /lib/functions/weimarnetz/ipsystem.sh
 
 log_olsr4() {
 	logger -s -t apply_profile_olsrd $@
@@ -8,7 +9,7 @@ setup_olsrbase() {
 	uci_set olsrd $cfg IpVersion "4"
 	uci_set olsrd $cfg AllowNoInt "yes"
 	uci_set olsrd $cfg NatThreshold "0.75"
-	uci_set olsrd $cfg LinkQualityAlgorithm "etx_ff"
+	uci_set olsrd $cfg LinkQualityAlgorithm "etx_ffeth"
 	uci_set olsrd $cfg FIBMetric "flat"
 	uci_set olsrd $cfg TcRedundancy "2"
 	uci_set olsrd $cfg Pollrate "0.025"
@@ -33,16 +34,10 @@ setup_Plugin_json() {
 	uci_set olsrd $cfg ignore "0"
 }
 
-setup_Plugin_watchdog() {
-	local cfg="$1"
-	uci_set olsrd $cfg file "/var/run/olsrd.watchdog.ipv4"
-	uci_set olsrd $cfg interval "30"
-	uci_set olsrd $cfg ignore "1"
-}
 setup_Plugin_nameservice() {
 	local cfg="$1"
 	uci_set olsrd $cfg services_file "/var/etc/services.olsr.ipv4"
-	uci_set olsrd $cfg latlon_file "/var/run/latlon.js.ipv4"
+	uci_set olsrd $cfg latlon_file "/var/run/latlon.ipv4"
 	uci_set olsrd $cfg hosts_file "/tmp/hosts/olsr.ipv4"
 	uci_set olsrd $cfg suffix ".olsr"
 	uci_set olsrd $cfg ignore "0"
@@ -74,12 +69,8 @@ setup_ether() {
 	local cfg="$1"
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" == "0" ] && return
-	config_get dhcp_br $cfg dhcp_br "0"
-	[ "$dhcp_br" == "0" ] || return
 	config_get olsr_mesh $cfg olsr_mesh "0"
 	[ "$olsr_mesh" == "0" ] && return
-	config_get mesh_ip $cfg mesh_ip "0"
-	[ "$mesh_ip" == "0" ] && return
 	config_get device $cfg device "0"
 	[ "$device" == "0" ] && return
 	log_olsr4 "Setup ether $cfg"
@@ -115,8 +106,6 @@ setup_wifi() {
 	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
 	uci_set olsrd "$iface_sec" interface "$device"
 	uci_set olsrd "$iface_sec" ignore "0"
-	#Shoud be mesh with LinkQualityAlgorithm=etx_ffeth
-	#and LinkQualityAlgorithm=etx_ff
 	uci_set olsrd "$iface_sec" Mode "mesh"
 	olsr_enabled=1
 	config_get ipaddr $cfg dhcp_ip 0
@@ -133,7 +122,7 @@ remove_section() {
 	uci_remove olsrd $cfg
 }
 
-#Load olsrd6 config
+#Load olsrd config
 config_load olsrd
 #Remove InterfaceDefaults
 config_foreach remove_section InterfaceDefaults
@@ -148,7 +137,7 @@ local olsr_watchdog=0
 local olsr_nameservice=0
 
 #Setup ether and wifi
-config_load ffwizard
+config_load meshnode 
 config_foreach setup_ether ether
 config_foreach setup_wifi wifi
 config_get br ffwizard br "0"
