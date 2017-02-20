@@ -1,6 +1,6 @@
 #!/bin/sh 
 
-uci -m import meshnode << -EOF
+uci -m import meshnode <<EOF
 config public 'community'
 	option name 'weimar'
 	option nodenumber ''
