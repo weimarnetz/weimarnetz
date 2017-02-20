@@ -34,19 +34,17 @@ config ether 'lan'
 config ether 'wan'
 	option restrict '1'
 
-config wifi 'radio0' 
+config wifi 'radio0'
+	option idx '0'
 	option enabled '1'
-	option mesh  'olsr'
+	option vap '1'
+	option roaming '1'
+	option olsr_mesh '1'
 
-config wifi 'radio1' 
+config wifi 'radio1'
+        option idx '1'
 	option enabled '1'
-	option mesh  'olsr' 
-
-config wifi 'roaming'
-	option enabled '1' 
-
-
-config monitoring 'monitoring'
-        option url 'http://intercity-vpn.de/networks/ffweimar'
-
+	option vap '1'
+	option roaming '1'
+	option olsr_mesh '1' 
 EOF
