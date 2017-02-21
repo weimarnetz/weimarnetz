@@ -1,5 +1,5 @@
 
-log_system() {
+log() {
 	logger -s -t apply_profile system $@
 }
 
@@ -8,16 +8,13 @@ setup_system() {
 	
 	if [ -z "$hostname" ] || [ "$hostname" == "LEDE" ] ; then
 		config_get hostname $cfg hostname "$hostname"
-		log_system "No custom Hostname! Get sys Hostname $hostname"
+		log "No custom Hostname! Get sys Hostname $hostname"
 	fi
 	if [ -z "$hostname" ] || [ "$hostname" == "LEDE" ] ; then
-		rand="$(echo -n $(head -n 1 /dev/urandom 2>/dev/null | md5sum | cut -b 1-4))"
-		rand="$(printf "%d" "0x$rand")"
-		hostname="$hostname-$rand"
-		log_system "No valid Hostname! Set rand Hostname $hostname"
+		hostname="weimarnetz-$nodenumber"
 		uci_set system $cfg hostname "$hostname"
 	else
-		log_system "Set Hostname $hostname"
+		log "Set Hostname $hostname"
 		uci_set system $cfg hostname "$hostname"
 	fi
 
@@ -38,16 +35,14 @@ setup_system() {
 	fi
 }
 
-#Load ffwizard config
 config_load meshnode 
-
-# Set Hostname
-config_get hostname ffwizard hostname "LEDE"
+config_get hostname settings hostname "LEDE"
+config_get nodenumber settings nodenumber
 
 # Set lat lon
-config_get location ffwizard location
-config_get latitude ffwizard latitude
-config_get longitude ffwizard longitude
+config_get location settings location
+config_get latitude settings latitude
+config_get longitude settings longitude
 
 
 config_load system

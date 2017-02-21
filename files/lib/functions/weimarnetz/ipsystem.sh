@@ -2,6 +2,8 @@
 
 . /usr/share/libubox/jshn.sh
 
+# return the interface ip + range
+# use with ipcalc.sh to get broadcast / net
 node2nets_json()
 {
         local nodenumber="$1"
@@ -30,13 +32,13 @@ node2nets_json()
                         n=$(( nodenumber - 255 ))
                         s=64
                 fi
-                json_add_string "nodenet" "$network.$city.$n.$s/26"
-                json_add_string "wifi" "$network.$city.$n.$s/27"
-                json_add_string "lan" "$network.$city.$n.$((s+32))/28"
+		json_add_string "nodenet" "$network.$city.$n.$((s+1))/26"
+		json_add_string "wifi" "$network.$city.$n.$((s+1))/27"
+                json_add_string "lan" "$network.$city.$n.$((s+32+1))/28"
                 json_add_string "radio0_mesh" "$network.$city.$n.$((s+48))/32"
                 json_add_string "radio1_mesh" "$network.$city.$n.$((s+49))/32"
                 local roamingnet="$(_calc_roaming_net $nodenumber)"
-		json_add_string "roaming_block" "100.64.0.0/10" 
+		json_add_string "roaming_block" "100.64.0.1/10" 
                 json_add_string "roaming_net" "$roamingnet"
 		json_add_string "roaming_gw" "100.64.0.1"
                 json_add_string "roaming_dhcp_offset" "$(_dhcp_offset $roamingnet)"

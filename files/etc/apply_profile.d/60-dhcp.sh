@@ -17,6 +17,8 @@ log_dhcp() {
 setup_dhcp() {
 	local cfg_dhcp="$1"
 	local ipaddr="$2"
+	local ipv6="$3"
+
 	if uci_get dhcp $cfg_dhcp >/dev/null ; then
 		uci_remove dhcp $cfg_dhcp
 	fi
@@ -38,19 +40,22 @@ setup_dhcp() {
 	uci_add_list dhcp $cfg_dhcp domain "olsr"
 	uci_add_list dhcp $cfg_dhcp domain "lan"
 	uci_add_list dhcp $cfg_dhcp domain "p2p"
-	uci_set dhcp $cfg_dhcp dhcpv6 "server"
-	uci_set dhcp $cfg_dhcp ra "server"
-	uci_set dhcp $cfg_dhcp ra_preference "low"
-	uci_set dhcp $cfg_dhcp ra_default "1"
+	[ -n "$ipv6" ] {
+		uci_set dhcp $cfg_dhcp dhcpv6 "server"
+		uci_set dhcp $cfg_dhcp ra "server"
+		uci_set dhcp $cfg_dhcp ra_preference "low"
+		uci_set dhcp $cfg_dhcp ra_default "1"
+	}
 }
 
 setup_roaming_dhcp() {
 	local cfg_dhcp="$1"
-	local nodenumber="$2"	
+	local nodenumber="$2"
+	local ipv6="$3"
 
-	nodedata=$(node2nets_json $nodenumber)
 	json_load "$nodedata"
 	json_get_var offset roaming_dhcp_offset
+
 	if uci_get dhcp $cfg_dhcp >/dev/null ; then               
                 uci_remove dhcp $cfg_dhcp                         
         fi                                                        
@@ -64,29 +69,32 @@ setup_roaming_dhcp() {
         uci_add_list dhcp $cfg_dhcp domain "olsr"                 
         uci_add_list dhcp $cfg_dhcp domain "lan"                  
         uci_add_list dhcp $cfg_dhcp domain "p2p"                  
-        uci_set dhcp $cfg_dhcp dhcpv6 "server"                    
-        uci_set dhcp $cfg_dhcp ra "server"              
-        uci_set dhcp $cfg_dhcp ra_preference "low"      
-        uci_set dhcp $cfg_dhcp ra_default "1" 	
+        [ -n "$ipv6" ] {
+		uci_set dhcp $cfg_dhcp dhcpv6 "server"                    
+        	uci_set dhcp $cfg_dhcp ra "server"              
+        	uci_set dhcp $cfg_dhcp ra_preference "low"      
+        	uci_set dhcp $cfg_dhcp ra_default "1"
+	}
 }
 
 setup_ether() {
 	local cfg="$1"
 	local nodenumber="$2"
+	local ipv6="$3"
 
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" == "0" ] && return
-	nodedata=$(node2nets_json $nodenumber)
 	json_load "$nodedata"
 	json_get_var ipaddr $cfg	
 	cfg_dhcp=$cfg""
 	uci_remove dhcp $cfg_dhcp 2>/dev/null
-	setup_dhcp $cfg_dhcp "$ipaddr"
+	setup_dhcp $cfg_dhcp "$ipaddr" "$ipv6"
 }
 
 setup_wifi() {
 	local cfg="$1"
 	local nodenumber="$2"
+	local ipv6="$3"
 
 	config_get enabled $cfg enabled "0"
 	log_dhcp "$cfg $enabled"
@@ -104,7 +112,7 @@ setup_wifi() {
 		uci_remove dhcp $cfg_dhcp 2>/dev/null
 		if [ "$dhcp_ip" != "0" ] ; then
 			log_dhcp "Setup $cfg with $dhcp_ip"
-			setup_dhcp $cfg_dhcp "$dhcp_ip"
+			setup_dhcp $cfg_dhcp "$dhcp_ip" "$ipv6"
 		fi
 	fi
 }
@@ -124,6 +132,7 @@ setup_odhcpbase() {
 br_name="vap"
 #lan_iface="lan"
 wan_iface="wan"
+
 #Load dhcp config
 config_load dhcp
 #Setup dnsmasq
@@ -135,8 +144,10 @@ config_foreach setup_odhcpbase odhcpd
 #Setup ether and wifi
 config_load meshnode
 config_get nodenumber settings nodenumber
-config_foreach setup_ether ether "$nodenumber"
-config_foreach setup_wifi wifi "$nodenumber"
+config_get ipv6 settings ipv6
+nodedata=$(node2nets_json $nodenumber)
+config_foreach setup_ether ether "$nodenumber" "$ipv6"
+config_foreach setup_wifi wifi "$nodenumber" "$ipv6"
 
 #Setup DHCP Batman Bridge
 #config_get br ffwizard br "0"

@@ -30,11 +30,9 @@ setup_ip() {
 setup_bridge() {
 	local cfg="$1"
 	local ipaddr="$2"
-	local ifc="$3"
 	setup_ip $cfg "$ipaddr"
 	uci_set network $cfg macaddr '02:ff:ff:ff:00:00'
 	uci_set network $cfg type "bridge"
-	#uci_set network $cfg ifname "$ifc"
 }
 
 setup_ether() {
@@ -44,8 +42,6 @@ setup_ether() {
         config_get enabled $cfg enabled "0"                     
         [ "$enabled" == "0" ] && return 
 	
-	nodeconfig=$(node2nets_json $nodenumber)
-
 	json_load "$nodeconfig"
 	json_get_var ipaddr lan
  
@@ -64,8 +60,10 @@ setup_wifi() {
 	[ "$enabled" == "0" ] && return
 	config_get idx $cfg idx "-1"
 	[ "$idx" == "-1" ] return
+	
 	local device="radio$idx"
 	log_wifi "Setup $cfg"
+
 	#get valid hwmods
 	local hw_ac=0
 	local hw_a=0
@@ -94,11 +92,13 @@ setup_wifi() {
 			n)  hw_n=1 ;;
 		esac
 	done
-	[ "$hw_a" == 1 ] && log_wifi "HWmode a"
-	[ "$hw_b" == 1 ] && log_wifi "HWmode b"
-	[ "$hw_g" == 1 ] && log_wifi "HWmode g"
-	[ "$hw_n" == 1 ] && log_wifi "HWmode n"
-	[ "$hw_ac" == 1 ] && log_wifi "HWmode ac"
+
+	[ -n "$hw_a" ]  && log_wifi "$cfg: HWmode a"
+	[ -n "$hw_b" ]  && log_wifi "$cfg: HWmode b"
+	[ -n "$hw_g" ]  && log_wifi "$cfg: HWmode g"
+	[ -n "$hw_n" ]  && log_wifi "$cfg: HWmode n"
+	[ -n "$hw_ac" ] && log_wifi "$cfg: HWmode ac"
+
 	#get valid channel list
 	local channels
 	local valid_channel
@@ -122,9 +122,10 @@ setup_wifi() {
 		json_select ".."
 	done
 	#get default channel depending on hw_mod
-	[ "$hw_a" == 1 ] && def_channel=36
-	[ "$hw_b" == 1 ] && def_channel=5
-	[ "$hw_g" == 1 ] && def_channel=5
+	[ -n "$hw_ac" ] && def_channel=40
+	[ -n "$hw_a" ]  && def_channel=40
+	[ -n "$hw_b" ]  && def_channel=5
+	[ -n "$hw_g" ]  && def_channel=5
 	config_get channel $cfg channel "$def_channel"
 	local valid_channel
 	for i in $channels ; do
@@ -136,28 +137,13 @@ setup_wifi() {
 	log_wifi "Channel $valid_channel"
 	uci_set wireless $device channel "$valid_channel"
 	uci_set wireless $device disabled "0"
-	[ $hw_g == 1 ] && [ $hw_n == 1 ] && uci_set wireless $device noscan "1"
-	[ $hw_n == 1 ] && [ $valid_channel -gt 165 ] && uci_set wireless $device htmode "HT40+"
-	# Channel 165 HT40-
-	[ $hw_n == 1 ] && [ $valid_channel -le 165 ] && uci_set wireless $device htmode "HT40-"
-	# Channel 153,157,161 HT40+
-	[ $hw_n == 1 ] && [ $valid_channel -le 161 ] && uci_set wireless $device htmode "HT40+"
-	# Channel 104 - 140 HT40-
-	[ $hw_n == 1 ] && [ $valid_channel -le 140 ] && uci_set wireless $device htmode "HT40-"
-	# Channel 100 HT40+
-	[ $hw_n == 1 ] && [ $valid_channel -le 100 ] && uci_set wireless $device htmode "HT40+"
-	# Channel 40 - 64 HT40-
-	[ $hw_n == 1 ] && [ $valid_channel -le 64 ] && uci_set wireless $device htmode "HT40-"
-	# Channel 36 HT40+
-	[ $hw_n == 1 ] && [ $valid_channel -le 36 ] && uci_set wireless $device htmode "HT40+"
-	# Channel 10 - 14 HT40-
-	[ $hw_n == 1 ] && [ $valid_channel -le 14 ] && uci_set wireless $device htmode "HT40-"
-	# Channel 5 - 9 HT40+/-
-	[ $hw_n == 1 ] && [ $valid_channel -le 7 ] && uci_set wireless $device htmode "HT40+"
-	# Channel 1 - 4 HT40+
-	[ $hw_n == 1 ] && [ $valid_channel -le 4 ] && uci_set wireless $device htmode "HT40+"
+	[ -n "$hw_g" ] || [ -n $hw_n ] && uci_set wireless $device noscan "1"
+	[ -n "$hw_n" ] && uci_set wireless $device htmode "HT20"
+	[ -n "$hw_a" ] && [ -n "$hw_ac" ] && uci_set wireless $device htmode "VHT80"
+	[ -n "$hw_a" ] && [ -z "$hw_ac" ] && uci_set wireless $device htmode "HT40"
+
 	uci_set wireless $device country "DE"
-	[ $hw_a == 1 ] && uci_set wireless $device doth "0"
+
 	#uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
 	#Not working on wdr4300 with AP and ad-hoc
@@ -167,23 +153,20 @@ setup_wifi() {
 	#Save Airtime max 1000
 	#uci_set wireless $device beacon_int "250"
 	#wifi-iface
-	config_get olsr_mesh $cfg olsr_mesh "0"
-	config_get bat_mesh $cfg bat_mesh "0"
-	config_get nodenumber settings nodenumber
 
-        nodeconfig=$(node2nets_json $nodenumber)                                                      
-                                                                                                      
-        json_load "$nodeconfig"                                                                       
+	config_get olsr_mesh $cfg olsr_mesh "0"
+        json_load "$nodeconfig"  
+
         json_get_var ipaddr ${cfg}_mesh	
-	log_net $cfg $ipaddr	
+	log_net "${cfg}: $ipaddr"
+
 	if [ "$olsr_mesh" == "1" -o "$bat_mesh" == "1" ]; then
 		local bssid
-		log_wifi "mesh"
+		log_wifi "${cfg}: mesh"
 		cfg_mesh=$cfg"_mesh"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless $sec device "$device"
 		uci_set wireless $sec encryption "none"
-		# Depricated Ad-Hoc config
 		uci_set wireless $sec mode "adhoc"
 		uci_set wireless $sec ssid "intern."$nodenumber".ch"$valid_channel".weimarnetz.de"
 		bssid="02:CA:FF:EE:BA:BE"
@@ -199,7 +182,7 @@ setup_wifi() {
 		uci_set wireless $sec mcast_rate "6000"
 		setup_ip "$cfg_mesh" "$ipaddr"
 	fi
-	config_get vap $cfg vap "0"
+	config_get vap settings vap "0"
 	#TODO check valid interface combinations
 	#iw phy$idx info | grep -A6 "valid interface combinations"
 	#iw phy$idx info | grep "interface combinations are not supported"
@@ -210,7 +193,7 @@ setup_wifi() {
 		#uci_set meshnode $cfg vap "0"
 	fi
 	if [ "$vap" == "1" ] ; then
-		log_wifi "Virtual AP"
+		log_wifi "${cfg}: Virtual AP"
 		cfg_vap=$cfg"_vap"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless $sec device "$device"
@@ -220,13 +203,13 @@ setup_wifi() {
 		uci_set wireless $sec ssid "weimar.freifunk.net"
 		uci_set wireless $sec network "$br_name"
 
-		config_get roaming "$cfg" "roaming"
-		if [ "$roaming" == "1" ]; then
+		config_get roaming settings roaming
+		if [ -n "$roaming" ]; then
 			json_get_var ipaddr roaming_block
 		else 
 			json_get_var ipaddr wifi
 		fi
-		log_wifi "$ipaddr"
+		log_wifi "${cfg}: $ipaddr"
 		setup_bridge "$br_name" "$ipaddr"
 	fi
 }
@@ -236,7 +219,6 @@ remove_wifi() {
 	uci_remove wireless "$cfg" 2>/dev/null
 }
 
-br_ifaces=""
 br_name="vap"
 
 #Remove wireless config
@@ -253,14 +235,14 @@ uci_commit wireless
 #Setup ether and wifi
 config_load meshnode
 config_get nodenumber settings nodenumber
+nodedata=$(node2nets_json $nodenumber)
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber" "$br_name"
 
-#Setup IP6 Prefix
-#config_get ip6prefix meshnode ip6prefix
-#if [ -n "$ip6prefix" ] ; then
-#	uci_set network loopback ip6prefix "$ip6prefix"
-#fi
+config_get ip6prefix meshnode ip6prefix
+if [ -n "$ip6prefix" ] ; then
+	uci_set network globals ula_prefix "$ip6prefix"
+fi
 
 uci_commit network
 uci_commit wireless
