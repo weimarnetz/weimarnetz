@@ -9,118 +9,119 @@ log() {
 }
 
 up_rules() {
-    local iface="$1"
-    local dev="$2"
+	local iface="$1"
+	local dev="$2"
 
-    log "$ACTION: $1 $2"  
+	log "$ACTION: $1 $2"  
  
-    case "$iface" in
-        wan)
-            # mss clamping 
-            iptables -t mangle -A POSTROUTING -p tcp \
-                --tcp-flags SYN,RST SYN -o "$dev" \
-                -j TCPMSS --clamp-mss-to-pmtu
-            # nat
-            iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
-            # forbid access to wan subnet (e.g. fritzbox of user)
-            [ -n "$(uci get meshnode wan restrict)" ] && {
-                network_get_subnets wan_subnet  "$iface"
-                network_get_subnets6 wan_subnet6 "$iface" 
-                [ -n "$wan_subnet" ]  && {
-                    iptables -N paranoia-local
-                    iptables -A paranoia-local \
-                        -s "$wan_subnet" -i "$dev" -j REJECT
-                    iptables -A FORWARD \
-                        -j paranoia-local
-                }
-                [ -n "$wan_subnet6" ] && { 
-                    ip6tables -N paranoia-local6
-                    ip6tables -A paranoia-local6 \
-                        -s "$wan_subnet6" -i "$dev" -j REJECT
-                    ip6tables -A FORWARD \
-                        -j paranoia-local6
-                } 
-            }
-            # no internet without vpn
-            [ -z "$(uci_get meshnode vpn disabled)" ] && {
-                iptables -N paranoia-vpn
-                iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
-                iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
-                iptables -A FORWARD -j paranoia-vpn
-            }
-        ;;
-        tap*)
-            # mss clamping 
-            iptables -t mangle -A POSTROUTING -p tcp \
-                --tcp-flags SYN,RST SYN -o "$dev" \
-                -j TCPMSS --clamp-mss-to-pmtu
-            # nat
-            iptables -t nat -N natvpn
-            iptables -t nat -A natvpn -s 10.63.0.0/16 -j RETURN
-            #iptables -A natvpn -s 100.64.0.0/10 -j RETURN
-            iptables -t nat -A natvpn -j MASQUERADE
-            iptables -t nat -A POSTROUTING -o "$dev" -j natvpn
-	    ;; 
-    esac
+	case "$iface" in
+		wan)
+			# mss clamping 
+			iptables -t mangle -A POSTROUTING -p tcp \
+				--tcp-flags SYN,RST SYN -o "$dev" \
+				-j TCPMSS --clamp-mss-to-pmtu
+			# nat
+			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
+			# forbid access to wan subnet (e.g. fritzbox of user)
+			[ -n "$(uci get meshnode wan restrict)" ] && {
+				network_get_subnets wan_subnet	"$iface"
+				network_get_subnets6 wan_subnet6 "$iface" 
+				[ -n "$wan_subnet" ]  && {
+					iptables -N paranoia-local
+					iptables -A paranoia-local \
+						-s "$wan_subnet" -i "$dev" -j REJECT
+					iptables -A FORWARD \
+						-j paranoia-local
+				}
+				[ -n "$wan_subnet6" ] && { 
+					ip6tables -N paranoia-local6
+					ip6tables -A paranoia-local6 \
+						-s "$wan_subnet6" -i "$dev" -j REJECT
+					ip6tables -A FORWARD \
+						-j paranoia-local6
+				} 
+			}
+			# no internet without vpn
+			[ -z "$(uci_get meshnode vpn disabled)" ] && {
+				iptables -N paranoia-vpn
+				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
+				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
+				iptables -A FORWARD -j paranoia-vpn
+			}
+		;;
+		tap*)
+			# mss clamping 
+			iptables -t mangle -A POSTROUTING -p tcp \
+				--tcp-flags SYN,RST SYN -o "$dev" \
+				-j TCPMSS --clamp-mss-to-pmtu
+			# nat
+			iptables -t nat -N natvpn
+			iptables -t nat -A natvpn -s 10.63.0.0/16 -j RETURN
+			#iptables -A natvpn -s 100.64.0.0/10 -j RETURN
+			iptables -t nat -A natvpn -j MASQUERADE
+			iptables -t nat -A POSTROUTING -o "$dev" -j natvpn
+		;; 
+	esac
 }
 
 down_rules() {
-    local iface="$1"
-    local dev="$2"
+	local iface="$1"
+	local dev="$2"
 
-    log "$ACTION: $1 $2"
+	log "$ACTION: $1 $2"
   
-    case "$iface" in
-        wan)
-            # mss clamping
-            iptables -t mangle -D POSTROUTING -p tcp \
-                --tcp-flags SYN,RST SYN -o "$dev" \
-                -j TCPMSS --clamp-mss-to-pmtu
-            # nat
-            iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE
-            # forbid access to wan subnet (e.g. fritzbox of user)
-            [ -n "$(uci get meshnode wan restrict)" ] && {
-                network_get_subnets wan_subnet  "$iface"
-                network_get_subnets6 wan_subnet6 "$iface" 
-                [ -n "$wan_subnet" ] && {
-                    iptables -D FORWARD -j paranoia-local
-                    iptables -F paranoia-local
-                    iptables -X paranoia-local 
-                }
-                [ -n "$wan_subnet6" ] && {
-                    ip6tables -D FORWARD -j paranoia-local6
-                    ip6tables -F paranoia-local6
-                    ip6tables -X paranoia-local6
-                }
-            }
-            # no internet without vpn
-            [ -z "$(uci_get meshnode vpn disabled)" ] && {
-                iptables -D FORWARD -j paranoia-vpn
-                iptables -F paranoia-vpn
-                iptables -X paranoia-vpn
-            }
-        ;;
-        tap*)
-            # mss clamping
-            iptables -t mangle -D POSTROUTING -p tcp \
-                --tcp-flags SYN,RST SYN -o "$dev" \
-                -j TCPMSS --clamp-mss-to-pmtu
-            # nat
-            iptables -t nat -D POSTROUTING -o "$dev" -j natvpn
-            iptables -t nat -F natvpn
-            iptables -t nat -X natpvn
-        ;;
-        
-    esac
+	case "$iface" in
+		wan)
+			# mss clamping
+			iptables -t mangle -D POSTROUTING -p tcp \
+				--tcp-flags SYN,RST SYN -o "$dev" \
+				-j TCPMSS --clamp-mss-to-pmtu
+			# nat
+			iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE
+			# forbid access to wan subnet (e.g. fritzbox of user)
+			[ -n "$(uci get meshnode wan restrict)" ] && {
+				network_get_subnets wan_subnet	"$iface"
+				network_get_subnets6 wan_subnet6 "$iface" 
+				[ -n "$wan_subnet" ] && {
+					iptables -D FORWARD -j paranoia-local
+					iptables -F paranoia-local
+					iptables -X paranoia-local 
+				}
+				[ -n "$wan_subnet6" ] && {
+					ip6tables -D FORWARD -j paranoia-local6
+					ip6tables -F paranoia-local6
+					ip6tables -X paranoia-local6
+				}
+			}
+			# no internet without vpn
+			[ -z "$(uci_get meshnode vpn disabled)" ] && {
+				iptables -D FORWARD -j paranoia-vpn
+				iptables -F paranoia-vpn
+				iptables -X paranoia-vpn
+			}
+		;;
+		tap*)
+			# mss clamping
+			iptables -t mangle -D POSTROUTING -p tcp \
+				--tcp-flags SYN,RST SYN -o "$dev" \
+				-j TCPMSS --clamp-mss-to-pmtu
+			# nat
+			iptables -t nat -D POSTROUTING -o "$dev" -j natvpn
+			iptables -t nat -F natvpn
+			iptables -t nat -X natpvn
+		;;
+		
+	esac
 }
 
 case "$ACTION" in
-        ifup)
-            up_rules "$INTERFACE" "$DEVICE"
-        ;;
-        ifdown)
-            down_rules "$INTERFACE" "$DEVICE"
-        ;;
+		ifup)
+			up_rules "$INTERFACE" "$DEVICE"
+		;;
+		ifdown)
+			down_rules "$INTERFACE" "$DEVICE"
+		;;
 
 esac
 
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

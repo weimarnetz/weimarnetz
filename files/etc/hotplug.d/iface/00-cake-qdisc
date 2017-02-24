@@ -1,10 +1,11 @@
 #!/bin/sh
 
 case "$ACTION" in
-        ifup)
+		ifup)
 		grep -q '^sch_cake' '/proc/modules' && {
 			command -V tc > /dev/null || return 
 			tc qdisc replace dev "$DEVICE" root cake
 		}
 	;;
 esac
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
