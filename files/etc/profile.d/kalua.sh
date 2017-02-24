@@ -59,7 +59,7 @@ esac
 
 prompt_set
 
-alias n='_olsr txtinfo'
+alias n='neigh.sh 2>/dev/null'
 alias n2='echo /nhdpinfo link | nc 127.0.0.1 2009'
 alias ll='ls -la'
 alias lr='logread'
