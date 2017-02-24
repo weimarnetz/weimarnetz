@@ -83,7 +83,7 @@ setup_Plugins() {
             setup_Plugin_txtinfo "$cfg"
         ;;
 		*watchdog*)
-			setup_Plugin_watchdog "$cfg"
+		:
 		;;
 		*nameservice*)
 			setup_Plugin_nameservice "$cfg"
@@ -164,6 +164,8 @@ config_foreach remove_section InterfaceDefaults
 config_foreach remove_section Interface
 #Remove Hna's
 config_foreach remove_section Hna4
+#Remove Plugin Config
+config_foreach remove_section LoadPlugin 
 
 olsr_enabled=0
 

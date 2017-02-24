@@ -1,4 +1,4 @@
-#!/bin/sh 
+#!/bin/sh  
 # shellcheck disable=SC2039
 
 . /lib/functions/weimarnetz/ipsystem.sh
@@ -42,7 +42,7 @@ setup_ether() {
 	local nodenumber="$2"
 
         config_get enabled "$cfg" enabled "0"                     
-        [ -z "$enabled" ] && return 
+        [ "$enabled" -eq "0" ] && return 
 	
 	json_load "$nodeconfig"
 	json_get_var ipaddr lan
@@ -61,7 +61,7 @@ setup_wifi() {
 
 	[ -z "$enabled" ] && return
 	config_get idx "$cfg" idx "-1"
-	[ "$idx" -le "-1" ] return
+	[ "$idx" -eq "-1" ] return
 	
 	local device="radio$idx"
 	log_wifi "Setup $cfg"
@@ -78,6 +78,7 @@ setup_wifi() {
 		log_wifi "ERR No iwinfo data for wlan$idx"
 		return 1
 	}
+	json_init
 	json_load "$info_data"
 	json_select hwmodes
 	json_get_values hw_res
@@ -85,7 +86,8 @@ setup_wifi() {
 		log_wifi "ERR No iwinfo hwmodes for wlan$idx"
 		return 1
 	}
-	for i in $hw_res ; do
+	log_wifi "$cfg $hw_res"
+	for i in $hw_res; do
 		case $i in
 			a)  hw_a=1  ;;
 			ac) hw_ac=1 ;;
@@ -95,54 +97,23 @@ setup_wifi() {
 		esac
 	done
 
-	[ -n "$hw_a" ]  && log_wifi "$cfg: HWmode a"
-	[ -n "$hw_b" ]  && log_wifi "$cfg: HWmode b"
-	[ -n "$hw_g" ]  && log_wifi "$cfg: HWmode g"
-	[ -n "$hw_n" ]  && log_wifi "$cfg: HWmode n"
-	[ -n "$hw_ac" ] && log_wifi "$cfg: HWmode ac"
+	[  "$hw_a"  -eq "1" ] && log_wifi "$cfg: HWmode a"
+	[  "$hw_b"  -eq "1" ] && log_wifi "$cfg: HWmode b"
+	[  "$hw_g"  -eq "1" ] && log_wifi "$cfg: HWmode g"
+	[  "$hw_n"  -eq "1" ] && log_wifi "$cfg: HWmode n"
+	[  "$hw_ac" -eq "1" ] && log_wifi "$cfg: HWmode ac"
 
-	#get valid channel list
-	local channels
-	local valid_channel
-	local chan_data
-	chan_data=$(ubus call iwinfo freqlist '{ "device": "wlan'"$idx"'" }' 2>/dev/null)
-	[ -z "$chan_data" ] && {
-		log_wifi "ERR No iwinfo freqlist for wlan$idx"
-		return 1
-	}
-	json_load "$chan_data"
-	json_select results
-	json_get_keys chan_res
-	for i in $chan_res ; do
-		json_select "$i"
-		#check what channels are available
-		json_get_var restricted restricted
-		if [ -z "$restricted" ] ; then
-			json_get_var channel channel
-			channels="$channels $channel"
-		fi
-		json_select ".."
-	done
 	#get default channel depending on hw_mod
-	[ -n "$hw_ac" ] && def_channel=40
-	[ -n "$hw_a" ]  && def_channel=40
-	[ -n "$hw_b" ]  && def_channel=5
-	[ -n "$hw_g" ]  && def_channel=5
-	config_get channel "$cfg" channel "$def_channel"
-	local valid_channel
-	for i in $channels; do
-		[ -z "$valid_channel" ] && valid_channel="$i"
-		if [ "$channel" -eq "$i" ] ; then
-			valid_channel="$i"
-		fi
-	done
-	log_wifi "Channel $valid_channel"
-	uci_set wireless "$device" channel "$valid_channel"
+	[ "$hw_ac" -eq "1" ] && channel=40
+	[ "$hw_a" -eq "1"  ] && channel=40
+	[ "$hw_b" -eq "1"  ] && channel=5
+	[ "$hw_g" -eq "1"  ] && channel=5
+	uci_set wireless "$device" channel "$def_channel"
 	uci_set wireless "$device" disabled "0"
-	[ -n "$hw_g" ] || [ -n "$hw_n" ]  && uci_set wireless "$device" noscan "1"
-	[ -n "$hw_n" ] 			  && uci_set wireless "$device" htmode "HT20"
-	[ -n "$hw_a" ] && [ -n "$hw_ac" ] && uci_set wireless "$device" htmode "VHT80"
-	[ -n "$hw_a" ] && [ -z "$hw_ac" ] && uci_set wireless "$device" htmode "HT40"
+	[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
+	[  "$hw_n" ] 			  	     && uci_set wireless "$device" htmode "HT20"
+	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "1" ] && uci_set wireless "$device" htmode "VHT80"
+	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "0" ] && uci_set wireless "$device" htmode "HT40"
 
 	uci_set wireless "$device" country "DE"
 
@@ -170,7 +141,7 @@ setup_wifi() {
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" encryption "none"
 		uci_set wireless "$sec" mode "adhoc"
-		uci_set wireless "$sec" ssid "intern.$nodenumber.ch$valid_channel.weimarnetz.de"
+		uci_set wireless "$sec" ssid "intern.$nodenumber.ch$channel.weimarnetz.de"
 		bssid="02:CA:FF:EE:BA:BE"
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
 		#	bssid="12:"$(printf "%02d" "$(expr $valid_channel - 100)")":CA:FF:EE:EE"
@@ -189,7 +160,7 @@ setup_wifi() {
 	#iw phy$idx info | grep -A6 "valid interface combinations"
 	#iw phy$idx info | grep "interface combinations are not supported"
 	if [ -n "$vap" ] && \
-		[ -n "$(iw phy$idx info | grep -qc 'interface combinations are not supported')" ]  ; then
+		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "Virtual AP Not Supported"
 		#uci_set meshnode $cfg vap "0"

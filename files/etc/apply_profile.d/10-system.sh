@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 # shellcheck disable=SC2039
 
 log() {

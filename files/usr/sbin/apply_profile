@@ -13,7 +13,7 @@ files="$(find $wdir -type f | sort)"
 [ -z "$files" ] && return 0
 for file in $files; do
 	log "procesing $file"
-	. "$wdir/$file"
+	. "$file"
 done
 
 ubus call uci "reload_config"

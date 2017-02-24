@@ -1,3 +1,4 @@
+#!/bin/sh
 
 . /lib/functions/weimarnetz/ipsystem.sh
 
@@ -40,7 +41,7 @@ setup_dhcp() {
 	uci_add_list dhcp $cfg_dhcp domain "olsr"
 	uci_add_list dhcp $cfg_dhcp domain "lan"
 	uci_add_list dhcp $cfg_dhcp domain "p2p"
-	[ -n "$ipv6" ] {
+	[ "$ipv6" -eq "1" ] && {
 		uci_set dhcp $cfg_dhcp dhcpv6 "server"
 		uci_set dhcp $cfg_dhcp ra "server"
 		uci_set dhcp $cfg_dhcp ra_preference "low"
@@ -69,7 +70,7 @@ setup_roaming_dhcp() {
         uci_add_list dhcp $cfg_dhcp domain "olsr"                 
         uci_add_list dhcp $cfg_dhcp domain "lan"                  
         uci_add_list dhcp $cfg_dhcp domain "p2p"                  
-        [ -n "$ipv6" ] {
+        [ "$ipv6" -eq "1" ] && {
 		uci_set dhcp $cfg_dhcp dhcpv6 "server"                    
         	uci_set dhcp $cfg_dhcp ra "server"              
         	uci_set dhcp $cfg_dhcp ra_preference "low"      
@@ -98,7 +99,7 @@ setup_wifi() {
 
 	config_get enabled $cfg enabled "0"
 	log_dhcp "$cfg $enabled"
-	[ "$enabled" == "0" ] && return
+	[ "$enabled" -eq "0" ] && return
 
 	config_get roaming $cfg roaming "1"
 	log_dhcp "$cfg $roaming"
