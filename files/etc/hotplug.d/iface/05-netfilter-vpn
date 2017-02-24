@@ -1,9 +1,0 @@
-#!/bin/sh
-
-[ "$ACTION" = 'ifup' -a "$INTERFACE" = 'tap0' ] && {
-	iptables -t nat -A POSTROUTING -o tap+ -j MASQUERADE
-}
-
-[ "$ACTION" = 'ifdown' -a "$INTERFACE" = 'tap0' ] && {
-	iptables -t nat -D POSTROUTING -o tap+ -j MASQUERADE
-}

@@ -100,7 +100,7 @@ _ t 2>/dev/null || {
 		. '/tmp/loader'		# TODO: avoid "no permission" on debian user-X-session
 
 		echo
-		echo "this is a '$HARDWARE' - for some hints type: _help overview"
+		echo "this is a '$HARDWARE' - type _ for an overview of available commands"
 
 		[ -n "$SSH_CONNECTION" -a -n "$WIFIDEV" ] && {
 			NAME="$( _wifi longshot_name )" && {

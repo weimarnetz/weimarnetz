@@ -1,0 +1,10 @@
+#!/bin/sh
+
+case "$ACTION" in
+        ifup)
+		grep -q '^sch_cake' '/proc/modules' && {
+			command -V tc > /dev/null || return 
+			tc qdisc replace dev "$DEVICE" root cake
+		}
+	;;
+esac

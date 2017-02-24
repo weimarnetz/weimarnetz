@@ -1,6 +1,0 @@
-#!/bin/sh
-
-[ "$ACTION" = 'ifup' -a "$INTERFACE" = 'wan' ] && {
-	_log it hotplug_wan daemon info 'iface wan is up - starting masquerading'
-	iptables -t nat -A POSTROUTING -o "$DEVICE" -j MASQUERADE
-}
