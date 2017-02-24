@@ -55,10 +55,10 @@ up_rules() {
                 --tcp-flags SYN,RST SYN -o "$dev" \
                 -j TCPMSS --clamp-mss-to-pmtu
             # nat
-            iptables -N natvpn
-            iptables -A natvpn -s 10.63.0.0/16 -j RETURN
+            iptables -t nat -N natvpn
+            iptables -t nat -A natvpn -s 10.63.0.0/16 -j RETURN
             #iptables -A natvpn -s 100.64.0.0/10 -j RETURN
-            iptables -A natvpn -j MASQUERADE
+            iptables -t nat -A natvpn -j MASQUERADE
             iptables -t nat -A POSTROUTING -o "$dev" -j natvpn
 	    ;; 
     esac
@@ -107,8 +107,8 @@ down_rules() {
                 -j TCPMSS --clamp-mss-to-pmtu
             # nat
             iptables -t nat -D POSTROUTING -o "$dev" -j natvpn
-            iptables -F natvpn
-            iptables -X natpvn
+            iptables -t nat -F natvpn
+            iptables -t nat -X natpvn
         ;;
         
     esac
