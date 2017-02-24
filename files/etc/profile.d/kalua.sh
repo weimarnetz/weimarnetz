@@ -114,7 +114,7 @@ _ t 2>/dev/null || {
 	}
 }
 
-if   [ -e '/etc/init.d/apply_profile' -a -e '/sbin/uci' ]; then
+if	 [ -e '/etc/init.d/apply_profile' -a -e '/sbin/uci' ]; then
 	echo "fresh/unconfigured device detected, run: '/etc/init.d/apply_profile.code' for help"
 elif [ -e '/tmp/REBOOT_REASON' ]; then
 	# see system_crashreboot()
@@ -145,3 +145,4 @@ elif [ -e '/tmp/REBOOT_REASON' ]; then
 
 	unset CRASH UNIXTIME UPTIME
 fi
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
