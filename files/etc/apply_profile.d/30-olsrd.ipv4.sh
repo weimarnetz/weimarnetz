@@ -132,7 +132,7 @@ setup_wifi() {
 	
 	log_olsr4 "Setup wifi $cfg $ipaddr"
 	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-	uci_set olsrd "$iface_sec" interface "$device"
+	uci_set olsrd "$iface_sec" interface "${device}_mesh"
 	uci_set olsrd "$iface_sec" ignore "0"
 	uci_set olsrd "$iface_sec" Mode "mesh"
 	olsr_enabled=1
