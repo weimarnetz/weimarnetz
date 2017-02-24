@@ -2,18 +2,18 @@
 
 # ToDo:
 # - integer
-#   - shortint
-#   - integer
-#   - longint
-#   - unsigned
-#   - range -500...+800	(round to min or max, or check)
+#	- shortint
+#	- integer
+#	- longint
+#	- unsigned
+#	- range -500...+800	(round to min or max, or check)
 # - ip6
 #
 # fixme! use POSIX style for function/arg names, e.g. 'digit' = numeric 'xdigit' = hex ... -> POSIX Character Classes
 #
 
 _sanitizer_run()	# example_call: _sanitizer run "$MYSTRING" mac hex lowercase check
-{			#               _sanitizer run "$MYSTRING" length:24
+{			#				_sanitizer run "$MYSTRING" length:24
 	local INPUT="$1"
 	local WORK="$1"
 	local KEYWORD OPTION
@@ -25,7 +25,7 @@ _sanitizer_run()	# example_call: _sanitizer run "$MYSTRING" mac hex lowercase ch
 		OPTION=
 
 		[ "${KEYWORD#*:}" = "$KEYWORD" ] || {
-			OPTION="${KEYWORD#*:}"		# cut string after  "_", e.g.: string "keyword_option" -> string "option"
+			OPTION="${KEYWORD#*:}"		# cut string after	"_", e.g.: string "keyword_option" -> string "option"
 			KEYWORD="${KEYWORD%[:]*}"	# cut string before "_", e.g.: string "keyword_option" -> string "keyword"
 		}
 
@@ -197,7 +197,7 @@ _sanitizer_alphanum()
 	echo -n "$1" | sed 's/[^a-zA-Z0-9]//g'
 }
 
-_sanitizer_shellsafe()		# allow only a-z A-Z 0-9 . _ - ~ {}     ()     ,    SPACE   = + ? @   \ / :
+_sanitizer_shellsafe()		# allow only a-z A-Z 0-9 . _ - ~ {}		()	   ,	SPACE	= + ? @   \ / :
 {
 	echo -n "$1" | sed 's/[^-a-zA-Z0-9\._-~}{(), =+?@\\/]://g'
 }
@@ -382,10 +382,11 @@ _sanitizer_add_length_diff_with_spaces()	# special: ARG1 is separated by space i
 		1) echo -n ' ' ;;
 		2) echo -n '  ' ;;
 		3) echo -n '   ' ;;
-		4) echo -n '    ' ;;
-		5) echo -n '     ' ;;
-		6) echo -n '      ' ;;
-		7) echo -n '       ' ;;
-		*) echo -n '        ' ;;
+		4) echo -n '	' ;;
+		5) echo -n '	 ' ;;
+		6) echo -n '	  ' ;;
+		7) echo -n '	   ' ;;
+		*) echo -n '		' ;;
 	esac
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

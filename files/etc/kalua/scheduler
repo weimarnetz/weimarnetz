@@ -108,7 +108,7 @@ _scheduler_run()
 				_log it $funcname daemon debug "ignoring twin '$line'"
 			else
 				case "$line" in
-					'_'*)   # seems like a kalua-function, e.g. _vpn_adduser argX
+					'_'*)	# seems like a kalua-function, e.g. _vpn_adduser argX
 						case "$line" in
 							*' '*' '*)
 								# e.g. '_sms_send bla blubb' = 2 spaces or more
@@ -211,3 +211,4 @@ _scheduler_run()
 
 	rm "$logfile"
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

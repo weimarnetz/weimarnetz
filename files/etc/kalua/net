@@ -41,7 +41,7 @@ _net_both_ipv4_in_same_subnet()
 		mask="$( _net cidr2mask "$mask2" )"
 	fi
 
-	explode $( echo "$addr1 $mask" | tr '.' ' ' )	# e.g. 10 63 12 1   255 255 255 240
+	explode $( echo "$addr1 $mask" | tr '.' ' ' )	# e.g. 10 63 12 1	255 255 255 240
 	s1="$(( $1 & $5 )) $(( $2 & $6 )) $(( $3 & $7 )) $(( $4 & $8 ))"
 	explode $( echo "$addr2 $mask" | tr '.' ' ' )
 	s2="$(( $1 & $5 )) $(( $2 & $6 )) $(( $3 & $7 )) $(( $4 & $8 ))"
@@ -378,9 +378,9 @@ _net_ping_getlatency()
 	local pings="${2:-3}"
 
 	# round-trip min/avg/max = 24.638/24.638/24.638 ms	// busybox
-	# or:                      ^^^^^^^^^^^^^^^^^^^^
+	# or:					   ^^^^^^^^^^^^^^^^^^^^
 	# 3 packets transmitted, 0 packets received, 100% packet loss
-	#                       ^^^
+	#						^^^
 	# rtt min/avg/max/mdev = 33.415/33.415/33.415/0.000 ms	// debian
 	# or: <empty>
 	explode $( ping -q -c${pings} -W1 "$server" 2>/dev/null | tail -n1 )
@@ -509,7 +509,7 @@ _net_dhcp_lease_filename()
 {
 	local file
 
-	if   [ -e '/tmp/dhcp.leases' ]; then		# openwrt
+	if	 [ -e '/tmp/dhcp.leases' ]; then		# openwrt
 		file="/tmp/dhcp.leases"
 	elif [ -e '/var/run/dhcp.leases' ]; then	# freifunk-firmware
 		file="/var/run/dhcp.leases"
@@ -569,7 +569,7 @@ _net_mac2vendor()
 
 	# OUI = O.rganizationally U.nique I.dentifier
 
-	if   [ ${#oui} -eq 6 -o ${#oui} -eq 12 ]; then
+	if	 [ ${#oui} -eq 6 -o ${#oui} -eq 12 ]; then
 		:
 	elif [ ${#oui} -eq 17 ]; then
 		oui="$( echo "$oui" | tr -d ':' )"
@@ -639,18 +639,18 @@ _net_ip2dns()
 	local startparse last line error output do_olsr
 
 	# root@box:~ nslookup 10.63.6.3
-	# Server:    127.0.0.1			// these 2 lines are
+	# Server:	 127.0.0.1			// these 2 lines are
 	# Address 1: 127.0.0.1 localhost	// optional
 	#
-	# Name:      10.63.6.3
+	# Name:		 10.63.6.3
 	# Address 1: 10.63.6.3 mid1.F36-Dach4900er-MESH		// hostname is missing if lookup fails
 
 	# root@box:~ nslookup 10.63.222.1
-	# Server:    (null)
+	# Server:	 (null)
 	# Address 1: ::1 localhost
 	# Address 2: 127.0.0.1 localhost
 	#
-	# Name:      10.63.222.1
+	# Name:		 10.63.222.1
 	# Address 1: 10.63.222.1
 
 	output="$( nslookup "$ip" 2>/dev/null || echo 'ERROR ERROR' )"
@@ -661,7 +661,7 @@ _net_ip2dns()
 			do_olsr='true'
 		;;
 		*)
-			if   [ "$1" = 'ERROR' ]; then
+			if	 [ "$1" = 'ERROR' ]; then
 				do_olsr='true'
 				error='true'
 			elif _net ip4_is_private "$ip"; then
@@ -773,12 +773,12 @@ _net_ip2mac()		# works only for local/active IP's, but: maybe we want to "guess"
 		# 10.63.155.225 dev wlan0 lladdr b0:48:7a:c5:dc:bc STALE
 		#
 		# root@box: grep b0:48:7a:c5:dc:bc /proc/net/arp 
-		# 10.63.155.193    0x1         0x2         b0:48:7a:c5:dc:bc     *        wlan0
-		# 10.63.155.225    0x1         0x2         b0:48:7a:c5:dc:bc     *        eth0.1
-		# 10.63.2.37       0x1         0x2         b0:48:7a:c5:dc:bc     *        wlan0
-		# 10.63.2.37       0x1         0x2         b0:48:7a:c5:dc:bc     *        eth0.1
-		# 10.63.155.225    0x1         0x2         b0:48:7a:c5:dc:bc     *        wlan0
-		# 10.63.2.35       0x1         0x2         b0:48:7a:c5:dc:bc     *        eth0.1
+		# 10.63.155.193    0x1		   0x2		   b0:48:7a:c5:dc:bc	 *		  wlan0
+		# 10.63.155.225    0x1		   0x2		   b0:48:7a:c5:dc:bc	 *		  eth0.1
+		# 10.63.2.37	   0x1		   0x2		   b0:48:7a:c5:dc:bc	 *		  wlan0
+		# 10.63.2.37	   0x1		   0x2		   b0:48:7a:c5:dc:bc	 *		  eth0.1
+		# 10.63.155.225    0x1		   0x2		   b0:48:7a:c5:dc:bc	 *		  wlan0
+		# 10.63.2.35	   0x1		   0x2		   b0:48:7a:c5:dc:bc	 *		  eth0.1
 
 		ip -oneline neigh show to "$get_ip" >"$tempfile"	# FIXME! cannot be more than 1 line
 
@@ -943,8 +943,8 @@ _net_dev2ip()			# only first ip
 			case "$key" in
 				brd|scope)
 					# e.g.:
-					# 6: wlan0    inet 10.63.10.1/8 brd 10.255.255.255 scope global wlan0
-					# 7: wlan0-1    inet 10.63.10.1/32 scope global wlan0-1
+					# 6: wlan0	  inet 10.63.10.1/8 brd 10.255.255.255 scope global wlan0
+					# 7: wlan0-1	inet 10.63.10.1/32 scope global wlan0-1
 					ip_with_mask="$4"
 				;;
 				*)
@@ -1070,7 +1070,7 @@ _net_dev_type()		# out: string, "wifi/tunnel/wire"
 	local option="$2"	# short
 	local out
 
-	if   [ -z "$dev" ]; then
+	if	 [ -z "$dev" ]; then
 		out='unknown'
 	elif _net dev_is_wifi "$dev" ; then
 		out='wifi'
@@ -1090,7 +1090,7 @@ _net_dev_type()		# out: string, "wifi/tunnel/wire"
 _net_dev_is_wifi()
 {
 	# case " $WIFI_DEVS " in
-	# 	*" $dev "*)
+	#	*" $dev "*)
 	#		// is_wifi
 	#	;;
 	# esac
@@ -1150,7 +1150,7 @@ _net_ip2dev()		# outputs real devname like 'br0' or 'wlan0-1'
 	while read -r line; do {
 		case "$line" in
 			"$ip "*)
-				# 10.63.61.1  0x1  0x2  66:70:02:f3:90:6c  *  wlan1
+				# 10.63.61.1  0x1  0x2	66:70:02:f3:90:6c  *  wlan1
 				explode $line
 
 				[ "$4" = '00:00:00:00:00:00' ] || {
@@ -1172,7 +1172,7 @@ _net_ip2dev()		# outputs real devname like 'br0' or 'wlan0-1'
 
 	# e.g.
 	# 192.168.99.243 dev br-mybridge  src 192.168.99.1 \ cache
-	# fe80::221:6aff:fe32:7c1c from :: dev eth0  src fe80::da5d:4cff:fe9c:2f1a  metric 0 \ cache
+	# fe80::221:6aff:fe32:7c1c from :: dev eth0  src fe80::da5d:4cff:fe9c:2f1a	metric 0 \ cache
 	explode $( ip -oneline route get "$ip" 2>/dev/null || echo 'ERROR ERROR' )
 
 	while shift; do {
@@ -1225,11 +1225,11 @@ _net_mac2ip()		# SENSE: get client-IP from different sources
 				# we use selfdefined mac's on some batman-nodes, e.g.
 				# 02:00:ca:b1:01:11 = node 111 (last 4 digits)
 				# 02:00:ca:fe:02:22 = node 222
-				# 02:00:ca:ff:00:33 = node  33
+				# 02:00:ca:ff:00:33 = node	33
 				# 02:00:de:ad:01:34 = node 134
 				MAC="$( echo "$MAC" | cut -d':' -f5 )$( echo "$MAC" | cut -d':' -f6 )"
 
-				MAC="${MAC#0}"          # e.g. 0002 -> 2
+				MAC="${MAC#0}"			# e.g. 0002 -> 2
 				MAC="${MAC#0}"
 				MAC="${MAC#0}"
 
@@ -1344,7 +1344,7 @@ _net_mac2media()
 	local DEV="$( _net mac2dev "$MAC" )"
 
 	  if [ "$DEV" = "$WIFIDEV" ]; then
-	  	OUT=wifi
+		OUT=wifi
 	elif uci get system.@ethers[0].wifi | grep -qi $MAC ; then
 		OUT=wifi
 	elif grep -sq ^"$( _sanitizer run "$( _net mac2ip $MAC )" escape_dots );" /tmp/CLIENTS_WIFI ; then
@@ -1361,9 +1361,9 @@ _net_mac2media()
 _net_arp_permanent()
 {
 	local FUNC="net_arp_permanent"
-        local IP="$1"
-        local MAC="$( _sanitizer run "$2" lowercase )"
-        local FORCE="$3"				# or <dev>
+		local IP="$1"
+		local MAC="$( _sanitizer run "$2" lowercase )"
+		local FORCE="$3"				# or <dev>
 	local nudmode="${4:-permanent}"			# or 'reachable'
 	local MODE LINE DEV dev_keyword=''
 
@@ -1373,7 +1373,7 @@ _net_arp_permanent()
 		;;
 	esac
 
-        _log it $FUNC daemon info "IP: '$IP' MAC: '$MAC' FORCE: '$FORCE' nudmode: '$nudmode'"
+		_log it $FUNC daemon info "IP: '$IP' MAC: '$MAC' FORCE: '$FORCE' nudmode: '$nudmode'"
 
 	# see dhcp-script
 	[ "$MAC" = '00:00:00:00:00:00' ] && return 1
@@ -1397,22 +1397,22 @@ _net_arp_permanent()
 		MODE='add'
 	fi
 
- 	if [ -z "$DEV" ]; then
+	if [ -z "$DEV" ]; then
 		_log it $FUNC daemon info "not in neigh-list, probing"
 
- 		  if [ "$FORCE" = 'wifi' ]; then
+		  if [ "$FORCE" = 'wifi' ]; then
 			dev_keyword="wifi (forced)"
 			DEV="$WIFIDEV"
- 		elif [ "$( _net mac2media $MAC )" = 'wire' ]; then		# why a 2nd try? -> checked: is needed somethimes
+		elif [ "$( _net mac2media $MAC )" = 'wire' ]; then		# why a 2nd try? -> checked: is needed somethimes
 			dev_keyword="wire (detected at 2nd try)"
 			DEV="$LANDEV"
- 		else
+		else
 			dev_keyword="wifi (defaulting)"
 			DEV="$WIFIDEV"
- 		fi
- 	else
+		fi
+	else
 		[ -z "$dev_keyword" ] && dev_keyword="$DEV (autodetected)"
- 	fi
+	fi
 
 	_log it $FUNC daemon info "detected physical-device ${dev_keyword:-unknown}: ip neigh $MODE $IP dev $DEV lladdr $MAC nud $nudmode"
 	ip neigh $MODE $IP dev $DEV lladdr $MAC nud "$nudmode" 2>/dev/null || return $?
@@ -1478,3 +1478,4 @@ _net_active_ap_devices()	# TODO: add linefeed, so 'read X <FILE' will return 0
 
 	grep ^'interface=' /var/run/hostapd-phy[0-3].conf | cut -d'=' -f2 | while read -r dev; do printf '%s' " $dev "; done
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

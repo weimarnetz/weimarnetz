@@ -32,3 +32,4 @@ if [ "$cn_hostname" != "$sys_hostname" ] ; then
 fi
 
 [ -s /www/index.html ] || ln -s /www/luci2.html /www/index.html
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

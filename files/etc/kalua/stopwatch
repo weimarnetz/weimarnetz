@@ -50,7 +50,7 @@ _stopwatch_seconds2humanreadable()
 	# 1d 0h 17min -> 1d 17min
 	# 1h 0min -> 1h
 
-	if   [ $min -gt 1440 ]; then
+	if	 [ $min -gt 1440 ]; then
 		days=$(( $min / 1440 ))
 		min=$(( $min % 1440 ))
 		hours=$(( $min / 60 ))
@@ -113,7 +113,7 @@ _stopwatch_stop()		# OUT1: centyseconds = seconds/100
 			;;
 		esac
 
-		if   [ -e "/tmp/STOPWATCH_${context}" ]; then
+		if	 [ -e "/tmp/STOPWATCH_${context}" ]; then
 			file="/tmp/STOPWATCH_${context}"
 		elif [ -e "/tmp/STOPWATCH_${context}_$$" ]; then
 			file="/tmp/STOPWATCH_${context}_$$"
@@ -160,3 +160,4 @@ _stopwatch_stop()		# OUT1: centyseconds = seconds/100
 
 	return 0
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

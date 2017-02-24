@@ -6,7 +6,7 @@ _list_contains_element()
 	local element="$2"
 
 	case " $list " in		# e.g. ' A B C '
-		*" $element "*)		#        ' B '
+		*" $element "*)		#		 ' B '
 			return 0
 		;;
 		*)
@@ -93,3 +93,4 @@ _list_random_element()
 
 	_list shuffle "$list" get_first_random
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

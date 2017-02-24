@@ -10,9 +10,9 @@ boot()
 
 	export TZ="$( uci -q get system.@system[0].timezone )"
 	# https://lists.openwrt.org/pipermail/openwrt-devel/2014-January/023196.html
-	if   [ -e '/dev/rtc0' ]; then
+	if	 [ -e '/dev/rtc0' ]; then
 		# root@CubieNAS:~ :) hwclock -r -f /dev/rtc0
-		# Mon Nov  7 12:59:49 2016  0.000000 seconds
+		# Mon Nov  7 12:59:49 2016	0.000000 seconds
 		set -- $( hwclock -r -f '/dev/rtc0' )
 		unixtime="$( _system date 2unixtime "$1 $2 $3 $4 $5" )"
 	elif [ -e "$PERMLOG" ]; then
@@ -50,7 +50,7 @@ boot()
 			while shift; do {
 				case "$1 $2" in
 					'Comm: ux'*|'Process ux'*)
-						reason="$(   echo "$2" | cut -b3 )"
+						reason="$(	 echo "$2" | cut -b3 )"
 						unixtime="$( echo "$2" | cut -d',' -f2 )"
 						break
 					;;
@@ -66,7 +66,7 @@ boot()
 			echo "$reason" >'/tmp/REBOOT_REASON'
 		else
 			if [ -e "$crashlog" ]; then
-				if   grep -q 'SysRq : Trigger a crash' "$crashlog"; then
+				if	 grep -q 'SysRq : Trigger a crash' "$crashlog"; then
 					# e.g. in cron.minutely PSWORK()
 					# CPU: 0 PID: 28069 Comm: sh Not tainted 3.18.14 #1
 					echo "$( date ) [ERROR] emergency_triggered crash detected in '$crashlog'" >>"$PERMLOG"
@@ -113,3 +113,4 @@ boot()
 	# see scheduler_run()
 	touch "$TMPDIR/scheduler_keep_running"
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

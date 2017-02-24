@@ -57,24 +57,24 @@ setup_roaming_dhcp() {
 	json_load "$nodedata"
 	json_get_var offset roaming_dhcp_offset
 
-	if uci_get dhcp $cfg_dhcp >/dev/null ; then               
-                uci_remove dhcp $cfg_dhcp                         
-        fi                                                        
-        uci_add dhcp dhcp $cfg_dhcp                               
-        uci_set dhcp $cfg_dhcp interface "$cfg_dhcp"              
-        uci_set dhcp $cfg_dhcp ignore "0"                         
-        uci_set dhcp $cfg_dhcp start "$offset"      
-        uci_set dhcp $cfg_dhcp limit "254"             
-        uci_set dhcp $cfg_dhcp leasetime "12h"                    
-        uci_add_list dhcp $cfg_dhcp dhcp_option "119,olsr,lan,p2p"
-        uci_add_list dhcp $cfg_dhcp domain "olsr"                 
-        uci_add_list dhcp $cfg_dhcp domain "lan"                  
-        uci_add_list dhcp $cfg_dhcp domain "p2p"                  
-        [ "$ipv6" -eq "1" ] && {
-		uci_set dhcp $cfg_dhcp dhcpv6 "server"                    
-        	uci_set dhcp $cfg_dhcp ra "server"              
-        	uci_set dhcp $cfg_dhcp ra_preference "low"      
-        	uci_set dhcp $cfg_dhcp ra_default "1"
+	if uci_get dhcp $cfg_dhcp >/dev/null ; then				  
+				uci_remove dhcp $cfg_dhcp						  
+		fi														  
+		uci_add dhcp dhcp $cfg_dhcp								  
+		uci_set dhcp $cfg_dhcp interface "$cfg_dhcp"			  
+		uci_set dhcp $cfg_dhcp ignore "0"						  
+		uci_set dhcp $cfg_dhcp start "$offset"		
+		uci_set dhcp $cfg_dhcp limit "254"			   
+		uci_set dhcp $cfg_dhcp leasetime "12h"					  
+		uci_add_list dhcp $cfg_dhcp dhcp_option "119,olsr,lan,p2p"
+		uci_add_list dhcp $cfg_dhcp domain "olsr"				  
+		uci_add_list dhcp $cfg_dhcp domain "lan"				  
+		uci_add_list dhcp $cfg_dhcp domain "p2p"				  
+		[ "$ipv6" -eq "1" ] && {
+		uci_set dhcp $cfg_dhcp dhcpv6 "server"					  
+			uci_set dhcp $cfg_dhcp ra "server"				
+			uci_set dhcp $cfg_dhcp ra_preference "low"		
+			uci_set dhcp $cfg_dhcp ra_default "1"
 	}
 }
 
@@ -106,8 +106,8 @@ setup_wifi() {
 	if [ "$roaming" == "1" ]; then 
 		setup_roaming_dhcp "$br_name" "$nodenumber"
 	else 
-	        local nodedata=$(node2nets_json $nodenumber)                    
-        	json_load "$nodedata" 	
+			local nodedata=$(node2nets_json $nodenumber)					
+			json_load "$nodedata"	
 		json_get_var ipaddr wifi
 		cfg_dhcp="$br_name"
 		uci_remove dhcp $cfg_dhcp 2>/dev/null
@@ -188,3 +188,4 @@ if [ -n "$wan_iface" ] ; then
 fi
 
 uci_commit dhcp
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

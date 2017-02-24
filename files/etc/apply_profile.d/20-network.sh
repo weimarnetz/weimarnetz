@@ -41,8 +41,8 @@ setup_ether() {
 	local cfg="$1"
 	local nodenumber="$2"
 
-        config_get enabled "$cfg" enabled "0"                     
-        [ "$enabled" -eq "0" ] && return 
+		config_get enabled "$cfg" enabled "0"					  
+		[ "$enabled" -eq "0" ] && return 
 	
 	json_load "$nodeconfig"
 	json_get_var ipaddr lan
@@ -89,18 +89,18 @@ setup_wifi() {
 	log_wifi "$cfg $hw_res"
 	for i in $hw_res; do
 		case $i in
-			a)  hw_a=1  ;;
+			a)	hw_a=1	;;
 			ac) hw_ac=1 ;;
-			b)  hw_b=1  ;;
-			g)  hw_g=1  ;;
-			n)  hw_n=1  ;;
+			b)	hw_b=1	;;
+			g)	hw_g=1	;;
+			n)	hw_n=1	;;
 		esac
 	done
 
-	[  "$hw_a"  -eq "1" ] && log_wifi "$cfg: HWmode a"
-	[  "$hw_b"  -eq "1" ] && log_wifi "$cfg: HWmode b"
-	[  "$hw_g"  -eq "1" ] && log_wifi "$cfg: HWmode g"
-	[  "$hw_n"  -eq "1" ] && log_wifi "$cfg: HWmode n"
+	[  "$hw_a"	-eq "1" ] && log_wifi "$cfg: HWmode a"
+	[  "$hw_b"	-eq "1" ] && log_wifi "$cfg: HWmode b"
+	[  "$hw_g"	-eq "1" ] && log_wifi "$cfg: HWmode g"
+	[  "$hw_n"	-eq "1" ] && log_wifi "$cfg: HWmode n"
 	[  "$hw_ac" -eq "1" ] && log_wifi "$cfg: HWmode ac"
 
 	#get default channel depending on hw_mod
@@ -111,7 +111,7 @@ setup_wifi() {
 	uci_set wireless "$device" channel "$def_channel"
 	uci_set wireless "$device" disabled "0"
 	[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
-	[  "$hw_n" ] 			  	     && uci_set wireless "$device" htmode "HT20"
+	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT20"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "1" ] && uci_set wireless "$device" htmode "VHT80"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "0" ] && uci_set wireless "$device" htmode "HT40"
 
@@ -128,9 +128,9 @@ setup_wifi() {
 	#wifi-iface
 
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
-        json_load "$nodeconfig"  
+		json_load "$nodeconfig"  
 
-        json_get_var ipaddr "${cfg}_mesh"	
+		json_get_var ipaddr "${cfg}_mesh"	
 	log_net "${cfg}: $ipaddr"
 
 	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
@@ -219,3 +219,4 @@ fi
 
 uci_commit network
 uci_commit wireless
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

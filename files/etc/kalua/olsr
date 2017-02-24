@@ -48,7 +48,7 @@ _olsr_defgw_change_stats()
 		value=$(( ${value:-0} + t_diff ))
 
 		# raise array for each known gateway and sum_up t_diff, e.g:
-		# gw:empty  1234 sec 10%
+		# gw:empty	1234 sec 10%
 		# gw:ipadr1 2345 sec 40%
 		# gw:ipadr2 3456 sec 50%
 	} done <"$file"
@@ -105,7 +105,7 @@ _olsr_hna4_inetoffer()
 		'check_active')
 			[ -e "$TMPDIR/olsr_hna_inetoffer_needed" ] || return 0		# see /etc/hotplug.d/iface/60...
 
-			if   grep -s -A2 ^'Table: HNA' "$file" | grep -q ^'0\.0\.0\.0/0'; then
+			if	 grep -s -A2 ^'Table: HNA' "$file" | grep -q ^'0\.0\.0\.0/0'; then
 				return 0
 			elif [ -e "$file" ]; then
 				_olsr daemon restart "$funcname() $action"
@@ -149,7 +149,7 @@ _olsr_hna4_inetoffer()
 	}
 }
 
-_olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every minute
+_olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL			// is called every minute
 {						#			   /LINKS + /LINKS.sh
 	local funcname='olsr_build_tables'	# and moving /tmp/OLSR_TMP/* -> /tmp/OLSR (which is used by all functions)
 	local line uptime_was_short firstrun	# also collecting routing_table
@@ -191,7 +191,7 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 			if pidof olsrd >/dev/null ; then
 				_olsr daemon restart "$funcname did not work, but daemon is up"
 			else
-				_olsr daemon start   "$funcname did not work, daemon is not up"
+				_olsr daemon start	 "$funcname did not work, daemon is not up"
 			fi
 
 			return 0
@@ -353,10 +353,10 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 	# here we try to catch this block:
 	#
 	# Table: Links
-	# Local IP        Remote IP       Hyst.   LQ      NLQ     Cost
-	# 10.63.39.65     10.63.8.67      0.00    1.000   0.851   1.175
-	# 10.63.39.65     10.63.34.65     0.00    1.000   1.000   1.000
-	# 10.63.39.65     10.63.10.65     0.00    0.819   0.819   1.488
+	# Local IP		  Remote IP		  Hyst.   LQ	  NLQ	  Cost
+	# 10.63.39.65	  10.63.8.67	  0.00	  1.000   0.851   1.175
+	# 10.63.39.65	  10.63.34.65	  0.00	  1.000   1.000   1.000
+	# 10.63.39.65	  10.63.10.65	  0.00	  0.819   0.819   1.488
 
 	parse=
 	while read -r line; do {
@@ -596,7 +596,7 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 			_watch counter "/tmp/error_lanping_$funcname" increment 1 max 5 || _system crashreboot 'lanping'
 		}
 	else
-		if   [ "$firstping_lan" = 'false' ]; then
+		if	 [ "$firstping_lan" = 'false' ]; then
 			[ -e "/tmp/error_lanping_$funcname" ] && rm "/tmp/error_lanping_$funcname"
 		elif [ -e "/tmp/OLSR/goodping_$LANDEV" ]; then
 			read -r ip <"/tmp/OLSR/goodping_$LANDEV"
@@ -621,7 +621,7 @@ _olsr_build_tables()				# building of /tmp/OLSR_TMP/ALL 		// is called every min
 			_watch counter "/tmp/error_wanping_$funcname" increment 1 max 5 || _system crashreboot 'wanping'
 		}
 	else
-		if   [ "$firstping_wan" = 'false' ]; then
+		if	 [ "$firstping_wan" = 'false' ]; then
 			[ -e "/tmp/error_wanping_$funcname" ] && rm "/tmp/error_wanping_$funcname"
 		elif [ -e "/tmp/OLSR/goodping_$WANDEV" ]; then
 			read -r ip <"/tmp/OLSR/goodping_$WANDEV"
@@ -765,7 +765,7 @@ _olsr_daemon()
 						}
 					;;
 					start)
-						pidof olsrd >/dev/null  || {
+						pidof olsrd >/dev/null	|| {
 							# config is fresh generated?
 							_file age "$olsrd_config" -lt 10 && {	# [10 sec]
 								_watch coredump "after: $funcname start" || {
@@ -899,7 +899,7 @@ _olsr_gateways_get()		# OUT: list with each HNA4-0.0.0.0/0-announcing IP line by
 	local line
 
 	# e.g.:
-	# 0.0.0.0/0       10.63.21.97
+	# 0.0.0.0/0		  10.63.21.97
 	grep ^'0\.0\.0\.0/0' "$file" | while read -r line; do explode $line; test -n "$3" || echo $2; done
 }
 
@@ -1035,8 +1035,8 @@ _olsr_neigh_nlq()
 	else
 		_sanitizer include
 
-		nlq="$(  _sanitizer run "$nlq"  numeric )"
-		lq="$(   _sanitizer run "$lq"   numeric )"
+		nlq="$(  _sanitizer run "$nlq"	numeric )"
+		lq="$(	 _sanitizer run "$lq"	numeric )"
 		cost="$( _sanitizer run "$cost" numeric )"
 
 		if [ -z "$option" ]; then
@@ -1171,7 +1171,7 @@ _olsr_check_plausi()				# test 1/7: is each non-infinite neighbour in routing-ta
 	local FILE="/tmp/OLSR/LINKS.sh"		# test 6/7: ping to inet-gateway works?
 	local option="$1"			# test 7/7: strong change to more worse values of wireless neighs
 	# option = force|deep			# test 0/7: olsr-plaintext plugin works? + too much restarts? + default route exists?
-						# idea: '10.63.176.193 ~~0~~ 10.63.62.1     LQ/NLQ/COST: 0.000 / 0.000 / ~      MAC+DNS: ??:??:??:??:??:?? 'unknown'
+						# idea: '10.63.176.193 ~~0~~ 10.63.62.1		LQ/NLQ/COST: 0.000 / 0.000 / ~		MAC+DNS: ??:??:??:??:??:?? 'unknown'
 						# idea:
 	[ "$option" = "force" ] || {
 		_olsr uptime is_short && {
@@ -1317,7 +1317,7 @@ _olsr_check_plausi()				# test 1/7: is each non-infinite neighbour in routing-ta
 
 			[ "$COST" = "INFINITE" ] && continue
 
-			LQ="$(  echo $LQ  | sed -ne 's/\.//' -e 's/^[0]*\([0-9]*\)/\1/p' )"
+			LQ="$(	echo $LQ  | sed -ne 's/\.//' -e 's/^[0]*\([0-9]*\)/\1/p' )"
 			NLQ="$( echo $NLQ | sed -ne 's/\.//' -e 's/^[0]*\([0-9]*\)/\1/p' )"
 
 			case "${LQ:=0}-${NLQ:=0}" in
@@ -1670,8 +1670,8 @@ EOF
 
 	for hna4 in $( _olsr show_hna4_slaves ); do {
 		route="$( ip -oneline route get "$hna4" )"
-		# broadcast 192.168.178.0 dev eth0.2  src 192.168.178.20 \    cache <local,brd>
-		# 10.63.27.0 via 10.63.27.33 dev eth0.0  src 10.63.24.33 \    cache
+		# broadcast 192.168.178.0 dev eth0.2  src 192.168.178.20 \	  cache <local,brd>
+		# 10.63.27.0 via 10.63.27.33 dev eth0.0  src 10.63.24.33 \	  cache
 		case "$route" in
 			'broadcast'*)
 				continue
@@ -1721,11 +1721,11 @@ _olsr_neighs_humanreadable()		# TODO: latitude/longitude/distance + speed
 	MAX2="$( _sanitizer run "$LIST" list_get_longest_string )"
 	LQMULTI_ALL="$( _olsr lqmultiplier )"
 
-	[ $( echo $LIST | wc -w ) -gt 9 ] && SPACER3=" "  	# numbering layout
+	[ $( echo $LIST | wc -w ) -gt 9 ] && SPACER3=" "	# numbering layout
 
 	while read -r LINE; do {
 
-	  	eval $LINE
+		eval $LINE
 
 		[ "$COST" = "INFINITE" ] && COST=
 
@@ -1769,7 +1769,7 @@ _olsr_neighs_humanreadable()		# TODO: latitude/longitude/distance + speed
 
 				txrate=; txthroughput=; efficiency=
 				eval $( _wifi minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate $MAC )
-				minstrel_stats="$minstrel_stats/$txrate/${txthroughput}@${efficiency}%  "
+				minstrel_stats="$minstrel_stats/$txrate/${txthroughput}@${efficiency}%	"
 			else
 				minstrel_stats="sig/mbytes_TX,RX/rate/throughput: ?  "
 			fi
@@ -1777,7 +1777,7 @@ _olsr_neighs_humanreadable()		# TODO: latitude/longitude/distance + speed
 			minstrel_stats=
 		fi
 
-		echo "${SPACER3}${COUNT}:${SPACER4}${LOCAL}${SPACER1} ${DEVTYPE}${METRIC:=0}${DEVTYPE} ${REMOTE}${SPACER2}  LQ/NLQ/COST: ${LQ} / ${NLQ} / ${COST:=~    }  ${minstrel_stats}MAC+DNS: ${MAC:=??:??:??:??:??:??} '${DNS:=unknown}' ${LQMULTI}"
+		echo "${SPACER3}${COUNT}:${SPACER4}${LOCAL}${SPACER1} ${DEVTYPE}${METRIC:=0}${DEVTYPE} ${REMOTE}${SPACER2}	LQ/NLQ/COST: ${LQ} / ${NLQ} / ${COST:=~    }  ${minstrel_stats}MAC+DNS: ${MAC:=??:??:??:??:??:??} '${DNS:=unknown}' ${LQMULTI}"
 
 	} done <"$FILE"
 
@@ -1787,7 +1787,7 @@ _olsr_neighs_humanreadable()		# TODO: latitude/longitude/distance + speed
 
 	for hna4 in $( _olsr show_hna4_slaves ); do {
 		route="$( ip -oneline route get "$hna4" )"
-		# 10.63.27.0 via 10.63.27.33 dev eth0.0  src 10.63.24.33 \    cache
+		# 10.63.27.0 via 10.63.27.33 dev eth0.0  src 10.63.24.33 \	  cache
 		local_ip="$( echo "$route" | cut -d' ' -f8 )"
 		remote_ip="$( echo "$route" | cut -d' ' -f3 )"
 
@@ -1862,7 +1862,7 @@ _olsr_incoming_and_outgoing_olsr_traffic()
 	bytes_out="$( get_bytes 'OUTPUT' )"
 
 	divisor_valid "$interval" || interval=1
-	bytes_in_sec=$((  bytes_in  / interval ))	# divisor_valid
+	bytes_in_sec=$((  bytes_in	/ interval ))	# divisor_valid
 	bytes_out_sec=$(( bytes_out / interval ))	# divisor_valid
 
 	$IPT -D $ruleset_in
@@ -1890,3 +1890,4 @@ _olsr_plugin_filename_get()
 	echo "not_found:olsrd_$name.so.0.0"
 	return 1
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

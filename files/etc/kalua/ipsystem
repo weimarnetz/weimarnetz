@@ -18,12 +18,12 @@ _ipsystem_getvar()
 	_ipsystem get $nodenumber | grep ^"$varname=" | cut -d'=' -f2
 }
 
-_ipsystem_ffweimar()			# ARG1: - empty       -> has_nodenumber? -> output for my nodenumber
-{					#  	- "random" or empty && no_nodenumber?  -> output for random nodenumber
-	local node_number="$1"		#       - IP-address  -> output nodenumber
+_ipsystem_ffweimar()			# ARG1: - empty		  -> has_nodenumber? -> output for my nodenumber
+{					#	- "random" or empty && no_nodenumber?  -> output for random nodenumber
+	local node_number="$1"		#		- IP-address  -> output nodenumber
 	local city="${2:-63}"		#	- node-number -> output for this nodenumber, return 1 if not in range
 	local network="${3:-10}"
-    local ipv6_prefix="2001:bf7:193"
+	local ipv6_prefix="2001:bf7:193"
 	local range_start="${4:-2}"
 	local range_end="${5:-1020}"
 	local range_first_random="${6:-970}"
@@ -35,12 +35,12 @@ _ipsystem_ffweimar()			# ARG1: - empty       -> has_nodenumber? -> output for my
 	local oct1 oct2 oct3 oct4 oldIFS s n random node_number_hex node_hex
 
 	# a typical node 16:
-	# all:  10.63.16.0  /26  (=  0...64)
-	# WIFI: 10.63.16.0  /27  (=  1...30) = 29 x DHCP
-	# LAN:  10.63.16.32 /28  (= 33...46) = 13 x DHCP
-	# ---:          .48 /29  (= 49...54) =  6 x IP (unused)
-	# VPN:  10.63.16.56 /30  (= 57...58) =  1 x here, 1 x remote
-	# WAN:  10.63.16.60 /30  (= 61...62) =  1 x here, 1 x remote
+	# all:	10.63.16.0	/26  (=  0...64)
+	# WIFI: 10.63.16.0	/27  (=  1...30) = 29 x DHCP
+	# LAN:	10.63.16.32 /28  (= 33...46) = 13 x DHCP
+	# ---:			.48 /29  (= 49...54) =	6 x IP (unused)
+	# VPN:	10.63.16.56 /30  (= 57...58) =	1 x here, 1 x remote
+	# WAN:	10.63.16.60 /30  (= 61...62) =	1 x here, 1 x remote
 
 	if [ -z "$node_number" ]; then
 		node_number="${NODENUMBER:-$( _math random_integer "$range_first_random" "$range_end" ) }"
@@ -51,7 +51,7 @@ _ipsystem_ffweimar()			# ARG1: - empty       -> has_nodenumber? -> output for my
 		oct1="$1"; oct2="$2"; oct3="$3"; oct4="$4"
 
 		if [ $oct1 -eq $network -a $oct2 -eq $city ]; then
-			if   [ $oct4 -gt 191 ]; then
+			if	 [ $oct4 -gt 191 ]; then
 				echo $(( $oct3 + 765 ))
 			elif [ $oct4 -gt 127 ]; then
 				echo $(( $oct3 + 510 ))
@@ -68,33 +68,33 @@ _ipsystem_ffweimar()			# ARG1: - empty       -> has_nodenumber? -> output for my
 	fi
 
 	if [ "$node_number" -ge "$range_start" -a "$node_number" -le "$range_end" ]; then
-		s="0"			# subnetstart 	e.g. network.city.100.${S}
+		s="0"			# subnetstart	e.g. network.city.100.${S}
 		n="$node_number"	# nodenumber_id	e.g. network.city.${N}.0
-        random="false"
-        node_number_hex=$( printf "%X" "$node_number"; )
-        node_hex="0:$node_number_hex"
-        
+		random="false"
+		node_number_hex=$( printf "%X" "$node_number"; )
+		node_hex="0:$node_number_hex"
+		
 		if [ "$node_number" -ge "$range_first_random" ]; then
 			n=$(( node_number - 765 ))
 			s=192
 			random="true"
-            node_number_hex=$( printf "%X" "$node_number"; )
-            node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
+			node_number_hex=$( printf "%X" "$node_number"; )
+			node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
 		elif [ "$node_number" -gt 765 ]; then
 			n=$(( node_number - 765 ))
 			s=192
-            node_number_hex=$( printf "%X" "$node_number"; )
-            node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
+			node_number_hex=$( printf "%X" "$node_number"; )
+			node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
 		elif [ "$node_number" -gt 510 ]; then
 			n=$(( node_number - 510 ))
 			s=128
-            node_number_hex=$( printf "%X" "$node_number"; )
-            node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
+			node_number_hex=$( printf "%X" "$node_number"; )
+			node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
 		elif [ "$node_number" -gt 255 ]; then
 			n=$(( node_number - 255 ))
 			s=64
-            node_number_hex=$( printf "%X" "$node_number"; )
-            node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
+			node_number_hex=$( printf "%X" "$node_number"; )
+			node_hex=$( echo "$node_number_hex" | sed 's/^.*\(.\)\(..\)$/\1:\2/g' )
 		fi
 	else
 		return 1
@@ -179,3 +179,4 @@ ROAMING_IP4=172.31.$city.$network
 ROAMING_PRE=24
 EOF
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

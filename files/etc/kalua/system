@@ -48,7 +48,7 @@ _system_crashreboot()
 				switch_error)	reason=1 ;;
 				network_hangs)	reason=2 ;;
 				overload)	reason=3 ;;
-				olsrd_missing)  reason=4 ;;
+				olsrd_missing)	reason=4 ;;
 				conntrack_full) reason=5 ;;
 				flappy_ether)	reason=6 ;;	# unused
 				flappy_olsr)	reason=7 ;;
@@ -76,19 +76,19 @@ _system_crashreboot()
 				err_wifialloc)	reason=U ;;
 				kernel_unaligned_access) reason=V ;;
 				page_alloc_fail) reason=W ;;
-				BUG_bad_page)    reason=X ;;
+				BUG_bad_page)	 reason=X ;;
 				recursive_fault) reason=Y ;;
-				wifi_txdma)      reason=Z ;;
+				wifi_txdma)		 reason=Z ;;
 				webcam_pic2small) reason=a ;;
-				procfs_broken)    reason=b ;;
-				hanging_wifi)     reason=c ;;
-				khubd_blocked)    reason=d ;;
+				procfs_broken)	  reason=b ;;
+				hanging_wifi)	  reason=c ;;
+				khubd_blocked)	  reason=d ;;
 				lanping)	  reason=e ;;
 				wanping)	  reason=f ;;
 				ubus_dead)	  reason=g ;;
 				netifd_overload)  reason=h ;;
-				wifiphy_probs)    reason=i ;;
-				pidof_hangs)      reason=j ;;
+				wifiphy_probs)	  reason=i ;;
+				pidof_hangs)	  reason=j ;;
 				lost_ip_and_hostapd) reason=k ;;
 				irq_probs)	  reason=l ;;
 				olsr_restart2much) reason=m ;;
@@ -104,7 +104,7 @@ _system_crashreboot()
 				*)
 					reason=${#reason_long}		# hello   = 5
 					reason=$(( 123 - reason ))	# 123 - 5 = 118
-					# 122 = z / 97 = a		# 118     = v
+					# 122 = z / 97 = a		# 118	  = v
 					octal="$( printf '%03o' "$reason" )"
 					reason="$( eval printf "\\\\$octal" )"
 				;;
@@ -293,7 +293,7 @@ _system_add_ramdisc()
 	if grep -q ^"tmpfs /$name " '/proc/mounts'; then
 		_log it $funcname daemon debug "[OK] already mounted: /$name"
 	else
-		if   [ "$option" = 'compressable' ]; then
+		if	 [ "$option" = 'compressable' ]; then
 			# larger size, if content can be compressed
 			grep -q ^'/dev/zram' '/proc/swaps' && divide=1
 		elif [ -n "$option" ]; then
@@ -509,8 +509,8 @@ _system_disc_free()
 	esac
 
 	# user@box:~ df /tmp
-	# Filesystem           1K-blocks      Used Available Use% Mounted on
-	# tmpfs                    14152      1220     12932   9% /tmp
+	# Filesystem		   1K-blocks	  Used Available Use% Mounted on
+	# tmpfs					   14152	  1220	   12932   9% /tmp
 	line="$( df "$disc" )"
 	explode ${line:-0 0 0 0 0 0 0 0 0 0 0}
 	shift 7
@@ -636,7 +636,7 @@ _system_date()				# fixme! set a fixed path for the binary?
 		unixtime2date)
 			date -d @$2
 		;;
-		2unixtime)			# hwclock:               "Mon Nov  7 12:59:49 2016"
+		2unixtime)			# hwclock:				 "Mon Nov  7 12:59:49 2016"
 			local DATE="$2"		# output of 'date', e.g. "Tue Mar  9 11:07:44 CET 2010"
 						# TODO: uname -a: "5 Mon Apr 11 11:24:07 CEST 2011"
 						# TODO: uname -a: "1 So 4. Okt 13:34:39 CEST 2009"
@@ -731,7 +731,7 @@ _system_ram_free()		# [bytes]
 			;;
 			'Buffers:'*)
 				# FIXME: why is 'mem' or '$2' sometimes empty? if this happens, WTF:
-				# 1: 'Buffers:            3428 kB' 2: '' 3:'' 4: '' 5:'' 6: '' 7:''
+				# 1: 'Buffers:			  3428 kB' 2: '' 3:'' 4: '' 5:'' 6: '' 7:''
 				# IFS: '
 				# '
 				explode $line
@@ -828,3 +828,4 @@ _system_sysctl_tweaks()
 	grep -q ' oops=panic' "$file" || _log it $funcname daemon debug "missing 'oops=panic' in $file"
 	grep -q ' panic=10'   "$file" || _log it $funcname daemon debug "missing 'panic=10' in $file"
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

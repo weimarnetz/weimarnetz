@@ -34,12 +34,12 @@ _watch_space_tmpfs()
 		}
 
 		success=
-		list_logs="$(      ls 2>/dev/null -S1 /var/log/* $PERMLOG )"	# FIXME! permlog?
+		list_logs="$(	   ls 2>/dev/null -S1 /var/log/* $PERMLOG )"	# FIXME! permlog?
 		list_vdsfiles="$(  ls 2>/dev/null -S1 /tmp/user-* )"
 		for list_vdsfiles in $list_vdsfiles; do break; done
 		list_orphaned="$(  ls 2>/dev/null -S1 /tmp/db_backup.tgz.temp.* )"
-		list_debug="$(     ls 2>/dev/null -S1 /tmp/WIFI_INCOMING_FRAME_COUNTER_wlan0.error_debug.* )"
-		list_klog="$(      ls 2>/dev/null -S1 /tmp/dmesg.* )"
+		list_debug="$(	   ls 2>/dev/null -S1 /tmp/WIFI_INCOMING_FRAME_COUNTER_wlan0.error_debug.* )"
+		list_klog="$(	   ls 2>/dev/null -S1 /tmp/dmesg.* )"
 		list_coredump="$(  ls 2>/dev/null -S1 /tmp/*.core )"
 		list_scheduler="$( ls 2>/dev/null -S1 /tmp/scheduler.log.debug.* )"
 		list_curl="$( ls 2>/dev/null -S1 $TMPDIR/curl_it_* )"
@@ -366,7 +366,7 @@ _watch_random_node_id()		# check if nodenumber/id is from random pool
 
 		[ -n "$SSH_PUBKEY_FP" ] && ID="$( _curl it "$URL" )"		# FIXME! no ssh  -> no ssh_pubkey_fingerprint!
 										# FIXME! no wifi -> no wifimac -> no registration?
-	 	if _ipsystem get "${ID:-99999}" >/dev/null ; then		# ipsystem() has a sanitizer built in, so don't worry 8-)
+		if _ipsystem get "${ID:-99999}" >/dev/null ; then		# ipsystem() has a sanitizer built in, so don't worry 8-)
 			if [ -e "/tmp/LOCKFILE_APPLY" ]; then
 				_log it $funcname daemon info "will not apply anything, /tmp/LOCKFILE_APPLY exists"
 			else
@@ -518,10 +518,10 @@ _watch_nanostation_max_ethernet()	# eth-phy has hardware error/problem
 								*'no link'*)
 									# F36dach:
 									# mii-tool --restart
-									#   -> 'eth0: negotiated 100baseTx-FD, link ok'
+									#	-> 'eth0: negotiated 100baseTx-FD, link ok'
 									# but
 									# mii-tool --force=100baseTx-FD eth0
-									#   -> 'eth0: 100 Mbit, full duplex, no link'
+									#	-> 'eth0: 100 Mbit, full duplex, no link'
 									_log it $funcname daemon alert "must fallback: '$out'"
 									mii-tool --force=10baseT-FD 'eth0'
 									out="$( mii-tool eth0 )"
@@ -674,7 +674,7 @@ _watch_wifistuff()
 		local monitoring_vif="mon.$WIFIDEV"
 		local logprio='alert'
 
-		if   grep -Fsq '"wlan0-1"' /var/etc/olsrd.conf; then	# hybrid adhoc/ap - check adhoc
+		if	 grep -Fsq '"wlan0-1"' /var/etc/olsrd.conf; then	# hybrid adhoc/ap - check adhoc
 			check_dev='wlan0-1'
 		elif grep -Fsq '"wlan0"' /var/etc/olsrd.conf; then
 			check_dev='wlan0'
@@ -782,7 +782,7 @@ _watch_wifistuff()
 				_wifi phy_restart "$WIFIDEV" "no incoming_wifi_activity, mode '$WIFIMODE'"
 			;;
 			*)
-				# AP-mode:     WIFIDEV =    ap-interface
+				# AP-mode:	   WIFIDEV =	ap-interface
 				# HYBRID-mode: WIFIDEV = adhoc-interface
 				if [ -n "$( iw dev "$WIFIDEV" station dump )" ]; then
 					touch "/tmp/wifi_hasclients_$WIFIDEV"
@@ -815,7 +815,7 @@ _watch_wifistuff()
 
 					if iw dev "$interface" station dump | grep -c ^'Station' >"/tmp/wifi_hasclients_TEMP_$interface"; then
 						mv "/tmp/wifi_hasclients_TEMP_$interface" "/tmp/wifi_hasclients_$interface"
-						read -r clients     <"/tmp/wifi_hasclients_${interface}"
+						read -r clients		<"/tmp/wifi_hasclients_${interface}"
 						read -r clients_max <"/tmp/wifi_hasclients_${interface}_max"
 						[ $clients -gt ${clients_max:-1} ] && {
 							echo "$clients" >"/tmp/wifi_hasclients_${interface}_max"
@@ -877,7 +877,7 @@ _watch_wifistuff()
 						if pidof hostapd >/dev/null; then
 							touch "$TMPDIR/DAEMON_hostapd_seen"
 						else
-							if   [ -e '/tmp/PHYRESTART' ]; then
+							if	 [ -e '/tmp/PHYRESTART' ]; then
 								sleep 30
 							elif [ -z "$( _net dev2ip $WIFIDEV )" ]; then
 								_log it $funcname daemon alert "empty dev2ip '$WIFIDEV'"
@@ -956,7 +956,7 @@ _watch_olsrstuff()
 			explode $( grep -F "$watch_olsr_ip" "/tmp/OLSR/ALL" | head -n1 )
 			value="$( echo "$value" | tr -d '.' )"	# ETX-value, e.g 1.234 -> 1234
 
-			if   [ "$value" = '0100' ]; then
+			if	 [ "$value" = '0100' ]; then
 				:
 			elif [ "$value" = 'INFINITE' ]; then
 				bad='true'
@@ -967,10 +967,10 @@ _watch_olsrstuff()
 			fi
 
 			if [ -n "$bad" -a -e "/tmp/check_$watch_olsr_ip" ]; then
-				if    _watch counter "/tmp/check_$watch_olsr_ip" increment 1 max 10 ; then
-					_log it "check_$watch_olsr_ip" daemon info  "bad value for $watch_olsr_ip: '$value' max: $watch_value"
+				if	  _watch counter "/tmp/check_$watch_olsr_ip" increment 1 max 10 ; then
+					_log it "check_$watch_olsr_ip" daemon info	"bad value for $watch_olsr_ip: '$value' max: $watch_value"
 				elif  _watch counter "/tmp/check_$watch_olsr_ip" increment 1 max 20 ; then
-					_log it "check_$watch_olsr_ip" daemon info  "bad value for $watch_olsr_ip: '$value' max: $watch_value"
+					_log it "check_$watch_olsr_ip" daemon info	"bad value for $watch_olsr_ip: '$value' max: $watch_value"
 					_wifi phy_restart "$WIFIDEV" 'bad_link'
 				else
 					_log it "check_$watch_olsr_ip" daemon alert "bad value for $watch_olsr_ip: '$value' - rebooting"
@@ -1006,18 +1006,18 @@ _watch_vpn()
 	local ip_server="$( _ipsystem getvar 'WIFIVPNSERVERADR' )"
 
 	if pidof vtund >/dev/null; then
-	        _log it $func daemon debug "daemon running"
-	        grep -sq ^"Interface .*tap0" /etc/olsrd.conf /var/etc/olsrd.conf || {   # fixme! more abstraction: tun/tapXY + conf-filename
+			_log it $func daemon debug "daemon running"
+			grep -sq ^"Interface .*tap0" /etc/olsrd.conf /var/etc/olsrd.conf || {	# fixme! more abstraction: tun/tapXY + conf-filename
 			_log it $FUNC daemon info "daemon running but tunnel-device not used by olsr"
-	        	return 1
+				return 1
 		}
-	        _log it $func daemon debug "tunnel-device is in olsr.conf"
+			_log it $func daemon debug "tunnel-device is in olsr.conf"
 
-	        ps | grep vtund | grep -q connecting && {
+			ps | grep vtund | grep -q connecting && {
 			_log it $func daemon info "daemon running but connection seems broken"
-	                return 1
-	        }
-	        _log it $func daemon debug "connection seems active"
+					return 1
+			}
+			_log it $func daemon debug "connection seems active"
 
 		vpn_server_is_neigh()
 		{
@@ -1035,12 +1035,13 @@ _watch_vpn()
 				_log do $func daemon info "ping failed: $ip_server"
 				return 1
 			}
-	        else
+			else
 			_log it $func daemon info "no tunnel-olsr neigh available?!"
-	        	return 1
-	        fi
+				return 1
+			fi
 	else
 		_log it $func daemon info "daemon NOT running"
 		return 1
 	fi
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

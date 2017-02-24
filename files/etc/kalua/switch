@@ -77,7 +77,7 @@ _switch_query_swconfig()	# SENSE: show a single switch-port of a 'swconfig'-cont
 		[ -n "$debug" ] && \
 			_log it $funcname daemon debug "type: $type port: $port line '$line'"
 
-		# why this lead to unknown? line: '     link: port:0 link:down'
+		# why this lead to unknown? line: '		link: port:0 link:down'
 
 		case "$line" in
 			*"link: port:$port link: down"*)
@@ -135,7 +135,7 @@ _switch_query_mii()		# SENSE: show port of a 'MII'-interface
 		line=
 		max_try=10
 		while [ -z "$line" ]; do {
-			if   command -v 'devstatus' >/dev/null; then
+			if	 command -v 'devstatus' >/dev/null; then
 				line="$( devstatus "$port" | grep '"speed": ' )" && {
 					# e.g. "speed": "100F", -> "100F", -> 100F
 					explode $line
@@ -337,26 +337,26 @@ _switch_test()
 {
 	_switch symbol html_init
 
-	_switch symbol html      'Cisco Catalyst WS-C2960G-24TC-L'
+	_switch symbol html		 'Cisco Catalyst WS-C2960G-24TC-L'
 	_switch symbol newline
 
-	_switch symbol full      100  1    'X'
-	_switch symbol full      100  3
-	_switch symbol down      -    5
-	_switch symbol full      100  7    '&clubs;'
+	_switch symbol full		 100  1    'X'
+	_switch symbol full		 100  3
+	_switch symbol down		 -	  5
+	_switch symbol full		 100  7    '&clubs;'
 	_switch symbol gap
-	_switch symbol downFIBER -   LWL-1
-	_switch symbol downFIBER -   LWL-2
+	_switch symbol downFIBER -	 LWL-1
+	_switch symbol downFIBER -	 LWL-2
 
 	_switch symbol newline
 
 	_switch symbol error
-	_switch symbol down      -    4
-	_switch symbol full      10   6
-	_switch symbol down      -    8
+	_switch symbol down		 -	  4
+	_switch symbol full		 10   6
+	_switch symbol down		 -	  8
 	_switch symbol gap
-	_switch symbol FIBER     1G  LWL-3 'X'
-	_switch symbol FIBER     1G  LWL-4 'Y'
+	_switch symbol FIBER	 1G  LWL-3 'X'
+	_switch symbol FIBER	 1G  LWL-4 'Y'
 
 	_switch symbol html_end
 }
@@ -493,3 +493,4 @@ _switch_symbol()	# SENSE: represent each port with a short letter: [a-cA-C] = 10
 		printf '%s' "$symbol_text"
 	fi
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

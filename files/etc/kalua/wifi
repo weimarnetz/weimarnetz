@@ -1,11 +1,11 @@
 #!/bin/sh
 
 # Idee, wie man mit mehreren wlan-karten klarkommt:
-#    Erstes WIFI_DEV steht sowohl in normaler Variablenliste,
-#    als auch in /tmp/wifi_$DEV zum includen. So werden Operationen
-#    auf alle Elemente in der Liste gemacht:
-#    (es muss also nur was included werden, wenn es mehrere wireless-karten gibt)
-#    (bei einer wlan-karte oder der letzten gibt es kein $WIFI_DEV_NEXT)
+#	 Erstes WIFI_DEV steht sowohl in normaler Variablenliste,
+#	 als auch in /tmp/wifi_$DEV zum includen. So werden Operationen
+#	 auf alle Elemente in der Liste gemacht:
+#	 (es muss also nur was included werden, wenn es mehrere wireless-karten gibt)
+#	 (bei einer wlan-karte oder der letzten gibt es kein $WIFI_DEV_NEXT)
 #
 # for WIFIDEV in $WIFI_DEVS; do {
 #	do_some_stuff_with_normal_vars
@@ -395,7 +395,7 @@ _wifi_minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate(
 				explode $line
 				shift
 			;;
-			"HT20/LGI  t"*|"HT20/SGI  t"*|"HT40/LGI  t"*|"HT40/SGI  t"*)
+			"HT20/LGI  t"*|"HT20/SGI  t"*|"HT40/LGI  t"*|"HT40/SGI	t"*)
 				system="n"
 				explode $line
 				shift
@@ -405,7 +405,7 @@ _wifi_minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate(
 			;;
 		esac
 
-# 		logger -s "interesting line: 1: $1 2: $2 3: $3 4:$3 5: $5 6: $6 7: $7 8: $8 9: $9 10: ${10}"
+#		logger -s "interesting line: 1: $1 2: $2 3: $3 4:$3 5: $5 6: $6 7: $7 8: $8 9: $9 10: ${10}"
 
 		case "$2" in
 			1|2|5.5|11|6|9|12|18|24|36|48|54|*MCS*)
@@ -446,7 +446,7 @@ _wifi_minstrel_extract_raw_and_real_txrate_from_neigh_with_highest_success_rate(
 
 	[ -n "$targetline" ] && {
 		explode $targetline
-# 		logger -s "TL 1: $1 2: $2 3: $3 4:$3 5: $5 6: $6 7: $7 8: $8 9: $9"
+#		logger -s "TL 1: $1 2: $2 3: $3 4:$3 5: $5 6: $6 7: $7 8: $8 9: $9"
 
 		case "$2" in
 			*MCS*)
@@ -540,14 +540,14 @@ _wifi_math_mcs2rate()			# fixme! output spatial streams, coding rate, modulation
 
 		case "$mcs_index" in
 			  0|1|3|8|9|11|16|17|19|24|25|27) coding_rate='1/2' ;;
-					      5|13|21|29) coding_rate='2/3' ;;
+						  5|13|21|29) coding_rate='2/3' ;;
 			2|4|6|10|12|14|18|20|22|26|28|30) coding_rate='3/4' ;;
-					      7|15|23|31) coding_rate='5/6' ;;
+						  7|15|23|31) coding_rate='5/6' ;;
 		esac
 
 		case "$mcs_index" in
 						  0|8|16) modulation_type='BPSK' ;;
-				    1|2|9|10|17|18|24|25) modulation_type='QPSK' ;;
+					1|2|9|10|17|18|24|25) modulation_type='QPSK' ;;
 				   3|4|11|12|19|20|27|28) modulation_type='16QAM' ;;
 			5|6|7|13|14|15|21|22|23|29|30|31) modulation_type='64QAM' ;;
 		esac
@@ -674,7 +674,7 @@ _wifi_params_iwconfig_status()
 
 	# WIFI_DEV=eth1
 	# WIFI_UPTIME=0
-	# WIFI_ESSID='www.freifunk.net (Zugangspunkt)'  	# fixme! single quotes are not correct escaped!
+	# WIFI_ESSID='www.freifunk.net (Zugangspunkt)'		# fixme! single quotes are not correct escaped!
 	# WIFI_MODE="Managed"
 	# WIFI_FREQ=2442					# in MHz ! -> convert to Channel?
 	# WIFI_CHANNEL="$( _wifi math_mhz2channel 2442 )"	# this is converted during 'eval'
@@ -693,15 +693,15 @@ _wifi_params_iwconfig_status()
 							# FIXME! sometimes iwconfig-output is empty
 	/usr/sbin/iwconfig "$dev" 2>/dev/null |
 	 sed -ne "s/^.*ESSID:\"\(.*\)\"/WIFI_DEV=$1\nWIFI_UPTIME=0\nWIFI_ESSID='\1'/p" \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Access Point: \(.*\)Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE=\1;WIFI_TXPOWER=\3;/p' \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Access Point: \(..:..:..:..:..:..\)/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: \(..:..:..:..:..:..\)/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: Not-Associated/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"/p' \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_TXPOWER=\4/p' \
-	     -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE=\1;WIFI_TXPOWER=\2;/p' \
-	     -ne 's/^.*Bit Rate:.*Tx-Power:.*Sensitivity=\([0-9]*\)\/\([0-9]*\).*/WIFI_SENSITIVITY="\1\/\2"/p' \
-	     -ne 's/^.*Retry.\([a-z0-9]*\)[^a-zA-Z0-9]*RTS thr.\([a-z0-9]*\)[^0-9a-zA-Z]*Fragment thr.\([a-z0-9]*\).*/WIFI_RETRY="\1"\nWIFI_RTS="\2"\nWIFI_FRAG="\3"/p' \
-	     -ne "s/^.*Link Quality[:=]\([0-9]*\)\/\([0-9]*\).*Signal level[:=]\([-0-9]*\) dBm.*Noise level[:=]\([-0-9]*\) dBm/WIFI_QUALITY=\1\nWIFI_QUALITY_MAX=\2\nWIFI_SIGNAL='\3'\nWIFI_NOISE='\4'/p"
+		 -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Access Point: \(.*\)Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE=\1;WIFI_TXPOWER=\3;/p' \
+		 -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Access Point: \(..:..:..:..:..:..\)/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
+		 -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: \(..:..:..:..:..:..\)/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_BSSID=\4/p' \
+		 -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Cell: Not-Associated/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"/p' \
+		 -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Frequency:\([0-9]\)\.\([0-9]*\).*Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE="\1"\nWIFI_FREQ=\2\3\nWIFI_CHANNEL=\"\$( _wifi math_mhz2channel \2\3 )\"\nWIFI_TXPOWER=\4/p' \
+		 -ne 's/^.*Mode:\([- a-zA-Z]*[a-zA-Z]\).*Tx-Power=\([0-9]*\) dBm.*/WIFI_MODE=\1;WIFI_TXPOWER=\2;/p' \
+		 -ne 's/^.*Bit Rate:.*Tx-Power:.*Sensitivity=\([0-9]*\)\/\([0-9]*\).*/WIFI_SENSITIVITY="\1\/\2"/p' \
+		 -ne 's/^.*Retry.\([a-z0-9]*\)[^a-zA-Z0-9]*RTS thr.\([a-z0-9]*\)[^0-9a-zA-Z]*Fragment thr.\([a-z0-9]*\).*/WIFI_RETRY="\1"\nWIFI_RTS="\2"\nWIFI_FRAG="\3"/p' \
+		 -ne "s/^.*Link Quality[:=]\([0-9]*\)\/\([0-9]*\).*Signal level[:=]\([-0-9]*\) dBm.*Noise level[:=]\([-0-9]*\) dBm/WIFI_QUALITY=\1\nWIFI_QUALITY_MAX=\2\nWIFI_SIGNAL='\3'\nWIFI_NOISE='\4'/p"
 }
 
 _wifi_phy_probe_online()		# fixme! more abstraction
@@ -779,7 +779,7 @@ _wifi_speed()
 					"${LANDEV:-nolan}")   nexthop_interface='LAN' ;;
 					"${WANDEV:-nowan}")   nexthop_interface='WAN' ;;
 					"${WIFIDEV:-nowifi}") nexthop_interface='WIFI' ;;
-							    *) nexthop_interface='WIFI2' ;;
+								*) nexthop_interface='WIFI2' ;;
 				esac
 			}
 		}
@@ -898,11 +898,11 @@ _wifi_forwarding_still_active()
 	# FIXME! do not count tap -> eth+ or lo -> eth+
 	# measure forwarding of wired -> wifi or wifi -> wired
 	$IPT -I FORWARD   -i eth+ ! -o eth+
-	$IPT -I FORWARD ! -i eth+   -o eth+
+	$IPT -I FORWARD ! -i eth+	-o eth+
 
 	unroll()
 	{
-		$IPT -D FORWARD ! -i eth+   -o eth+
+		$IPT -D FORWARD ! -i eth+	-o eth+
 		$IPT -D FORWARD   -i eth+ ! -o eth+
 	}
 
@@ -1252,7 +1252,7 @@ _wifi_dev2txpower()		# output in [mW]
 _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 {
 	local o				# idea: add to each freq regdomain/countrycode
-					#       and choose corresponding countrycode, which fits channel 8-)
+					#		and choose corresponding countrycode, which fits channel 8-)
 	case "$1" in
 		2412) o=1 ;;  # 276	# block of 802.11b/g/n-freqs
 		2417) o=2 ;;  # 276
@@ -1273,69 +1273,69 @@ _wifi_math_mhz2channel ()		# http://en.wikipedia.org/wiki/Lost_of_WLAN_channels
 					# block of 802.11y omitted
 
 		5035) o=7 ;;		# block of 802.11a/h/j/n
-            504|5040) o=8 ;;		# ath5k / r32060
+			504|5040) o=8 ;;		# ath5k / r32060
 		5045) o=9 ;;		# fixme! mark 'outdoor'-channels
 		5055) o=11 ;;
-	    506|5060) o=12 ;;		# ath5k / r32060
-            508|5080) o=16 ;;		# ath5k / r32060
+		506|5060) o=12 ;;		# ath5k / r32060
+			508|5080) o=16 ;;		# ath5k / r32060
 
-	    517|5170) o=34 ;;
-	    518|5180) o=36 ;; # 608
-	    519|5190) o=38 ;;
-	     52|5200) o=40 ;; # 608
-	    521|5210) o=42 ;; #	608	# TURBO.only	# for TURBO, see http://madwifi-project.org/wiki/UserDocs/802.11a_channels
-	    522|5220) o=44 ;; # 608
-	    523|5230) o=46 ;;
-	    524|5240) o=48 ;; # 608
-	    525|5250) o=50 ;; # 608	# TURBO.only	# not listed in wikipedia?
-	    526|5260) o=52 ;; # 608
-	    528|5280) o=56 ;; # 608
-	    529|5290) o=58 ;; # 608	# TURBO.only	# not listed in wikipedia?
-	     53|5300) o=60 ;; # 608
-	    532|5320) o=64 ;; # 608
+		517|5170) o=34 ;;
+		518|5180) o=36 ;; # 608
+		519|5190) o=38 ;;
+		 52|5200) o=40 ;; # 608
+		521|5210) o=42 ;; #	608	# TURBO.only	# for TURBO, see http://madwifi-project.org/wiki/UserDocs/802.11a_channels
+		522|5220) o=44 ;; # 608
+		523|5230) o=46 ;;
+		524|5240) o=48 ;; # 608
+		525|5250) o=50 ;; # 608	# TURBO.only	# not listed in wikipedia?
+		526|5260) o=52 ;; # 608
+		528|5280) o=56 ;; # 608
+		529|5290) o=58 ;; # 608	# TURBO.only	# not listed in wikipedia?
+		 53|5300) o=60 ;; # 608
+		532|5320) o=64 ;; # 608
 
-	     55|5500) o=100 ;; # 276	# iwconfig-output is '55' and means 5500mhz!
-	    552|5520) o=104 ;; # 276
-	    553|5530) o=106 ;; # 276	# not listed in wikipedia?
-	    554|5540) o=108 ;; # 276
-	    556|5560) o=112 ;; # 276
-	    557|5570) o=114 ;; # 276	# not listed in wikipedia?
-	    558|5580) o=116 ;; # 276
-	     56|5600) o=120 ;; # 276
-	    561|5610) o=122 ;; # 276	# not listed in wikipedia?
-	    562|5620) o=124 ;; # 276
-	    564|5640) o=128 ;; # 276
-	    565|5650) o=130 ;; # 276	# not listed in wikipedia?
-	    566|5660) o=132 ;; # 276
-	    568|5680) o=136 ;; # 276
-	     57|5700) o=140 ;; # 276
-	    572|5720) o=144 ;;	# ac-only
+		 55|5500) o=100 ;; # 276	# iwconfig-output is '55' and means 5500mhz!
+		552|5520) o=104 ;; # 276
+		553|5530) o=106 ;; # 276	# not listed in wikipedia?
+		554|5540) o=108 ;; # 276
+		556|5560) o=112 ;; # 276
+		557|5570) o=114 ;; # 276	# not listed in wikipedia?
+		558|5580) o=116 ;; # 276
+		 56|5600) o=120 ;; # 276
+		561|5610) o=122 ;; # 276	# not listed in wikipedia?
+		562|5620) o=124 ;; # 276
+		564|5640) o=128 ;; # 276
+		565|5650) o=130 ;; # 276	# not listed in wikipedia?
+		566|5660) o=132 ;; # 276
+		568|5680) o=136 ;; # 276
+		 57|5700) o=140 ;; # 276
+		572|5720) o=144 ;;	# ac-only
 		5745) o=149 ;;
-	    576|5760) o=152 ;;	# TURBO.only	# not listed in wikipedia?	# BFWA
+		576|5760) o=152 ;;	# TURBO.only	# not listed in wikipedia?	# BFWA
 		5765) o=153 ;;							# BFWA
 		5785) o=157 ;;							# BFWA
-	     58|5800) o=160 ;;	# TURBO.only	# not listed in wikipedia?	# BFWA
+		 58|5800) o=160 ;;	# TURBO.only	# not listed in wikipedia?	# BFWA
 		5805) o=161 ;;							# BFWA
 		5825) o=165 ;;							# BFWA
-	    583|5830) o=166 ;;							# BFWA
-	        5835) o=167 ;;							# BFWA
-	    584|5840) o=168 ;;							# BFWA
+		583|5830) o=166 ;;							# BFWA
+			5835) o=167 ;;							# BFWA
+		584|5840) o=168 ;;							# BFWA
 		5845) o=169 ;;							# BFWA
-	    585|5850) o=170 ;;							# BFWA
+		585|5850) o=170 ;;							# BFWA
 		5855) o=171 ;;							# BFWA
-	    586|5860) o=172 ;;							# BFWA
+		586|5860) o=172 ;;							# BFWA
 		5865) o=173 ;;							# BFWA
-	    587|5870) o=174 ;;							# BFWA
+		587|5870) o=174 ;;							# BFWA
 		5875) o=175 ;;							# BFWA
 
 		4915) o=183 ;;
-	    492|4920) o=184 ;;
+		492|4920) o=184 ;;
 		4925) o=185 ;;
 		4935) o=187 ;;
-	    494|4940) o=188 ;;
+		494|4940) o=188 ;;
 		4945) o=189 ;;
-	    496|4960) o=192 ;;
-	    498|4980) o=196 ;;
+		496|4960) o=192 ;;
+		498|4980) o=196 ;;
 					# wl also knows: 200, 204, 208, 212, 216
 					# oswave.com -> 220/6100mhz, 234...250 (4920...5000mhz), 1...6 (5005....5030)
 
@@ -1412,7 +1412,7 @@ _wifi_bssid()				# BSSID = cell in adhoc, ap-wifimac in ap, wifimac of associate
 		}
 
 		command -v iwconfig >/dev/null && test -z "$bssid" && {
-			# Mode:Ad-Hoc  Frequency:2.432 GHz  Cell: 02:CA:FF:EE:BA:BE
+			# Mode:Ad-Hoc  Frequency:2.432 GHz	Cell: 02:CA:FF:EE:BA:BE
 			explode $( iwconfig "$WIFIDEV" | grep -F 'Cell:' )
 
 			while [ -n "$1" ]; do {
@@ -1456,7 +1456,7 @@ _wifi_mcastrate()
 	if [ -n "$line" ]; then
 		case "$line" in
 			5500000) echo '5.5' ;;
-			      *) echo $(( line / 1000 )) ;;
+				  *) echo $(( line / 1000 )) ;;
 		esac
 	else
 		echo 'auto'
@@ -1468,7 +1468,7 @@ _wifi_noise()			# OUT1: e.g. '-93' = signed Integer in [dBm]
 	local dev="$1"
 
 	# FIXME! do not read the first 'noise', only after
-	#        line 'frequency:   2432 MHz [in use]'
+	#		 line 'frequency:	2432 MHz [in use]'
 	iw dev "$dev" survey dump |
 	 sed -n '/noise:/{s/^.*noise:.*\(-[0-9]*\).*/\1/p;q}'
 }
@@ -1534,7 +1534,7 @@ _wifi_signal_get()
 		}
 
 		explode $line
-		line="$*"			# signal:    0 dBm
+		line="$*"			# signal:	 0 dBm
 		signal="${line#*signal: }"	# signal:  -50 [-60, -54, -53] dBm
 		signal="${signal%% *}"		# -50
 
@@ -1626,7 +1626,7 @@ _wifi_assoclist ()		# OUT1: list of associated mac_addresses
 	return 0
 }
 
-_wifi_mode()			# OUT1: string, ap | client | adhoc | adhocap             // rename: wifi_get_mode_conn?
+_wifi_mode()			# OUT1: string, ap | client | adhoc | adhocap			  // rename: wifi_get_mode_conn?
 {
 	local funcname='wifi_mode'
 	local dev="$1"		# we check the whole phy, e.g. wlan0 + wlan0-1
@@ -1926,8 +1926,8 @@ _wifi_scan_geolocation_api_build_json()
 	}
 
 	echo '{'
-	echo '  "wifiAccessPoints": ['
-	echo '  {'
+	echo '	"wifiAccessPoints": ['
+	echo '	{'
 
 	# e.g. -39 2432 ca:d3:a3:57:f7:6a
 	while read -r line; do {
@@ -1937,17 +1937,17 @@ _wifi_scan_geolocation_api_build_json()
 		bssid="$3"
 		[ -n "$bssid" ] && i=$(( i + 1 ))
 
-		echo "    \"macAddress\": \"$bssid\","
-		echo "    \"signalStrength\": $signal,"
-		echo "    \"frequency\": $freq,"
-		echo "    \"age\": $i"
-		echo '  }, {'
+		echo "	  \"macAddress\": \"$bssid\","
+		echo "	  \"signalStrength\": $signal,"
+		echo "	  \"frequency\": $freq,"
+		echo "	  \"age\": $i"
+		echo '	}, {'
 	} done <"$file"
 	rm -f "$file"
 
 	# just for valid json:
-	echo "    \"macAddress\": \"$( _net dev2mac "$WIFIDEV" )\""
-	echo '  }]'
+	echo "	  \"macAddress\": \"$( _net dev2mac "$WIFIDEV" )\""
+	echo '	}]'
 	echo '}'
 
 	test $i -gt 0
@@ -2387,21 +2387,21 @@ _wifi_set()			# e.g. _wifi set ap "$ifindex" txpower
 		;;
 	esac
 
-	# _wifi set ap      5ghz     ssid 'Appartementhaus'
-	# _wifi set ap      5ghz     off
+	# _wifi set ap		5ghz	 ssid 'Appartementhaus'
+	# _wifi set ap		5ghz	 off
 	# _wifi set anymode anyfreq  disabled kmod_unload
 
 	for i in $( seq 0 15 ); do {
 		[ "$( uci -q get "wireless.@wifi-iface[$i].mode" )" = "$wifimode" -o "$wifimode" = 'any' -o "$wifimode" = 'anymode' ] && {
 			radio=
 
-			if   isnumber "$band"; then
+			if	 isnumber "$band"; then
 				[ "$i" = "$band" ] || continue
 			elif [ "$band" = 'any' -o "$band" = 'anyfreq' ]; then
 				:
 			elif [ "$band" = '2ghz' ]; then
 				_wifi is2ghz "$i" || continue
-			else 	# wish: 5ghz
+			else	# wish: 5ghz
 				_wifi is2ghz "$i" && continue
 			fi
 
@@ -2469,7 +2469,7 @@ _wifi_set()			# e.g. _wifi set ap "$ifindex" txpower
 					}
 
 					[ -n "$radio" -a "$var" = 'channel' ] && {
-						if   [ "$value" = 'auto' ]; then
+						if	 [ "$value" = 'auto' ]; then
 							uci set wireless.$radio.country='FM'
 						elif [ ${value:-0} -ge 1 -a ${value:-0} -le 11 ]; then
 							uci set wireless.$radio.country='US'
@@ -2477,9 +2477,9 @@ _wifi_set()			# e.g. _wifi set ap "$ifindex" txpower
 
 						[ "$option" = 'bssid_wellformed' ] && {
 							# e.g.
-							# channel:  36 chanbw: 10 -> 02:be:ef:10:00:36
+							# channel:	36 chanbw: 10 -> 02:be:ef:10:00:36
 							# channel: 149 chanbw: 20 -> 02:be:ef:20:01:49
-							# channel:   1 chanbw:  5 -> 02:be:ef:05:00:01
+							# channel:	 1 chanbw:	5 -> 02:be:ef:05:00:01
 
 							# TODO: hardcoded magic - how to separate different networks in the same area?
 							bssid='02:be:ef'
@@ -2791,10 +2791,10 @@ _wifi_longshot()	# this works only for all radios on some band in adhoc-mode
 							fi
 
 							if [ $channel -ge 36 ]; then
-								_wifi set ap      5ghz 'off'
+								_wifi set ap	  5ghz 'off'
 								_wifi set anymode 5ghz txpower '19'
 							else
-								_wifi set ap      2ghz 'off'
+								_wifi set ap	  2ghz 'off'
 								_wifi set anymode 2ghz txpower '25'
 							fi
 						}
@@ -2898,3 +2898,4 @@ _wifi_longshot_report()
 		}
 	}
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

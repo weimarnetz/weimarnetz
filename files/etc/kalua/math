@@ -61,7 +61,7 @@ _math_divide10 ()	# SENS: sets point in front of last digit 976 = 97.6
 }
 
 _math_bytes2unit ()		# SENS: humanreadable but not correct bytes -> k|m|g-Bytes conversion
-{				#       ash can't calc with floats, so we use sed to 'calc' (not AWK!)
+{				#		ash can't calc with floats, so we use sed to 'calc' (not AWK!)
 	local VALUE="$1"
 	local UNIT="$2"			# can be kb, mb, gb, bytes
 	local ARG3="$3"			# can be "dotted" - so we convert 123456789 = 123.456.789	
@@ -72,15 +72,15 @@ _math_bytes2unit ()		# SENS: humanreadable but not correct bytes -> k|m|g-Bytes 
 		kb|KB|kbytes|KBytes)
 			case ${#VALUE} in
 				0|1|2) OUT="0" ;;
-				    3) OUT="1" ;;
-				    *) OUT="$( echo $VALUE | sed -n 's/^\(.*\).../\1/p' )" ;;			# cut off last 3 digits
+					3) OUT="1" ;;
+					*) OUT="$( echo $VALUE | sed -n 's/^\(.*\).../\1/p' )" ;;			# cut off last 3 digits
 			esac
 		;;
 		mb|MB|mbytes|MBytes)
 			case ${#VALUE} in
 				0|1|2|3|4|5) OUT="0" ;;
 					  6) OUT="1" ;;
-					  *) OUT="$( echo $VALUE | sed -n 's/^\(.*\)....../\1/p' )" ;;   	# cut off last 6 digits
+					  *) OUT="$( echo $VALUE | sed -n 's/^\(.*\)....../\1/p' )" ;;		# cut off last 6 digits
 			esac
 		;;
 		gb|GB|gbytes|GBytes)
@@ -112,3 +112,4 @@ _math_bytes2unit ()		# SENS: humanreadable but not correct bytes -> k|m|g-Bytes 
 
 	echo -n $OUT
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

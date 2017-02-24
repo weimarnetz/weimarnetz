@@ -66,9 +66,9 @@ _log_debug()
 	broadcast_ip=${broadcast_ip%% *}
 
 	# readable from a neighbour with:
-	# 	tcpdump -s 1500 -n -l -w - -i $YOURDEV port 0x1337 | strings | while read L; do test ${#L} -gt 5 && echo $L; done
+	#	tcpdump -s 1500 -n -l -w - -i $YOURDEV port 0x1337 | strings | while read L; do test ${#L} -gt 5 && echo $L; done
 	# or with an UDP-capable netcat via:
-	# 	nc -lup 4919	//fixme!
+	#	nc -lup 4919	//fixme!
 	# or with iptables:
 	#	iptables -I INPUT -p udp --dport 4919 -j LOG --log-prefix "0x1337: "
 	#	logread -f
@@ -182,3 +182,4 @@ _log_append_info()
 
 	echo "${location}->${host} @ ${date}"
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

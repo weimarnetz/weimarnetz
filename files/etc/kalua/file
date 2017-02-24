@@ -110,7 +110,7 @@ _file_size()			# FIXME! use 'stat -c%s $file' if possible (not included in defau
 	# scraping 'ls -la' is dirty, but much faster than 'wc -c <$file'
 	#
 	# root@box:~ ls -l /etc/init.d/myfile
-	# -rwxr-xr-x    1 1000     1000            0 Jan  3 16:50 /etc/init.d/myfile
+	# -rwxr-xr-x	1 1000	   1000			   0 Jan  3 16:50 /etc/init.d/myfile
 
 	set -- $( ls -la "$file" 2>/dev/null || echo O O O O x O )
 	size="$5"
@@ -152,3 +152,4 @@ _file_discusage()		# [bytes]
 	eval "$( ls -lR "$dir" | while read line; do set -- $line; case "$line" in 'd'*) ;; *) echo "i=\$(( i + ${5:-0} ));";; esac; done )"
 	echo $i
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

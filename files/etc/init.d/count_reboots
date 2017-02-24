@@ -7,11 +7,12 @@ boot()
 	local file='/www/REBOOT_COUNTER'
 	local i
 
-        if [ -e "$file" ]; then
-                read -r i <"$file"
-                i=$(( i + 1 ))
-                echo $i >"$file"
-        else
-                echo 1 >"$file"
-        fi
+		if [ -e "$file" ]; then
+				read -r i <"$file"
+				i=$(( i + 1 ))
+				echo $i >"$file"
+		else
+				echo 1 >"$file"
+		fi
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

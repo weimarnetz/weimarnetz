@@ -21,7 +21,7 @@ _ssh_key_public_fingerprint_get()	# output differs, wether its a SHA1 or MD5 has
 
 	[ "$option" = 'keyfilename' ] && nop=':'
 
-	if   [ -e "$file_openwrt2" ]; then	# try modern first
+	if	 [ -e "$file_openwrt2" ]; then	# try modern first
 		file="$file_openwrt2"
 		$nop dropbearkey -y -f "$file" | fgrep 'Fingerprint:' | cut -d' ' -f3
 	elif [ -e "$file_openwrt1" ]; then
@@ -130,3 +130,4 @@ _ssh_sanitize_and_cleanup_keys()
 
 	[ -h "$HOME/.ssh" ] || ln -fs '/etc/dropbear' "$HOME/.ssh"
 }
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

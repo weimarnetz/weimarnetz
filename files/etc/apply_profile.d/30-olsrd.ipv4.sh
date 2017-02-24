@@ -74,14 +74,14 @@ setup_Plugins() {
 			setup_Plugin_json "$cfg"
 		;;
 		*dyn_gw*)
-            setup_Plugin_dyn_gw "$cfg"
-        ;;
-        *arprefresh*)
-            :
-        ;;
-        *txtinfo*)
-            setup_Plugin_txtinfo "$cfg"
-        ;;
+			setup_Plugin_dyn_gw "$cfg"
+		;;
+		*arprefresh*)
+			:
+		;;
+		*txtinfo*)
+			setup_Plugin_txtinfo "$cfg"
+		;;
 		*watchdog*)
 		:
 		;;
@@ -129,7 +129,7 @@ setup_wifi() {
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -le "-1" ] && return
 	local device="radio$idx_mesh"
-    
+	
 	log_olsr4 "Setup wifi $cfg $ipaddr"
 	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
 	uci_set olsrd "$iface_sec" interface "$device"
@@ -220,3 +220,4 @@ else
 		/etc/init.d/olsrd disable
 	fi
 fi
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

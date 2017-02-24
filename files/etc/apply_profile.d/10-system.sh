@@ -53,3 +53,5 @@ config_foreach setup_system system
 
 #Save
 uci_commit system
+
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
