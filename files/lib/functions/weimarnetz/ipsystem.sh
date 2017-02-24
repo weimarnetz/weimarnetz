@@ -32,7 +32,7 @@ node2nets_json()
                         n=$(( nodenumber - 255 ))
                         s=64
                 fi
-		json_add_string "nodenet" "$network.$city.$n.$((s+1))/26"
+		json_add_string "node_net" "$network.$city.$n.$((s+1))/26"
 		json_add_string "wifi" "$network.$city.$n.$((s+1))/27"
                 json_add_string "lan" "$network.$city.$n.$((s+32+1))/28"
                 json_add_string "radio0_mesh" "$network.$city.$n.$((s+48))/32"
@@ -67,7 +67,7 @@ _calc_roaming_net() {
 
 _dhcp_offset() {
 
-awk -f - $* <<EOF
+awk -f - "$*" <<EOF
 
 function ip2int(ip) {
         for (ret=0,n=split(ip,a,"\."),x=1;x<=n;x++) ret=or(lshift(ret,8),a[x])
