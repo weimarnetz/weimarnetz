@@ -1,16 +1,5 @@
 #!/bin/sh
 
-ROAMING_DNS='100.64.0.1'	# was: 192.168.0.1
-ROAMING_GATEWAY='100.64.0.1'	# was: 192.168.0.1
-ROAMING_PRE=10
-ROAMING_NET='100.64.0.0'	# octet3: 64...127 = 64 * 256 /24 nets = 16384 IDs)
-
-_net_dummy()
-{
-	# simulate usage for 'shellcheck'
-	echo "$ROAMING_NET $ROAMING_PRE $ROAMING_DNS $ROAMING_GATEWAY"
-}
-
 _net_isrouter()
 {
 	local ip="$1"
@@ -1353,13 +1342,6 @@ _net_ip2dev()		# outputs real devname like 'br0' or 'wlan0-1'
 			;;
 		esac
 	} done
-}
-
-_net_local_inet_speed()
-{
-	local interface="$( _net local_inet_offer )"
-
-	cat "/tmp/speed_inet_$interface"
 }
 
 _net_local_inet_offer_TEST()
