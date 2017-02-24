@@ -1,8 +1,6 @@
 #!/bin/sh
 
-. /tmp/loader
-
-_http header_mimetype_output "text/html"
+echo "Content-type: text/html\n"
 
 cat<<EOF
 <HTML>
@@ -12,28 +10,9 @@ cat<<EOF
 <META CONTENT="no-cache" HTTP-EQUIV="cache-control">
 <LINK HREF="ff.css" REL="StyleSheet" TYPE="text/css">
 <LINK HREF="sven-ola*.t*gmx*de" REV="made" TITLE="Sven-Ola">
-EOF
-
-if [ -e /www/cgi-bin/luci ]; then
-
-cat<<EOF
-<meta http-equiv="refresh" content="0; URL=/cgi-bin/luci/freifunk/olsr/neighbors" />                   
-</head>
-<body style="background-color: black">
-<a style="color: white; text-decoration: none" href="/cgi-bin/luci/freifunk/olsr/neighbors">Weimarnetz - status interface</a>                        
-</body>
-</html>
-EOF
-
-exit 0
-else 
-
-cat<<EOF
 </HEAD>
 <BODY> 
 EOF
-
-fi
 
 export DATE="3.12.2008";SCRIPT=${0#/rom}
 export TITLE="Status: OLSR"
@@ -44,9 +23,6 @@ ff_httpinfo=1
 
 cat<<EOF
 <H1>Status: &Uuml;bersicht</H1>
-Dein Router hat entweder zu wenig Speicherplatz oder der Administrator hat verpennt, luci zu installieren. Deshalb gibt es nur diese abgespeckte Seite zu sehen.<br>
-Die Administration erfolgt &uuml;ber SSH: <a href="http://$(ip -f inet addr show dev $WLDEV label $WLDEV |sed -ne'2{s/ \+inet \([0-9\.]\+\).*/\1/;p}')/cgi-bin-tool.sh?OPT=startshell">SSH starten</a><br>
-Freier Speicher: $(_system flash_free) kb 
 <SCRIPT LANGUAGE="JavaScript" TYPE="text/javascript"><!--
 function fold(id) {
 obj = document.getElementById(id);
@@ -71,13 +47,7 @@ MAC:&nbsp;$(ip link show dev $WLDEV|sed -ne'2{s/.*ether \+\([^ ]\+\).*/\1/;p}')<
 <TD>
 EOF
 
-if /rom/usr/sbin/wl -i $WLDEV status 2>&-;then
-echo "<br>"
-/rom/usr/sbin/wl -i $WLDEV rate
-/rom/usr/sbin/wl -i $WLDEV mrate
-else
 iwconfig $WLDEV 2>&-
-fi
 
 cat<<EOF
 </TD>
@@ -140,7 +110,6 @@ EOF
 echo -n '<PRE STYLE="display:none" ID="dmesg">'
 dmesg 2>&1
 echo '</PRE>'
-if pidof syslogd>/dev/null;then
 
 cat<<EOF
 </TD>
