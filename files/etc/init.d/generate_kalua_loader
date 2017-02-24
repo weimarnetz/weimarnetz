@@ -102,13 +102,8 @@ boot()
 	touch '/tmp/BOOT'
 	touch '/tmp/DEBUG'
 
-	/etc/init.d/kalua_init
+	/etc/kalua_init
 	. /tmp/loader
-
-	# e.g. reboot-on-panic
-	_system sysctl_tweaks
-	_watch counter '/www/REBOOT_COUNTER' increment 1
-	sync
 
 	# see scheduler_run()
 	touch "$TMPDIR/scheduler_keep_running"

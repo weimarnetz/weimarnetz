@@ -11,21 +11,6 @@ TIMEZONE_BERLIN="CET-1CEST,M3.5.0,M10.5.0/3"
 TIMEZONE="$( uci -q get system.@system[0].timezone )"
 TIMEZONE="${TIMEZONE:-$TIMEZONE_BERLIN}"
 
-# each node has it's own "nearly uniq" DHCP-range
-# which must be valid across the whole network,
-# e.g. 192.168.8.0/16 on node 8
-NODENUMBER_ROAMING="$( uci -q get system.@profile[0].nodenumber )"
-while [ ${NODENUMBER_ROAMING:=2} -gt 254 ]; do {
-	NODENUMBER_ROAMING=$(( NODENUMBER_ROAMING - 254 ))	# e.g. node 255 -> 1
-} done
-
-read -r HARDWARE 2>/dev/null <'/etc/HARDWARE' || {
-	# model name  : Intel(R) Xeon(R) CPU E5-2620 0 @ 2.00GHz
-	set -- $( grep ^'model name' '/proc/cpuinfo' | head -n1 )
-	shift 3
-	HARDWARE="$*"
-}
-
 PERMDIR='/www/keep'	# for permanent (kept when rebooting)
 mkdir -p "$PERMDIR" 2>/dev/null || {
 	PERMDIR="$TMPDIR/permanent_fake"
@@ -41,9 +26,8 @@ mkdir -p "$PERMDIR" 2>/dev/null || {
 
 # from $0.user @ $(date)
 export TZ='$TIMEZONE'
-NODENUMBER_ROAMING=$NODENUMBER_ROAMING
-NODENUMBER=\${NODENUMBER:-$( uci -q get system.@profile[0].nodenumber )}
-CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get system.@profile[0].name )}
+NODENUMBER=\${NODENUMBER:-$( uci -q get meshnode.settings.nodenumber )}
+CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get meshnode.settings.ipschema )}
 HARDWARE='$HARDWARE'
 HOSTNAME='$HOSTNAME'
 export HOME=$( grep ^${USER:-root}: /etc/passwd | cut -d: -f6 )
