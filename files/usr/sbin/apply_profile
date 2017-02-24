@@ -4,12 +4,12 @@
 . /usr/share/libubox/jshn.sh
 
 log() {
-	logger -s -t apply_profile $@
+	logger -s -t apply_profile "$@"
 }
 
 wdir="/etc/apply_profile.d"
 [ -d $wdir ] || return 0
-files="$(ls $wdir | sort)"
+files="$(find $wdir -type f | sort)"
 [ -z "$files" ] && return 0
 for file in $files; do
 	log "procesing $file"

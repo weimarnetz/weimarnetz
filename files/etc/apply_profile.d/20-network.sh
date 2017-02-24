@@ -1,46 +1,48 @@
+#!/bin/sh 
+# shellcheck disable=SC2039
 
 . /lib/functions/weimarnetz/ipsystem.sh
 
 log_net() {
-	logger -s -t apply_profile_net $@
+	logger -s -t apply_profile_net "$@"
 }
 
 log_wifi() {
-	logger -s -t apply_profile_wifi $@
+	logger -s -t apply_profile_wifi "$@"
 }
 
 setup_ip() {
 	local cfg="$1"
 	local ipaddr="$2"
-	if ! uci_get network $cfg >/dev/null ; then
+	if ! uci_get network "$cfg" >/dev/null ; then
 		uci_add network interface "$cfg"
 	fi
 	if [ -n "$ipaddr" ] ; then
-		eval "$(ipcalc.sh $ipaddr)"
-		uci_set network $cfg ipaddr "$IP"
-		uci_set network $cfg netmask "$NETMASK"
+		eval "$(ipcalc.sh "$ipaddr")"
+		uci_set network "$cfg" ipaddr "$IP"
+		uci_set network "$cfg" netmask "$NETMASK"
 	fi
-	if uci_get network $cfg type bridge; then 
-		uci_remove network $cfg type
+	if uci_get network "$cfg" type bridge; then 
+		uci_remove network "$cfg" type
 	fi
-	uci_set network $cfg proto "static"
-	uci_set network $cfg ip6assign "64"
+	uci_set network "$cfg" proto 'static'
+	#uci_set network "$cfg" ip6assign '64'
 }
 
 setup_bridge() {
 	local cfg="$1"
 	local ipaddr="$2"
-	setup_ip $cfg "$ipaddr"
-	uci_set network $cfg macaddr '02:ff:ff:ff:00:00'
-	uci_set network $cfg type "bridge"
+	setup_ip "$cfg" "$ipaddr"
+	uci_set network "$cfg" macaddr '02:ff:ff:ff:00:00'
+	uci_set network "$cfg" type 'bridge'
 }
 
 setup_ether() {
 	local cfg="$1"
 	local nodenumber="$2"
 
-        config_get enabled $cfg enabled "0"                     
-        [ "$enabled" == "0" ] && return 
+        config_get enabled "$cfg" enabled "0"                     
+        [ -z "$enabled" ] && return 
 	
 	json_load "$nodeconfig"
 	json_get_var ipaddr lan
@@ -54,12 +56,12 @@ setup_wifi() {
 	local nodenumber="$2"
 	local br_name="$3"
 
-	config_get enabled $cfg enabled "0"
+	config_get enabled "$cfg" enabled "0"
 	log_wifi "$cfg" "$enabled"
 
-	[ "$enabled" == "0" ] && return
-	config_get idx $cfg idx "-1"
-	[ "$idx" == "-1" ] return
+	[ -z "$enabled" ] && return
+	config_get idx "$cfg" idx "-1"
+	[ "$idx" -le "-1" ] return
 	
 	local device="radio$idx"
 	log_wifi "Setup $cfg"
@@ -71,7 +73,7 @@ setup_wifi() {
 	local hw_g=0
 	local hw_n=0
 	local info_data
-	info_data=$(ubus call iwinfo info '{ "device": "wlan'$idx'" }' 2>/dev/null)
+	info_data=$(ubus call iwinfo info '{ "device": "wlan'"$idx"'" }' 2>/dev/null)
 	[ -z "$info_data" ] && {
 		log_wifi "ERR No iwinfo data for wlan$idx"
 		return 1
@@ -85,11 +87,11 @@ setup_wifi() {
 	}
 	for i in $hw_res ; do
 		case $i in
-			a)  hw_a=1 ;;
+			a)  hw_a=1  ;;
 			ac) hw_ac=1 ;;
-			b)  hw_b=1 ;;
-			g)  hw_g=1 ;;
-			n)  hw_n=1 ;;
+			b)  hw_b=1  ;;
+			g)  hw_g=1  ;;
+			n)  hw_n=1  ;;
 		esac
 	done
 
@@ -103,7 +105,7 @@ setup_wifi() {
 	local channels
 	local valid_channel
 	local chan_data
-	chan_data=$(ubus call iwinfo freqlist '{ "device": "wlan'$idx'" }' 2>/dev/null)
+	chan_data=$(ubus call iwinfo freqlist '{ "device": "wlan'"$idx"'" }' 2>/dev/null)
 	[ -z "$chan_data" ] && {
 		log_wifi "ERR No iwinfo freqlist for wlan$idx"
 		return 1
@@ -115,7 +117,7 @@ setup_wifi() {
 		json_select "$i"
 		#check what channels are available
 		json_get_var restricted restricted
-		if [ "$restricted" == 0 ] ; then
+		if [ -z "$restricted" ] ; then
 			json_get_var channel channel
 			channels="$channels $channel"
 		fi
@@ -126,23 +128,23 @@ setup_wifi() {
 	[ -n "$hw_a" ]  && def_channel=40
 	[ -n "$hw_b" ]  && def_channel=5
 	[ -n "$hw_g" ]  && def_channel=5
-	config_get channel $cfg channel "$def_channel"
+	config_get channel "$cfg" channel "$def_channel"
 	local valid_channel
-	for i in $channels ; do
+	for i in $channels; do
 		[ -z "$valid_channel" ] && valid_channel="$i"
-		if [ "$channel" == "$i" ] ; then
+		if [ "$channel" -eq "$i" ] ; then
 			valid_channel="$i"
 		fi
 	done
 	log_wifi "Channel $valid_channel"
-	uci_set wireless $device channel "$valid_channel"
-	uci_set wireless $device disabled "0"
-	[ -n "$hw_g" ] || [ -n $hw_n ] && uci_set wireless $device noscan "1"
-	[ -n "$hw_n" ] && uci_set wireless $device htmode "HT20"
-	[ -n "$hw_a" ] && [ -n "$hw_ac" ] && uci_set wireless $device htmode "VHT80"
-	[ -n "$hw_a" ] && [ -z "$hw_ac" ] && uci_set wireless $device htmode "HT40"
+	uci_set wireless "$device" channel "$valid_channel"
+	uci_set wireless "$device" disabled "0"
+	[ -n "$hw_g" ] || [ -n "$hw_n" ]  && uci_set wireless "$device" noscan "1"
+	[ -n "$hw_n" ] 			  && uci_set wireless "$device" htmode "HT20"
+	[ -n "$hw_a" ] && [ -n "$hw_ac" ] && uci_set wireless "$device" htmode "VHT80"
+	[ -n "$hw_a" ] && [ -z "$hw_ac" ] && uci_set wireless "$device" htmode "HT40"
 
-	uci_set wireless $device country "DE"
+	uci_set wireless "$device" country "DE"
 
 	#uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
@@ -154,54 +156,54 @@ setup_wifi() {
 	#uci_set wireless $device beacon_int "250"
 	#wifi-iface
 
-	config_get olsr_mesh $cfg olsr_mesh "0"
+	config_get olsr_mesh "$cfg" olsr_mesh "0"
         json_load "$nodeconfig"  
 
-        json_get_var ipaddr ${cfg}_mesh	
+        json_get_var ipaddr "${cfg}_mesh"	
 	log_net "${cfg}: $ipaddr"
 
-	if [ "$olsr_mesh" == "1" -o "$bat_mesh" == "1" ]; then
+	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
 		local bssid
 		log_wifi "${cfg}: mesh"
-		cfg_mesh=$cfg"_mesh"
+		cfg_mesh="${cfg}_mesh"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
-		uci_set wireless $sec device "$device"
-		uci_set wireless $sec encryption "none"
-		uci_set wireless $sec mode "adhoc"
-		uci_set wireless $sec ssid "intern."$nodenumber".ch"$valid_channel".weimarnetz.de"
+		uci_set wireless "$sec" device "$device"
+		uci_set wireless "$sec" encryption "none"
+		uci_set wireless "$sec" mode "adhoc"
+		uci_set wireless "$sec" ssid "intern.$nodenumber.ch$valid_channel.weimarnetz.de"
 		bssid="02:CA:FF:EE:BA:BE"
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
 		#	bssid="12:"$(printf "%02d" "$(expr $valid_channel - 100)")":CA:FF:EE:EE"
 		#fi
-		uci_set wireless $sec bssid "$bssid"
-		#uci_set wireless $sec mode "mesh"
-		#uci_set wireless $sec mesh_id 'freifunk'
-		#uci_set wireless $sec mesh_fwding '0'
-		#uci_set wireless $sec "doth"
-		uci_set wireless $sec network "$cfg_mesh"
-		uci_set wireless $sec mcast_rate "6000"
+		uci_set wireless "$sec" bssid "$bssid"
+		#uci_set wireless "$sec" mode "mesh"
+		#uci_set wireless "$sec" mesh_id 'freifunk'
+		#uci_set wireless "$sec mesh_fwding '0'
+		#uci_set wireless "$sec "doth"
+		uci_set wireless "$sec" network "$cfg_mesh"
+		uci_set wireless "$sec" mcast_rate "6000"
 		setup_ip "$cfg_mesh" "$ipaddr"
 	fi
 	config_get vap settings vap "0"
 	#TODO check valid interface combinations
 	#iw phy$idx info | grep -A6 "valid interface combinations"
 	#iw phy$idx info | grep "interface combinations are not supported"
-	if [ "$vap" == "1" ] && \
-		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
+	if [ -n "$vap" ] && \
+		[ -n "$(iw phy$idx info | grep -qc 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "Virtual AP Not Supported"
 		#uci_set meshnode $cfg vap "0"
 	fi
-	if [ "$vap" == "1" ] ; then
+	if [ -n "$vap" ] ; then
 		log_wifi "${cfg}: Virtual AP"
-		cfg_vap=$cfg"_vap"
+		cfg_vap="${cfg}_vap"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
-		uci_set wireless $sec device "$device"
-		uci_set wireless $sec mode "ap"
-		uci_set wireless $sec mcast_rate "6000"
-		#uci_set wireless $sec isolate 1
-		uci_set wireless $sec ssid "weimar.freifunk.net"
-		uci_set wireless $sec network "$br_name"
+		uci_set wireless "$sec" device "$device"
+		uci_set wireless "$sec" mode "ap"
+		uci_set wireless "$sec" mcast_rate "6000"
+		#uci_set wireless "$sec" isolate 1
+		uci_set wireless "$sec" ssid "weimar.freifunk.net"
+		uci_set wireless "$sec" network "$br_name"
 
 		config_get roaming settings roaming
 		if [ -n "$roaming" ]; then
@@ -235,7 +237,7 @@ uci_commit wireless
 #Setup ether and wifi
 config_load meshnode
 config_get nodenumber settings nodenumber
-nodedata=$(node2nets_json $nodenumber)
+nodedata=$(node2nets_json "$nodenumber")
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber" "$br_name"
 

@@ -1,3 +1,5 @@
+#!/bin/sh 
+# shellcheck disable=SC2039
 
 . /lib/functions/weimarnetz/ipsystem.sh
 . /lib/functions/network.sh
