@@ -61,20 +61,20 @@ up_rules() {
                 iptables -A FORWARD -j paranoia-vpn
             }
             # notrack
-            # iptables -t raw -A PREROUTING -i "$dev" -j NOTRACK
-            # iptables -t raw -A OUTPUT -o "$dev" -j NOTRACK
+            # iptables -t raw -A PREROUTING -i "$dev" -j CT --notrack
+            # iptables -t raw -A OUTPUT -o "$dev" -j CT --notrack
         ;;
         *_mesh)
-            iptables -t raw -A PREROUTING -i "$dev" -j NOTRACK
-            iptables -t raw -A OUTPUT -o "$dev" -j NOTRACK
+            iptables -t raw -A PREROUTING -i "$dev" -j CT --notrack
+            iptables -t raw -A OUTPUT -o "$dev" -j CT --notrack
         ;;
         lan)
-            iptables -t raw -A PREROUTING -i "$dev" -j NOTRACK
-            iptables -t raw -A OUTPUT -o "$dev" -j NOTRACK
+            iptables -t raw -A PREROUTING -i "$dev" -j CT --notrack
+            iptables -t raw -A OUTPUT -o "$dev" -j CT --notrack
         ;;
         *vap)
-            iptables -t raw -A PREROUTING -i "$dev" -j NOTRACK
-            iptables -t raw -A OUTPUT -o "$dev" -j NOTRACK
+            iptables -t raw -A PREROUTING -i "$dev" -j CT --notrack
+            iptables -t raw -A OUTPUT -o "$dev" -j CT --notrack
         ;;
         
     esac
@@ -126,21 +126,21 @@ down_rules() {
                 iptables -X paranoia-vpn
             }
             # notrack
-            # iptables -t raw -D PREROUTING -i "$dev" -j NOTRACK
-            # iptables -t raw -D OUTPUT -o "$dev" -j NOTRACK
+            # iptables -t raw -D PREROUTING -i "$dev" -j CT --notrack
+            # iptables -t raw -D OUTPUT -o "$dev" -j CT --notrack
 
         ;;
         *_mesh)
-            iptables -t raw -D PREROUTING -i "$dev" -j NOTRACK
-            iptables -t raw -D OUTPUT -o "$dev" -j NOTRACK
+            iptables -t raw -D PREROUTING -i "$dev" -j CT --notrack
+            iptables -t raw -D OUTPUT -o "$dev" -j CT --notrack
         ;;
         lan)
-            iptables -t raw -D PREROUTING -i "$dev" -j NOTRACK
-            iptables -t raw -D OUTPUT -o "$dev" -j NOTRACK
+            iptables -t raw -D PREROUTING -i "$dev" -j CT --notrack
+            iptables -t raw -D OUTPUT -o "$dev" -j CT --notrack
         ;;
         *vap)
-            iptables -t raw -D PREROUTING -i "$dev" -j NOTRACK
-            iptables -t raw -D OUTPUT -o "$dev" -j NOTRACK
+            iptables -t raw -D PREROUTING -i "$dev" -j CT --notrack
+            iptables -t raw -D OUTPUT -o "$dev" -j CT --notrack
         ;;
         
     esac
