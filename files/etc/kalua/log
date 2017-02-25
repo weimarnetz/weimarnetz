@@ -14,102 +14,8 @@ _log_shell_is_interactive()
 	esac
 }
 
-_log_sleep()		# _log sleep firmware_burn 180 step 10
-{
-	local subroutine_name="$1"
-	local duration="$2"
-	local dummy="$3"	# "step"
-	local step="${4:-1}"
-	local i="$duration"
-	local uptime_start="$( _system uptime sec )"
-	local n do_sleep
-	local prio="info"	# only show first and last message with info, other with debug
-
-	while [ $i -ge 0 ]; do {
-		n=$i
-		i=$(( $i - $step ))
-
-		if [ $i -ge 0 ]; then
-			do_sleep="true"
-		else
-			do_sleep=
-			prio="info"
-		fi
-
-		# during high load/lowmem this can help:
-		[ $(( $( _system uptime sec ) - $uptime_start )) -gt $duration ] && return
-
-		_log it "$subroutine_name" daemon $prio "[OK] sleeping $n/$duration sec"
-		prio="debug"
-
-		[ -n "$do_sleep" ] && /bin/sleep $step
-	} done
-}
-
-_log_debug()
-{
-	local message="$1"
-	local dev="${2:-${LANDEV:-${WANDEV:-eth0}}}"
-	local ip_bin="/usr/sbin/ip"
-	local netmsg_bin="/bin/netmsg"
-
-	message="$( _system load 1min ):$( _system ram_free ):${message}"
-	[ -e "/dev/console" ] && echo "$message" >/dev/console
-
-	[ -e "$ip_bin" ] || return 0
-	[ -e "$netmsg_bin" ] || return 0
-
-	set -- $( $ip_bin address show dev "$dev" )
-	broadcast_ip="$*"
-	broadcast_ip=${broadcast_ip#*inet }
-	broadcast_ip=${broadcast_ip#*brd }
-	broadcast_ip=${broadcast_ip%% *}
-
-	# readable from a neighbour with:
-	#	tcpdump -s 1500 -n -l -w - -i $YOURDEV port 0x1337 | strings | while read L; do test ${#L} -gt 5 && echo $L; done
-	# or with an UDP-capable netcat via:
-	#	nc -lup 4919	//fixme!
-	# or with iptables:
-	#	iptables -I INPUT -p udp --dport 4919 -j LOG --log-prefix "0x1337: "
-	#	logread -f
-	# or with iptables:
-	#	iptables -I INPUT -j LOG
-	#	iptables -I INPUT -p udp --dport 698 -j ACCEPT
-	#	iptables -I INPUT -p tcp --dport 22 -j ACCEPT
-	#	logread -f
-
-	if [ -z "$broadcast_ip" ]; then
-		if grep -sq "$dev:" /proc/net/wireless ; then
-			broadcast_ip="192.168.1.255"
-			local ip="192.168.1.1/24"
-		else
-			broadcast_ip="10.255.255.255"
-			local ip="10.0.0.1/8"
-		fi
-
-		$ip_bin link set dev "$dev" up
-		$ip_bin address add "$ip" dev "$dev"
-		$netmsg_bin "$broadcast_ip" "NO-IP: $message"
-		$ip_bin address del "$ip" dev "$dev"
-	else
-		$netmsg_bin "$broadcast_ip" "$message"
-	fi
-}
-
 _log_it()		# CALL: _log it my_function_name daemon info "mytext"
 {
-	case "$-" in
-		*'x'*)
-			# too much text during debugging with 'set -x'
-			return 0
-		;;
-	esac
-
-	[ "$3" = 'debug' -a ! -e '/tmp/DEBUG' ] && {
-		# early exit when not interactive and no enforced debugmode
-		_log shell_is_interactive || return 0
-	}
-
 	local FATHER_PROCESS="$0"
 	local FUNCTION="$1"		# name of function, from where call was invoked
 	local FACILITY="$2"		# source = kern,user,mail,daemon,syslog,lpr,news,uucp,cron,authpriv,local0-7
@@ -125,10 +31,6 @@ _log_it()		# CALL: _log it my_function_name daemon info "mytext"
 		} done
 
 		return 0
-	}
-
-	[ -n "$LOWMEM" ] && {
-		_log shell_is_interactive || return 0
 	}
 
 	mem_uptime_and_date()
@@ -166,7 +68,6 @@ _log_it()		# CALL: _log it my_function_name daemon info "mytext"
 	_log shell_is_interactive && {
 		eval $( mem_uptime_and_date )
 
-		FATHER_PROCESS="TERM:${TERM} $0"
 		# output to STDERR
 		echo 1>&2 "$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
 	}
@@ -174,12 +75,4 @@ _log_it()		# CALL: _log it my_function_name daemon info "mytext"
 	logger -t "kalua: $FATHER_PROCESS" -p "${FACILITY}.${PRIO}" -- "$FUNCTION() $MESSAGE"
 }
 
-_log_append_info()
-{
-#	local location="$( _weblogin metadata_locationname )"
-	local host="$( uci -q get system.@system[0].hostname )"
-	local date="$( _system date humanreadable nice )"
-
-	echo "${location}->${host} @ ${date}"
-}
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
