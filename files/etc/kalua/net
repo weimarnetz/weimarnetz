@@ -26,7 +26,6 @@ _net_tcp_port_reachable()		# please call with 2>/dev/null otherwise you
 
 	local file="$TMPDIR/$funcname"
 	local rc=0
-	local pid i
 
 	command -v nc >/dev/null || {
 		_log it $funcname daemon info '[ERR] no netcat'
@@ -34,33 +33,18 @@ _net_tcp_port_reachable()		# please call with 2>/dev/null otherwise you
 	}
 
 	# we can't rely on '-w3' or '-z' because of lobotomized busybox netcat
-	( nc "$server" "$port" 2>/dev/null >"$file" || touch "$file.error" ) &
-	pid=$!
-
+	timeout 5 nc "$server" "$port" 2>/dev/null >"$file" || touch "$file.error" 
 	if [ -n "$check_output" ]; then
-		for i in $( seq 5 -1 1 ); do {
-			grep -sq -- "$check_output" "$file" && break
-			sleep 1
-		} done
-
-		[ $i -gt 0 ] || {
-			_log it $funcname daemon info "[ERR] '$( cat "$file" )'"
-			rc=1
-		}
+		local success=0
+		grep -sq -- "$check_output" "$file" && success=1 
+		[ "$success" ] && break
+		_log it $funcname daemon info "[ERR] '$( cat "$file" )'"
 	else
-		i=5
-		while [ $i -gt 0 ]; do {
-			[ -e "$file.error" ] && {
+		[ -e "$file.error" ] && {
 				rc=1
 				break
-			}
-
-			sleep 1
-			i=$(( i - 1 ))
-		} done
+		}
 	fi
-
-	kill ${pid:-empty_pid} 2>/dev/null
 	rm "$file" "$file.error" 2>/dev/null
 
 	return $rc
