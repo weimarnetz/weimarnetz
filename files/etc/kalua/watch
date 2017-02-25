@@ -739,7 +739,7 @@ _watch_vpn()
 			_log it $func daemon debug "tunnel-olsr neigh available"
 
 			_net ping_getlatency "$ip_server" 2>/dev/null || {
-				_log do $func daemon info "ping failed: $ip_server"
+				_log it $func daemon info "ping failed: $ip_server"
 				return 1
 			}
 			else
