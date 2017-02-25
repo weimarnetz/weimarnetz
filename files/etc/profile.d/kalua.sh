@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2039
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 [ -n "$FFF_VERSION" ] && echo "Welcome to your Weimarnetz router! You are running kalua revision $FFF_VERSION from $FFF_SOURCE_URL! " 
@@ -11,7 +12,7 @@ check_weak_passwd()
 
 	salt=$(awk -F"$" '/^root/ { print $3}' < /etc/shadow)
 	pass=admin
-	weakhash=$(mkpasswd -S $salt $pass) 
+	weakhash=$(mkpasswd -S "$salt" "$pass") 
 	hash=$(awk -F":" '/^root/ { print $2}' < /etc/shadow)
 	[ "$weakhash" = "$hash" ] && { 
 		echo "[ATT] Weak default password! Please change the password with 'passwd' now!"
@@ -101,22 +102,10 @@ _ t 2>/dev/null || {
 
 		echo
 		echo "this is a '$HARDWARE' - type _ for an overview of available commands"
-
-		[ -n "$SSH_CONNECTION" -a -n "$WIFIDEV" ] && {
-			NAME="$( _wifi longshot_name )" && {
-				echo
-				echo "this device is part of a wifi-longshot named '$NAME'"
-				echo 'get stats with: _wifi longshot_report'
-			}
-
-			unset NAME
-		}
 	}
 }
 
-if	 [ -e '/etc/init.d/apply_profile' -a -e '/sbin/uci' ]; then
-	echo "fresh/unconfigured device detected, run: '/etc/init.d/apply_profile.code' for help"
-elif [ -e '/tmp/REBOOT_REASON' ]; then
+if [ -e '/tmp/REBOOT_REASON' ]; then
 	# see system_crashreboot()
 	read -r CRASH <'/tmp/REBOOT_REASON'
 	[ -e '/tmp/loader' ] && . /tmp/loader
