@@ -209,11 +209,10 @@ _vpn_remove_vtun_conf ()
 _vpn_defer_start ()
 {
 	DIRTY=
-	[ "$( uci -q get system.vpn.active )" = "0" ]	&& DIRTY="system.vpn.active set to 0"
+	[ "$( uci -q get meshnode.vpn.disabled )" = "1" ]	&& DIRTY="VPN disabled"
 	[ -e "/tmp/LOWMEM" ]				&& DIRTY="lowmem"
 	[ -n "$FAILSAFE" ]				&& DIRTY="failsafe"
 	[ -n "$READONLY" ]				&& DIRTY="readonly"
-	[ ! -e "/www/SOFTWARE_FULLY_INSTALLED" ]	&& DIRTY="software not fully installed"
 
 	[ -n "$DIRTY" ] && {
 		_log it init daemon debug "call: '$1' - abort: '$DIRTY'"
