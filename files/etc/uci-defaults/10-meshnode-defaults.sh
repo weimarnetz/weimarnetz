@@ -6,7 +6,6 @@ config node 'settings'
 	option nodenumber ''
 	option ipschema 'ffweimar'
 	option roaming '1'
-	option vap '1'
 	option ipv6 '0'
 	option ip6prefix 'fd42:7ceb:f2ff::/48'
 	option location ''
@@ -29,22 +28,5 @@ config vpn 'vpn'
 	option proto 'olsr'
 	option disabled '0'
 	option lan_vpn '1'
-
-config ether 'lan' 
-	option enabled '1'
-	option olsr_mesh '1' 
-
-config ether 'wan'
-	option restrict '1'
-
-config wifi 'radio0'
-	option idx '0'
-	option enabled '1'
-	option olsr_mesh '1'
-
-config wifi 'radio1'
-	option idx '1'
-	option enabled '1'
-	option olsr_mesh '1' 
 EOF
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
