@@ -33,7 +33,7 @@ _net_tcp_port_reachable()		# please call with 2>/dev/null otherwise you
 	}
 
 	# we can't rely on '-w3' or '-z' because of lobotomized busybox netcat
-	timeout 5 nc "$server" "$port" 2>/dev/null >"$file" || touch "$file.error" 
+	timeout 5 echo "foo" | nc "$server" "$port" 2>/dev/null >"$file" || touch "$file.error" 
 	if [ -n "$check_output" ]; then
 		local success=0
 		grep -sq -- "$check_output" "$file" && success=1 
