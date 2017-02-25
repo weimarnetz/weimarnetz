@@ -1,27 +1,10 @@
 #!/bin/sh
 
-# this is a wrapper for 'wget/curl', which works around a bug/behaviour
-# which can lead to a hanging-daemon which will 'never' exit.
-# ask the net for all sorts of strange corner cases.
-#
-# here we simply start 'wget' in background, wait some seconds (default: 15)
-# and kill it (hard) if it's still there with the same PID
-
 _curl_it()
 {
 	local funcname='curl_it'
 	local url="$1"
 	local max="${2:-15}"	# maximal running time [sec]
-	case "$url" in
-		'http://'*|'https://'*|'ftp://'*)
-			# http://user:pass@bla.com:1234/my/file -> bla.com:1234
-			destination="$( echo "$url" | cut -d'/' -f3 | cut -d'@' -f2 )"
-		;;
-		*)
-			_log it $funcname daemon info "invalid url: '$url'"
-			return 1
-		;;
-	esac
 
 	_log it $funcname daemon debug "max ${max}s, ${#url} bytes, wget -qO $filename '$url'"
 	timeout $max wget -qO $filename $file_option "$url" 
