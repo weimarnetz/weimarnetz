@@ -58,49 +58,6 @@ _file_age()
 	esac
 }
 
-_file_insert_at()
-{
-	local regex="$1"	# e.g. ^mystring
-	local file_include="$2"
-	local file_work="$3"
-
-	# http://stackoverflow.com/questions/3784672/inserting-text-from-a-file-to-the-beginning-of-another-file-bash
-	sed -i -e "2{x;G};/${regex}/{r${file_include}" -e 'd}' "$file_work"
-}
-
-_file_convert_bin2hex()		# using hexdump, to output eachs byte hex-representation
-{				# and throw away thrash + linebreaks
-	local file="$1"
-	local line
-
-	hexdump -C "$file" |
-	 sed -n 's/^[0-9a-f]*\([0-9a-f ]*\)|.*/\1/p' |
-	  sed -e 's/ //g' |
-	   while read line; do {
-		echo -n "$line"
-	   } done
-}
-
-_file_convert_hex2bin()
-{
-	local file="$1"
-
-	# we mostly use it for stored SSH keys
-	_file size "$file" -gt 65535 && return 1
-
-	local j=0
-	local content="$( dd if=$file 2>&- )"
-	local size="${#content}"
-	local hexbyte
-
-	while [ $j -lt $size ]; do {
-		hexbyte="${content:$j:2}"
-		j=$(( j + 2 ))
-
-		printf "\\$( printf "%o" 0x$hexbyte )"
-	} done
-}
-
 _file_size()			# FIXME! use 'stat -c%s $file' if possible (not included in default OpenWrt)
 {				# or portable 'du -k $file'
 	local file="$1"
@@ -126,30 +83,4 @@ _file_size()			# FIXME! use 'stat -c%s $file' if possible (not included in defau
 	echo "$size"
 }
 
-_file_lines()
-{
-	local file="$1"
-
-	if [ -e "$file" ]; then
-		wc -l <"$file"
-	else
-		echo '0'
-	fi
-}
-
-_file_hash()
-{
-	local file="$1"
-
-	md5sum "$file" 2>/dev/null | cut -d' ' -f1
-}
-
-_file_discusage()		# [bytes]
-{
-	local dir="${1:-$( pwd )}"
-	local line i=0		# byte-counter
-
-	eval "$( ls -lR "$dir" | while read line; do set -- $line; case "$line" in 'd'*) ;; *) echo "i=\$(( i + ${5:-0} ));";; esac; done )"
-	echo $i
-}
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
