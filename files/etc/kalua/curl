@@ -6,7 +6,7 @@ _curl_it()
 	local url="$1"
 	local max="${2:-15}"	# maximal running time [sec]
 
-	_log it $funcname daemon debug "max ${max}s, ${#url} bytes, wget -qO $filename '$url'"
-	timeout $max wget -qO $filename $file_option "$url" 
+	_log it $funcname daemon debug "max ${max}s, ${#url} bytes, wget -qO - '$url'"
+	timeout $max wget -qO - "$url" 
 }
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
