@@ -4,8 +4,7 @@ START=90
 
 start() {
 	[ -n "$FAILSAFE" ] && exit
-	[ -e /www/SOFTWARE_FULLY_INSTALLED ] || exit
-
+	
 	# write latlong into file 
 	[ -n "$( uci -q get system.@system[0].latitude )" ] && {
 	echo "$( uci -q get system.@system[0].latitude ),$( uci -q get system.@system[0].longitude )">/var/run/latlon.txt
