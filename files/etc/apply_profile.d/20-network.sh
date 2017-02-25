@@ -37,6 +37,21 @@ setup_bridge() {
 	uci_set network "$cfg" type 'bridge'
 }
 
+setup_vpn() {
+	local cfg="$1"
+	if uci_get network "$cfg"; then 
+		uci_remove network "$cfg"
+	fi 
+	if uci_get network "tap0"; then 
+		uci_remove network "tap0"
+	fi
+	uci_add network interface "$cfg"
+	config_get type "$cfg" type "vtun"
+	[ "$type" = "vtun" ] && {
+		uci_set network "$cfg" ifname "tap0"
+	}
+}
+
 setup_ether() {
 	local cfg="$1"
 	local nodenumber="$2"
@@ -108,9 +123,9 @@ setup_wifi() {
 	[ "$hw_a" -eq "1"  ] && channel=40
 	[ "$hw_b" -eq "1"  ] && channel=5
 	[ "$hw_g" -eq "1"  ] && channel=5
-	uci_set wireless "$device" channel "$def_channel"
+	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
-	[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
+	#[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
 	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT20"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "1" ] && uci_set wireless "$device" htmode "VHT80"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "0" ] && uci_set wireless "$device" htmode "HT40"
@@ -128,9 +143,9 @@ setup_wifi() {
 	#wifi-iface
 
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
-		json_load "$nodeconfig"  
-
-		json_get_var ipaddr "${cfg}_mesh"	
+	
+	json_load "$nodeconfig"  
+	json_get_var ipaddr "${cfg}_mesh"	
 	log_net "${cfg}: $ipaddr"
 
 	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
@@ -171,7 +186,7 @@ setup_wifi() {
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" mode "ap"
-		uci_set wireless "$sec" mcast_rate "6000"
+		#uci_set wireless "$sec" mcast_rate "6000"
 		#uci_set wireless "$sec" isolate 1
 		uci_set wireless "$sec" ssid "weimar.freifunk.net"
 		uci_set wireless "$sec" network "$br_name"
@@ -211,6 +226,7 @@ config_get nodenumber settings nodenumber
 nodedata=$(node2nets_json "$nodenumber")
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber" "$br_name"
+config_foreach setup_vpn vpn 
 
 config_get ip6prefix meshnode ip6prefix
 if [ -n "$ip6prefix" ] ; then

@@ -99,10 +99,10 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"
-	[ -z "$enabled" ] && return
+	[ "$enabled" -eq "0" ] && return
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	log_olsr4 "$cfg $enabled"
-	[ -z "$olsr_mesh" ] && return
+	[ "$olsr_mesh" -eq "0" ] && return
 	
 	log_olsr4 "setup_ether: $cfg $device"
 	[ -z "$device" ] && return
@@ -122,22 +122,35 @@ setup_wifi() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"
-	[ -z "$enabled" ] && return
+	[ "$enabled" -eq "0" ] && return
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	log_olsr4 "$cfg $enabled"
-	[ -z "$olsr_mesh" ] && return
+	[ "$olsr_mesh" -eq "0" ] && return
 	config_get idx "$cfg" idx "-1"
-	[ "$idx" -le "-1" ] && return
-	local device="radio$idx_mesh"
+	[ "$idx" -eq "-1" ] && return
+	local device="radio${idx}_mesh"
 	
 	log_olsr4 "Setup wifi $cfg $ipaddr"
 	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-	uci_set olsrd "$iface_sec" interface "${device}_mesh"
+	uci_set olsrd "$iface_sec" interface "${device}"
 	uci_set olsrd "$iface_sec" ignore "0"
 	uci_set olsrd "$iface_sec" Mode "mesh"
 	olsr_enabled=1
 	
 	
+}
+
+setup_vpn() {
+	local cfg="$1"
+	local nodenumber="$2"
+	local device="vpn"
+
+	log_olsr4 "Setup vpn $cfg"
+	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
+	uci_set olsrd "$iface_sec" interface "${device}"
+	uci_set olsrd "$iface_sec" ignore "0"
+	uci_set olsrd "$iface_sec" Mode "ether"
+	olsr_enabled=1
 }
 
 setup_hna4() {
@@ -174,6 +187,7 @@ config_load meshnode
 config_get nodenumber settings nodenumber
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber"
+config_foreach setup_vpn vpn "$nodenumber"
 
 # setup hna4 
 nodedata=$(node2nets_json "$nodenumber")
