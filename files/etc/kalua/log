@@ -69,7 +69,7 @@ _log_it()		# CALL: _log it my_function_name daemon info "mytext"
 		eval $( mem_uptime_and_date )
 
 		# output to STDERR
-		echo 1>&2 "$DATE ' [up ${UPTIME}s $MEM bytes free] $FATHER_PROCESS [${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
+		echo 1>&2 "[${FACILITY}.${PRIO}] ${FUNCTION}() $MESSAGE"
 	}
 
 	logger -t "kalua: $FATHER_PROCESS" -p "${FACILITY}.${PRIO}" -- "$FUNCTION() $MESSAGE"
