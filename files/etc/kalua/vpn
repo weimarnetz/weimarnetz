@@ -22,38 +22,39 @@ _vpn_start ()
 	local FUNC='vpn_start'
 	local LOCKFILE='/tmp/VPN_LOCK'
 
-	_watch vpn && { # FIXME! Workaround until lock -n <filename> is implemented
-		_log it $FUNC daemon info 'already running, aborting'
-		return 1
-		}
+	lock -n $LOCKFILE || return 1
 
-	lock -n $LOCKFILE
-
-	_vpn_defer_start && {
+	unlock() { 
 		lock -u $LOCKFILE
-		return 1
 	}
+	_vpn_defer_start && { 
+		unlock
+		return 1
+	} 
 	_vpn needed || {
-		lock -u $LOCKFILE
+		unlock
 		return 1
-	}
-	_vpn_build_vars
+	} 
+	_vpn_build_vars || {
+		unlock
+		return 1
+	}  
 
 	[ -n "$SERV" ] || {
 		_log it $FUNC daemon debug "no suitable server found"
-		lock -u $LOCKFILE
-		return 1
+		unlock
+		return 1	
 	}
 	
 	[ -n "$PORT" ] || {
 		_log it $FUNC daemon debug "no server with suitable vtun setup found for you, please try again later"
-		lock -u $LOCKFILE
-		return 1
+		unlock 
+		return 1	
 	}
 	
 	[ -z "$NODE_NUMBER" ] && {
 		_log it $FUNC daemon debug "node not configured yet - abort"
-		lock -u $LOCKFILE
+		unlock
 		return 1
 	}
 		
@@ -123,7 +124,6 @@ _vpn_write_vtun_conf()
 {
 	local func="vpn_write_vtun_conf"
 	local LINE=""
-	local STATIC_ROUTE="$( _vpn_get_static_route )"
 	local particpant_net="10.63.0.0/16"			# fixme! hardcoded
 	local kalua_roaming_net="100.64.0.0/10"
 	local mytable="weimarnetz_anonym"
@@ -151,19 +151,18 @@ Node$KNOT {
 		program "ip address add $WIFIVPNCLIENTADR/32 dev %%" wait;
 		program "ip -6 address add $VPN6ADR/$VPN6MSK dev %%" wait;
 		program "ip link set dev %% mtu $MTU up" wait;
-		program "ip route add $VPN_SERVER_IP via $STATIC_ROUTE" wait;		# + table local?
+		program "# ip route add $VPN_SERVER_IP via $STATIC_ROUTE" wait;		# + table local?
 
 		program "grep -q $mytable /etc/iproute2/rt_tables || echo 50 $mytable >>/etc/iproute2/rt_tables" wait;
 		program "ip rule add from $particpant_net prio 30010 table $mytable" wait;
-				program "ip rule add from $kalua_roaming_net prio 30020 table $mytable" wait;
+		program "ip rule add from $kalua_roaming_net prio 30020 table $mytable" wait;
 
 		# dont send packets to private networks over vpn
 		program "ip rule add to 169.254.0.0/24 prio 30005 lookup main" wait;
-		program "ip rule add to 10.0.0.0/8	   prio 30004 lookup main" wait;
+		program "ip rule add to 10.0.0.0/8     prio 30004 lookup main" wait;
 		program	"ip rule add to 100.64.0.0/10  prio 30001 lookup main" wait;
 		program "ip rule add to 192.168.0.0/16 prio 30003 lookup main" wait;
 		program "ip rule add to 172.16.0.0/12  prio 30002 lookup main" wait;
-		#
 		program "ip rule add to $particpant_net prio 30001 lookup main" wait;
 		program "$lan_rule ip rule add from $LANNET/$LANPRE prio 30000 table main" wait;
 		program "ip route add default via $WIFIVPNSERVERADR dev %% table $mytable" wait;
@@ -185,9 +184,7 @@ Node$KNOT {
 		program "ip rule del to 169.254.0.0/24 prio 30005 lookup main" wait;
 
 		program "ip rule del from $kalua_roaming_net prio 30020 table $mytable" wait; 
-				program "ip rule del from $particpant_net prio 30010 table $mytable" wait;					  
-
-		program "ip route del $VPN_SERVER_IP via $STATIC_ROUTE" wait;
+		program "ip rule del from $particpant_net prio 30010 table $mytable" wait;					  
 		program "ip link set dev %% down" wait;
 	} ;
 }
