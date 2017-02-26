@@ -31,7 +31,8 @@ setup_dhcp() {
 		OCTET_4="${NETWORK##*.}"
 		OCTET_1_3="${NETWORK%.*}"
 		OCTET_4="$((OCTET_4 + 2))"
-		start_ipaddr="$OCTET_4"
+		#start_ipaddr="$OCTET_4"
+		start_ipaddr=1
 		uci_set dhcp $cfg_dhcp start "$start_ipaddr"
 		limit=$(($((2**$((32-$PREFIX))))-2))
 		uci_set dhcp $cfg_dhcp limit "$limit"
