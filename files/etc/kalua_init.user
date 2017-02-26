@@ -25,10 +25,10 @@ mkdir -p "$PERMDIR" 2>/dev/null || {
 	cat <<EOF
 
 # from $0.user @ $(date)
+read HARDWARE < /etc/HARDWARE
 export TZ='$TIMEZONE'
 NODENUMBER=\${NODENUMBER:-$( uci -q get meshnode.settings.nodenumber )}
 CONFIG_PROFILE=\${CONFIG_PROFILE:-$( uci -q get meshnode.settings.ipschema )}
-HARDWARE='$HARDWARE'
 HOSTNAME='$HOSTNAME'
 export HOME=$( grep ^${USER:-root}: /etc/passwd | cut -d: -f6 )
 FFF_PLUS_VERSION=$FFF_PLUS_VERSION;OPENWRT_REV=$OPENWRT_REV
