@@ -795,37 +795,4 @@ _system_adjust_coredump()
 	}
 }
 
-_system_sysctl_tweaks()
-{
-	local funcname='system_sysctl_tweaks'
-	local file='/proc/cmdline'
-	local entry
-	local min_free=1024
-
-	# /proc/sys/vm/min_free_kbytes | is e.g. '466' in 16mb Linksys with kernel 3.14.26
-	[ $( _system ram_size ) -lt 32768 ] && min_free=800
-
-	# http://www.kernel.org/doc/Documentation/sysctl/kernel.txt
-	# http://www.kernel.org/doc/Documentation/sysctl/vm.txt
-	# /proc/sys/vm/panic_on_oom = 2
-	# /proc/sys/kernel/panic_on_oops = 1
-	# /proc/sys/kernel/panic = 10
-	#
-	# since r42046 till r44873 http://wiki.openwrt.org/doc/uci/firewall#nf_conntrack_skip_filter
-	# net.netfilter.nf_conntrack_skip_filter=0
-	for entry in	'vm.panic_on_oom=2' \
-			'kernel.panic_on_oops=1' \
-			'kernel.panic=10' \
-			"vm.min_free_kbytes=$min_free" \
-			'net.netfilter.nf_conntrack_skip_filter=0'; do {
-		/sbin/sysctl -w "$entry" >/dev/null
-		grep -q ^"$entry"$ '/etc/sysctl.conf' || {
-			echo "$entry" >>'/etc/sysctl.conf'
-		}
-	} done
-
-	# warn on VPN-server - add via: /etc/default/grub + update-grub
-	grep -q ' oops=panic' "$file" || _log it $funcname daemon debug "missing 'oops=panic' in $file"
-	grep -q ' panic=10'   "$file" || _log it $funcname daemon debug "missing 'panic=10' in $file"
-}
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

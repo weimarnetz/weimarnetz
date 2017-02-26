@@ -5,6 +5,31 @@ log() {
 	logger -s -t apply_profile system "$@"
 }
 
+setup_sysctl()
+{
+  
+    mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
+	[ "$mem" -lt 32768 ] && min_free=128
+
+	# http://www.kernel.org/doc/Documentation/sysctl/kernel.txt
+	# http://www.kernel.org/doc/Documentation/sysctl/vm.txt
+	# /proc/sys/vm/panic_on_oom = 2
+	# /proc/sys/kernel/panic_on_oops = 1
+	# /proc/sys/kernel/panic = 10
+	
+	for entry in 'vm.panic_on_oom=1' \
+			'kernel.panic_on_oops=1' \
+			'kernel.panic=10' \
+			"vm.min_free_kbytes=$min_free"; do {
+		/sbin/sysctl -w "$entry" >/dev/null
+		grep -q ^"$entry"$ '/etc/sysctl.conf' || {
+			echo "$entry" >>'/etc/sysctl.conf'
+		}
+	} done
+	/sbin/sysctl -p
+    
+}
+
 setup_system() {
 	local cfg="$1"
 	
@@ -54,4 +79,6 @@ config_foreach setup_system system
 #Save
 uci_commit system
 
+# sysctl settings
+setup_sysctl
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
