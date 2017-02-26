@@ -26,14 +26,17 @@ setup_ip() {
 		uci_remove network "$cfg" type
 	fi
 	uci_set network "$cfg" proto 'static'
-	#uci_set network "$cfg" ip6assign '64'
+	uci_set network "$cfg" ip6assign '64'
 }
 
 setup_bridge() {
 	local cfg="$1"
 	local ipaddr="$2"
+	local roaming="$3"
 	setup_ip "$cfg" "$ipaddr"
-	uci_set network "$cfg" macaddr '02:ff:ff:ff:00:00'
+	if [ "$roaming" -eq "1" ]; then 
+		uci_set network "$cfg" macaddr '02:ff:ff:ff:00:00'
+	fi
 	uci_set network "$cfg" type 'bridge'
 }
 
@@ -47,9 +50,9 @@ setup_vpn() {
 	fi
 	uci_add network interface "$cfg"
 	config_get type "$cfg" type "vtun"
-	[ "$type" = "vtun" ] && {
+	if [ "$type" = "vtun" ]; then
 		uci_set network "$cfg" ifname "tap0"
-	}
+	fi
 }
 
 setup_ether() {
@@ -126,14 +129,14 @@ setup_wifi() {
 	[ "$hw_g" -eq "1"  ] && channel=5
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
-	#[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
-	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT20"
+	[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
+	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT40"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "1" ] && uci_set wireless "$device" htmode "VHT80"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "0" ] && uci_set wireless "$device" htmode "HT40"
 
 	uci_set wireless "$device" country "DE"
 
-	#uci_set wireless $device distance "1000"
+	uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
 	#Not working on wdr4300 with AP and ad-hoc
 	#[ $hw_n == 1 ] && uci_set wireless $device basic_rate "5500 6000 9000 11000 12000 18000 24000 36000 48000 54000"
@@ -193,13 +196,13 @@ setup_wifi() {
 		uci_set wireless "$sec" network "$br_name"
 
 		config_get roaming settings roaming
-		if [ -n "$roaming" ]; then
+		if [ "$roaming" -eq "1" ]; then
 			json_get_var ipaddr roaming_block
 		else 
 			json_get_var ipaddr wifi
 		fi
 		log_wifi "${cfg}: $ipaddr"
-		setup_bridge "$br_name" "$ipaddr"
+		setup_bridge "$br_name" "$ipaddr" "$roaming"
 	fi
 	json_cleanup
 }
