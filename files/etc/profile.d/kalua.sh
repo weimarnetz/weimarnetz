@@ -2,8 +2,11 @@
 # shellcheck disable=SC2039
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
-[ -n "$FFF_VERSION" ] && echo "Welcome to your Weimarnetz router! You are running kalua revision $FFF_VERSION from $FFF_SOURCE_URL! " 
-printf "\n" 
+[ -n "$FFF_VERSION" ] && { 
+	echo ":::: weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
+	echo ':::: Welcome \o/'
+	echo ''
+}
 
 check_weak_passwd() 
 {
@@ -15,7 +18,7 @@ check_weak_passwd()
 	weakhash=$(mkpasswd -S "$salt" "$pass") 
 	hash=$(awk -F":" '/^root/ { print $2}' < /etc/shadow)
 	[ "$weakhash" = "$hash" ] && { 
-		echo "[ATT] Weak default password! Please change the password with 'passwd' now!"
+		echo "!!!! Weak default password! Please change the password with 'passwd' now!"
 	}
 }
 
@@ -60,7 +63,7 @@ esac
 
 prompt_set
 
-alias n='neigh.sh 2>/dev/null'
+alias n='_olsr txtinfo'
 alias n2='echo /nhdpinfo link | nc 127.0.0.1 2009'
 alias ll='ls -la'
 alias lr='logread'
@@ -74,7 +77,7 @@ case "$LOAD" in
 	'0'*)
 	;;
 	*)
-		echo '[ATT] high load:'
+		echo '!!!! high load:'
 		uptime
 	;;
 esac
@@ -82,7 +85,7 @@ unset LOAD
 
 read -r UP REST <'/proc/uptime'
 UP="${UP%.*}"
-case "${#UP}" in 1|2|3) echo "[ATT] low uptime: $UP sec";; esac
+case "${#UP}" in 1|2|3) echo "!!! low uptime: $UP sec";; esac
 unset UP REST
 
 case "$USER" in
@@ -90,7 +93,7 @@ case "$USER" in
 		check_weak_passwd
 
 		grep -qs ^'root:\$' '/etc/shadow' || {
-			echo "[ERROR] unset password, use 'passwd'"
+			echo "ERR unset password, use 'passwd'"
 		}
 	;;
 esac
@@ -101,7 +104,8 @@ _ t 2>/dev/null || {
 		. '/tmp/loader'		# TODO: avoid "no permission" on debian user-X-session
 
 		echo
-		echo "this is a '$HARDWARE' - type _ for an overview of available commands"
+		echo ":::: hardware: $HARDWARE"
+		echo ":::: type _ for an overview of available commands"
 	}
 }
 
@@ -116,13 +120,13 @@ if [ -e '/tmp/REBOOT_REASON' ]; then
 			CRASH="$( _system reboots )"
 
 			test ${CRASH:-0} -gt 50 && {
-				echo "detected $CRASH reboots since last update - please check"
+				echo "!!!! detected $CRASH reboots since last update - please check"
 			}
 		;;
 		*)
 			UNIXTIME=$( date +%s )
 			UPTIME=$( _system uptime sec )
-			printf '\n%s' "last reboot unusual @ $( date -d @$(( UNIXTIME - UPTIME )) ) - "
+			printf '\n%s' "!!!! last reboot unusual @ $( date -d @$(( UNIXTIME - UPTIME )) ) - "
 
 			if [ -e '/sys/kernel/debug/crashlog' ]; then
 				printf '%s\n\n' "was: $CRASH, see with: cat /sys/kernel/debug/crashlog"
