@@ -64,7 +64,7 @@ setup_ether() {
 	config_get device "$cfg" device "none"
 	[ "$device" = "none" ] && return
 	json_init
-	json_load "$nodeconfig"
+	json_load "$nodedata"
 	json_get_var ipaddr "$device"
 	[ -z "$ipaddr" ] && log_net "ERR $cfg - missing IP" 
 	log_net "Setup $cfg | IP $ipaddr"
@@ -149,7 +149,7 @@ setup_wifi() {
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 
 	json_init	
-	json_load "$nodeconfig"  
+	json_load "$nodedata"  
 	json_get_var ipaddr "${device}_mesh"
 
 	if [ "$olsr_mesh" -eq "1" ] || [ "$bat_mesh" -eq "1" ]; then
