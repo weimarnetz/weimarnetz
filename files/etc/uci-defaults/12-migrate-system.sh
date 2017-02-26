@@ -7,11 +7,11 @@ config_cb() {
     local name="$2"
     case "$type" in
 	profile) 
-        	option_cb() {                                            
-            		local option="$1" 
-            		local value="$2" 
+		option_cb() {						 
+			local option="$1" 
+			local value="$2" 
 			uci_set meshnode settings "$option" "$value"
-        	}
+		}
 		uci_remove system profile
 	;;
 	system)
@@ -24,11 +24,11 @@ config_cb() {
 		}
 		uci_remove system noswinstall 
 	;;
-        weblogin|monitoring|fwupdate|admin|vpn)  
-                uci_remove system "$type"
-        ;;
-    	*) 
-        	option_cb() { return; }
+	weblogin|monitoring|fwupdate|admin|vpn)  
+		uci_remove system "$type"
+	;;
+	*) 
+		option_cb() { return; }
 	;;
 	esac
 }
@@ -36,4 +36,6 @@ config_cb() {
 config_load system
 
 uci_commit
+
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
 
