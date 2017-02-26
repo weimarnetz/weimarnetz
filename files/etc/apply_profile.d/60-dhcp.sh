@@ -126,7 +126,11 @@ setup_dhcpbase() {
 	local cfg="$1"
 	uci_set dhcp $cfg local "/olsr/"
 	uci_set dhcp $cfg domain "olsr"
-	uci_add_list $cfg server "8.8.8.8,8.8.4.4"
+	uci_remove dhcp $cfg server
+	uci_add_list dhcp $cfg server "8.8.8.8"
+	uci_add_list dhcp $cfg server "8.8.4.4"
+	uci_remove dhcp $cfg addnhosts
+	uci_add_list dhcp $cfg addnhosts "/tmp/hosts/olsr.ipv4"
 }
 
 setup_odhcpbase() {
