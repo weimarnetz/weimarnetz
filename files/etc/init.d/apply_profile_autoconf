@@ -39,14 +39,14 @@ setup_wifi() {
 
 
 start_autoconf() {
-	firstboot=$(uci_get meshnode autoconf firstboot "0")
-	[ "$firstboot" == "0" ] && return
+	firstboot=$(uci_get meshnode settings firstboot "0")
+	[ "$firstboot" = "0" ] && return
 	config_load wireless
 	config_foreach setup_wifi wifi-device
 	config_load network
 	config_foreach setup_ether interface
 	# Reset firstboot flag
-	uci_set meshnode autoconf firstboot 0
+	uci_set meshnode settings firstboot 0
 	uci_commit meshnode
 }
 
