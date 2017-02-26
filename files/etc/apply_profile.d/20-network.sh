@@ -22,7 +22,7 @@ setup_ip() {
 		uci_set network "$cfg" ipaddr "$IP"
 		uci_set network "$cfg" netmask "$NETMASK"
 	fi
-	if uci_get network "$cfg" type bridge; then 
+	if uci_get network "$cfg" type bridge >/dev/null; then 
 		uci_remove network "$cfg" type
 	fi
 	uci_set network "$cfg" proto 'static'
@@ -57,15 +57,16 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"					  
-	[ "$enabled" -eq "0" ] && return 
-	config_get device "$device"
-	[ -n "$device" ] || return
+	[ "$enabled" -eq "1" ] || return 
+	config_get device "$cfg" device "none"
+	[ "$device" = "none" ] && return
 	json_init
 	json_load "$nodeconfig"
-	json_get_var ipaddr "$device" 
-	json_cleanup 
-	log_net "Setup $cfg IP"
+	json_get_var ipaddr "$device"
+	[ -z "$ipaddr" ] && log_net "ERR $cfg - missing IP" 
+	log_net "Setup $cfg | IP $ipaddr"
 	setup_ip "$cfg" "$ipaddr"
+	json_cleanup
 }
 
 setup_wifi() {
@@ -74,8 +75,6 @@ setup_wifi() {
 	local br_name="$3"
 
 	config_get enabled "$cfg" enabled "0"
-	log_wifi "$cfg" "$enabled"
-
 	[ -z "$enabled" ] && return
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -eq "-1" ] return
@@ -104,7 +103,6 @@ setup_wifi() {
 		log_wifi "ERR No iwinfo hwmodes for wlan$idx"
 		return 1
 	}
-	log_wifi "$cfg $hw_res"
 	for i in $hw_res; do
 		case $i in
 			a)	hw_a=1	;;
@@ -150,12 +148,11 @@ setup_wifi() {
 	json_init	
 	json_load "$nodeconfig"  
 	json_get_var ipaddr "${device}_mesh"
-	log_net "$device: $ipaddr"
 
-	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
+	if [ "$olsr_mesh" -eq "1" ] || [ "$bat_mesh" -eq "1" ]; then
 		local bssid
 		log_wifi "${cfg}: mesh"
-		cfg_mesh="${cfg}_mesh"
+		local network="${cfg}_mesh"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" encryption "none"
@@ -170,9 +167,9 @@ setup_wifi() {
 		#uci_set wireless "$sec" mesh_id 'freifunk'
 		#uci_set wireless "$sec mesh_fwding '0'
 		#uci_set wireless "$sec "doth"
-		uci_set wireless "$sec" network "$cfg_mesh"
+		uci_set wireless "$sec" network "$network"
 		uci_set wireless "$sec" mcast_rate "6000"
-		setup_ip "$cfg_mesh" "$ipaddr"
+		setup_ip "$network" "$ipaddr"
 	fi
 	config_get vap "$cfg" vap "0"
 	#TODO check valid interface combinations

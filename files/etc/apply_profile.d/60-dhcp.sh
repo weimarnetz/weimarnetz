@@ -88,7 +88,7 @@ setup_ether() {
 	json_init
 	json_load "$nodedata"
 	json_get_var ipaddr "$cfg"
-	json_clean
+	json_cleanup
 	cfg_dhcp=$cfg""
 	uci_remove dhcp $cfg_dhcp 2>/dev/null
 	setup_dhcp $cfg_dhcp "$ipaddr" "$ipv6"
