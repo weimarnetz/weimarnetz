@@ -128,7 +128,7 @@ _vpn_write_vtun_conf()
 	local kalua_roaming_net="100.64.0.0/10"
 	local mytable="weimarnetz_anonym"
 	local VPN_SERVER_IP="$(_net dns2ip $VPN_SERVER)"
-	local lanvpn="$( uci -q -get meshnode.vpn.lan_vpn )"
+	local lanvpn="$( uci -q get meshnode.vpn.lan_vpn )"
 	local lan_rule=''
 
 	if [ "$lanvpn" -eq "1" ]; then 
