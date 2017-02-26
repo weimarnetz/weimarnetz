@@ -7,6 +7,8 @@ log() {
 	logger -s -t apply_profile "$@"
 }
 
+[ -n "$(uci -q get meshnode.settings.nodenumber)" ] || return 1
+
 wdir="/etc/apply_profile.d"
 [ -d $wdir ] || return 0
 files="$(find $wdir -type f | sort)"

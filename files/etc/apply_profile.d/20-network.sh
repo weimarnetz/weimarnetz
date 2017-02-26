@@ -56,12 +56,14 @@ setup_ether() {
 	local cfg="$1"
 	local nodenumber="$2"
 
-		config_get enabled "$cfg" enabled "0"					  
-		[ "$enabled" -eq "0" ] && return 
-	
+	config_get enabled "$cfg" enabled "0"					  
+	[ "$enabled" -eq "0" ] && return 
+	config_get device "$device"
+	[ -n "$device" ] || return
+	json_init
 	json_load "$nodeconfig"
-	json_get_var ipaddr lan
- 
+	json_get_var ipaddr "$device" 
+	json_cleanup 
 	log_net "Setup $cfg IP"
 	setup_ip "$cfg" "$ipaddr"
 }
@@ -97,6 +99,7 @@ setup_wifi() {
 	json_load "$info_data"
 	json_select hwmodes
 	json_get_values hw_res
+	json_cleanup
 	[ -z "$hw_res" ] && {
 		log_wifi "ERR No iwinfo hwmodes for wlan$idx"
 		return 1
@@ -143,10 +146,11 @@ setup_wifi() {
 	#wifi-iface
 
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
-	
+
+	json_init	
 	json_load "$nodeconfig"  
-	json_get_var ipaddr "${cfg}_mesh"	
-	log_net "${cfg}: $ipaddr"
+	json_get_var ipaddr "${device}_mesh"
+	log_net "$device: $ipaddr"
 
 	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
 		local bssid
@@ -170,17 +174,17 @@ setup_wifi() {
 		uci_set wireless "$sec" mcast_rate "6000"
 		setup_ip "$cfg_mesh" "$ipaddr"
 	fi
-	config_get vap settings vap "0"
+	config_get vap "$cfg" vap "0"
 	#TODO check valid interface combinations
 	#iw phy$idx info | grep -A6 "valid interface combinations"
 	#iw phy$idx info | grep "interface combinations are not supported"
-	if [ -n "$vap" ] && \
+	if [ "$vap" -eq "1" ] && \
 		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "Virtual AP Not Supported"
 		#uci_set meshnode $cfg vap "0"
 	fi
-	if [ -n "$vap" ] ; then
+	if [ "$vap" -eq "1" ] ; then
 		log_wifi "${cfg}: Virtual AP"
 		cfg_vap="${cfg}_vap"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
@@ -200,6 +204,7 @@ setup_wifi() {
 		log_wifi "${cfg}: $ipaddr"
 		setup_bridge "$br_name" "$ipaddr"
 	fi
+	json_cleanup
 }
 
 remove_wifi() {

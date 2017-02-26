@@ -85,8 +85,10 @@ setup_ether() {
 
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" == "0" ] && return
+	json_init
 	json_load "$nodedata"
-	json_get_var ipaddr $cfg	
+	json_get_var ipaddr "$cfg"
+	json_clean
 	cfg_dhcp=$cfg""
 	uci_remove dhcp $cfg_dhcp 2>/dev/null
 	setup_dhcp $cfg_dhcp "$ipaddr" "$ipv6"
@@ -106,15 +108,17 @@ setup_wifi() {
 	if [ "$roaming" == "1" ]; then 
 		setup_roaming_dhcp "$br_name" "$nodenumber"
 	else 
-			local nodedata=$(node2nets_json $nodenumber)					
-			json_load "$nodedata"	
-		json_get_var ipaddr wifi
+		local nodedata=$(node2nets_json $nodenumber)
+		json_init
+		json_load "$nodedata"
+		json_get_var dhcp_ip wifi
 		cfg_dhcp="$br_name"
 		uci_remove dhcp $cfg_dhcp 2>/dev/null
 		if [ "$dhcp_ip" != "0" ] ; then
 			log_dhcp "Setup $cfg with $dhcp_ip"
 			setup_dhcp $cfg_dhcp "$dhcp_ip" "$ipv6"
 		fi
+		json_cleanup
 	fi
 }
 
@@ -122,6 +126,7 @@ setup_dhcpbase() {
 	local cfg="$1"
 	uci_set dhcp $cfg local "/olsr/"
 	uci_set dhcp $cfg domain "olsr"
+	uci_add_list $cfg server "8.8.8.8,8.8.4.4"
 }
 
 setup_odhcpbase() {

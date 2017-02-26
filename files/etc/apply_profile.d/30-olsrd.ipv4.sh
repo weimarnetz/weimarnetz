@@ -191,6 +191,7 @@ config_foreach setup_vpn vpn "$nodenumber"
 
 # setup hna4 
 nodedata=$(node2nets_json "$nodenumber")
+json_init
 json_load "$nodedata"
 json_get_var node_net node_net
 
@@ -201,6 +202,7 @@ config_get roaming settings roaming
 [ -n "$roaming" ] && {
 	setup_hna4 "$roaming_net"
 }
+json_cleanup
 
 if [ -n "$olsr_enabled" ] ; then
 	#If olsrd is disabled then start olsrd before write config
