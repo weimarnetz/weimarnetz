@@ -3,8 +3,8 @@
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 [ -n "$FFF_VERSION" ] && { 
-	echo ":::: weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
-	echo ':::: Welcome \o/'
+	echo ".oo/ weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
+	echo '/[]. Welcome!'
 	echo ''
 }
 
@@ -104,8 +104,8 @@ _ t 2>/dev/null || {
 		. '/tmp/loader'		# TODO: avoid "no permission" on debian user-X-session
 
 		echo
-		echo ":::: hardware: $HARDWARE"
-		echo ":::: type _ for an overview of available commands"
+		echo ".... hardware: $HARDWARE"
+		echo ".... type _ for an overview of available commands"
 	}
 }
 
