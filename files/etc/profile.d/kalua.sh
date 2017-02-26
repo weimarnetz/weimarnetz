@@ -3,8 +3,9 @@
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 [ -n "$FFF_VERSION" ] && { 
-echo "::: weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
-echo '::: Welcome \o/'
+	echo "::: weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
+	echo '::: Welcome \o/'
+}
 
 check_weak_passwd() 
 {
@@ -83,7 +84,7 @@ unset LOAD
 
 read -r UP REST <'/proc/uptime'
 UP="${UP%.*}"
-case "${#UP}" in 1|2|3) echo "[ATT] low uptime: $UP sec";; esac
+case "${#UP}" in 1|2|3) echo "ATT low uptime: $UP sec";; esac
 unset UP REST
 
 case "$USER" in
@@ -102,7 +103,7 @@ _ t 2>/dev/null || {
 		. '/tmp/loader'		# TODO: avoid "no permission" on debian user-X-session
 
 		echo
-		echo "::: hardware: $HARDWARE" 
+		echo "::: hardware: $HARDWARE"
 		echo "::: type _ for an overview of available commands"
 	}
 }
