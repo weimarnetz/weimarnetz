@@ -3,8 +3,9 @@
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 [ -n "$FFF_VERSION" ] && { 
-	echo "::: weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
-	echo '::: Welcome \o/'
+	echo ":::: weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
+	echo ':::: Welcome \o/'
+	echo ''
 }
 
 check_weak_passwd() 
@@ -17,7 +18,7 @@ check_weak_passwd()
 	weakhash=$(mkpasswd -S "$salt" "$pass") 
 	hash=$(awk -F":" '/^root/ { print $2}' < /etc/shadow)
 	[ "$weakhash" = "$hash" ] && { 
-		echo "ATT Weak default password! Please change the password with 'passwd' now!"
+		echo "!!!! Weak default password! Please change the password with 'passwd' now!"
 	}
 }
 
@@ -76,7 +77,7 @@ case "$LOAD" in
 	'0'*)
 	;;
 	*)
-		echo 'ATT high load:'
+		echo '!!!! high load:'
 		uptime
 	;;
 esac
@@ -84,7 +85,7 @@ unset LOAD
 
 read -r UP REST <'/proc/uptime'
 UP="${UP%.*}"
-case "${#UP}" in 1|2|3) echo "ATT low uptime: $UP sec";; esac
+case "${#UP}" in 1|2|3) echo "!!! low uptime: $UP sec";; esac
 unset UP REST
 
 case "$USER" in
@@ -103,8 +104,8 @@ _ t 2>/dev/null || {
 		. '/tmp/loader'		# TODO: avoid "no permission" on debian user-X-session
 
 		echo
-		echo "::: hardware: $HARDWARE"
-		echo "::: type _ for an overview of available commands"
+		echo ":::: hardware: $HARDWARE"
+		echo ":::: type _ for an overview of available commands"
 	}
 }
 
@@ -119,18 +120,18 @@ if [ -e '/tmp/REBOOT_REASON' ]; then
 			CRASH="$( _system reboots )"
 
 			test ${CRASH:-0} -gt 50 && {
-				echo "ATT detected $CRASH reboots since last update - please check"
+				echo "!!!! detected $CRASH reboots since last update - please check"
 			}
 		;;
 		*)
 			UNIXTIME=$( date +%s )
 			UPTIME=$( _system uptime sec )
-			printf '\n%s' "ATT last reboot unusual @ $( date -d @$(( UNIXTIME - UPTIME )) ) - "
+			printf '\n%s' "!!!! last reboot unusual @ $( date -d @$(( UNIXTIME - UPTIME )) ) - "
 
 			if [ -e '/sys/kernel/debug/crashlog' ]; then
-				printf '%s\n\n' "ATT was: $CRASH, see with: cat /sys/kernel/debug/crashlog"
+				printf '%s\n\n' "was: $CRASH, see with: cat /sys/kernel/debug/crashlog"
 			else
-				printf '%s\n\n' "ATT was: $CRASH"
+				printf '%s\n\n' "was: $CRASH"
 			fi
 		;;
 	esac
