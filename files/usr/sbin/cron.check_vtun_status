@@ -1,4 +1,22 @@
 #!/bin/sh
+# http://unix.stackexchange.com/a/22062
+
+log() {
+        logger -s -t "$0" system "$@"
+}
+
+lockfile=/tmp/$0.lock
+tmpfile=${lockfile}.$$
+echo $$ > $tmpfile
+if ln $tmpfile $lockfile 2>&-; then
+    : 
+else
+    log "locked by $(<$lockfile)"
+    rm $tmpfile
+    exit
+fi
+trap "rm ${tmpfile} ${lockfile}" 0 1 2 3 15
+# do what you need to
 . /tmp/loader
 
 # here we check if we have a local inet connection and start vtun if it isn't already running
@@ -8,16 +26,10 @@ test   -e "/tmp/LOWMEM"                         && exit
 test   -n "$FAILSAFE"                           && exit
 test ! -e "/www/SOFTWARE_FULLY_INSTALLED"       && exit
 
-_olsr uptime is_short && {
-        _log it olsr_uptime_is_short daemon info "[OK] scheduling job"
-        echo >>$SCHEDULER "$0" force
-        exit
-        }
+_olsr uptime is_short && exit
 
 _net local_inet_offer && {
 	_watch vpn || {
 		_vpn restart
 	}
 }
-                        
-
