@@ -130,7 +130,7 @@ setup_wifi() {
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
-	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT40"
+	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT20"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "1" ] && uci_set wireless "$device" htmode "VHT80"
 	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "0" ] && uci_set wireless "$device" htmode "HT40"
 
