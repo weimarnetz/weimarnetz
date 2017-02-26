@@ -5,6 +5,13 @@ log() {
 	logger -s -t apply_profile system "$@"
 }
 
+setup_boot() {
+	/etc/init.d/generate_kalua_loader enable
+	/etc/init.d/generate_kalua_loader start
+	/etc/init.d/crond enable
+	/etc/init.d/crond start
+}
+
 setup_sysctl()
 {
   
@@ -82,4 +89,5 @@ uci_commit system
 
 # sysctl settings
 setup_sysctl
+setup_boot
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
