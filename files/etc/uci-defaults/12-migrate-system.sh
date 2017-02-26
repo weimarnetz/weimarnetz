@@ -21,6 +21,9 @@ config_cb() {
 			[ "$option" = "hostname" ] && {
 				uci_set meshnode settings hostname "$value"
 			}
+			[ "$option" = "latitude" -o "$option" = "longitude" -o "$option" = "location" ] && {
+				uci_set meshnode settings "$option" "$value"
+			}
 		}
 		uci_remove system noswinstall 
 	;;
