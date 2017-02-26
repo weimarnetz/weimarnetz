@@ -8,7 +8,8 @@ log() {
 setup_sysctl()
 {
   
-    mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
+    	mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
+	min_free=$(sysctl -n vm.min_free_kbytes)
 	[ "$mem" -lt 32768 ] && min_free=128
 
 	# http://www.kernel.org/doc/Documentation/sysctl/kernel.txt
