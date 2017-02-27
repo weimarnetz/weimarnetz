@@ -8,8 +8,8 @@ log() {
 setup_boot() {
 	/etc/init.d/generate_kalua_loader enable
 	/etc/init.d/generate_kalua_loader start
-	/etc/init.d/crond enable
-	/etc/init.d/crond start
+	/etc/init.d/cron enable
+	/etc/init.d/cron start
 }
 
 setup_sysctl()
