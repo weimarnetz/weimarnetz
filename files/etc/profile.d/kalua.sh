@@ -63,7 +63,7 @@ esac
 
 prompt_set
 
-if [ $(command -V neigh.sh >/dev/null) ]; then
+if command -V neigh.sh >/dev/null; then
 	alias n='neigh.sh 2>/dev/null'
 else 
 	alias n='_olsr txtinfo'
@@ -97,7 +97,7 @@ case "$USER" in
 		check_weak_passwd
 
 		grep -qs ^'root:\$' '/etc/shadow' || {
-			echo "ERR unset password, use 'passwd'"
+			echo "ERR! unset password, use 'passwd'"
 		}
 	;;
 esac
