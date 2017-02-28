@@ -23,7 +23,7 @@ up_rules() {
 			# nat
 			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			[ "$(uci get meshnode wan restrict)" -eq 1 ] && {
+			[ "$(uci_get meshnode wan restrict)" -eq 1 ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ]  && {
@@ -79,7 +79,7 @@ down_rules() {
 			# nat
 			iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			[ "$(uci get meshnode wan restrict)" -eq 1 ] && {
+			[ "$(uci_get meshnode wan restrict)" -eq 1 ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ] && {
