@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# FIXME https://bugs.lede-project.org/index.php?do=details&task_id=563
+return
+
 case "$ACTION" in
 		ifup)
 		grep -q '^sch_cake' '/proc/modules' && {
