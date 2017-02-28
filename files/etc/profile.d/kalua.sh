@@ -8,6 +8,17 @@
 	echo ''
 }
 
+nmeter_cmd() {
+ . /lib/functions/network.sh 
+ local cmd='%t %20c '
+ for dev in vap radio0_mesh radio1_mesh lan wan; do
+	network_get_physdev physdev "$dev"
+	[ -n "$physdev" ] && cmd="$cmd ${physdev}: %[n$physdev]"
+ done
+ cmd="$cmd ctx: %x mem: %m"
+ echo $cmd
+}
+
 check_weak_passwd() 
 {
 
@@ -55,18 +66,16 @@ prompt_set()
 	export PS1="${cyan}${user}$white@${green}$host:${yellow}$wdir \$( face '$ok' '$bad' ) $reset"
 }
 
-case "$PS1" in
-	*' face '*)
-		return 0
-	;;
-esac
-
 prompt_set
 
 if command -V neigh.sh >/dev/null; then
 	alias n='neigh.sh 2>/dev/null'
 else 
 	alias n='_olsr txtinfo'
+fi
+if command -V nmeter >/dev/null; then
+	echo '.... type nm for live cpu/memory/traffic stats'
+	alias nm="nmeter \"$(nmeter_cmd)\""
 fi
 alias n2='echo /nhdpinfo link | nc 127.0.0.1 2009'
 alias ll='ls -la'
@@ -81,8 +90,7 @@ case "$LOAD" in
 	'0'*)
 	;;
 	*)
-		echo '!!!! high load:'
-		uptime
+		echo "!!!! high load: $(uptime)"
 	;;
 esac
 unset LOAD
