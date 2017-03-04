@@ -127,7 +127,6 @@ _vpn_write_vtun_conf()
 	local particpant_net="10.63.0.0/16"			# fixme! hardcoded
 	local kalua_roaming_net="100.64.0.0/10"
 	local mytable="weimarnetz_anonym"
-	local VPN_SERVER_IP="$(_net dns2ip $VPN_SERVER)"
 	local lanvpn="$( uci -q get meshnode.vpn.lan_vpn )"
 	local lan_rule=''
 
@@ -137,62 +136,59 @@ _vpn_write_vtun_conf()
 		lan_rule=''
 	fi
 		
-	cat > "$VTUN" <<EOF
-Node$KNOT {
-	passwd ff ;
-	type ether ;		# fixme! olsrd-bug: /32 interface needed?
-	persist yes ;		# fixme! add 'timeout 60' ?
+	cat > "$VTUN" <<-EOF
+	Node$KNOT {
+		passwd ff ;
+		device tap0 ;
+		type ether ;		# fixme! olsrd-bug: /32 interface needed?
+		persist yes ;		# fixme! add 'timeout 60' ?
 
-	up {
-		program "logger -p daemon.info -t vtund.conf link_up %%:$HOSTNAME" ;
+		up {
+			program "logger -p daemon.info -t vtund.conf link_up %%:$HOSTNAME" ;
 
-		program "ip address add $WIFIVPNCLIENTADR/$WIFIVPNPRE dev %% " wait ;
-		program "sleep 10" wait;
-		program "ip address add $WIFIVPNCLIENTADR/32 dev %%" wait;
-		program "ip -6 address add $VPN6ADR/$VPN6MSK dev %%" wait;
-		program "ip link set dev %% mtu $MTU up" wait;
-		program "# ip route add $VPN_SERVER_IP via $STATIC_ROUTE" wait;		# + table local?
+			program "ip address add $WIFIVPNCLIENTADR/$WIFIVPNPRE dev %% " wait ;
+			program "ip link set dev %% mtu $MTU up" wait;
 
-		program "grep -q $mytable /etc/iproute2/rt_tables || echo 50 $mytable >>/etc/iproute2/rt_tables" wait;
-		program "ip rule add from $particpant_net prio 30010 table $mytable" wait;
-		program "ip rule add from $kalua_roaming_net prio 30020 table $mytable" wait;
+			program "grep -q $mytable /etc/iproute2/rt_tables || echo 50 $mytable >>/etc/iproute2/rt_tables" wait;
+			program "ip rule add from $particpant_net prio 30010 table $mytable" wait;
+			program "ip rule add from $kalua_roaming_net prio 30020 table $mytable" wait;
 
-		# dont send packets to private networks over vpn
-		program "ip rule add to 169.254.0.0/24 prio 30005 lookup main" wait;
-		program "ip rule add to 10.0.0.0/8     prio 30004 lookup main" wait;
-		program	"ip rule add to 100.64.0.0/10  prio 30001 lookup main" wait;
-		program "ip rule add to 192.168.0.0/16 prio 30003 lookup main" wait;
-		program "ip rule add to 172.16.0.0/12  prio 30002 lookup main" wait;
-		program "ip rule add to $particpant_net prio 30001 lookup main" wait;
-		program "$lan_rule ip rule add from $LANNET/$LANPRE prio 30000 table main" wait;
-		program "ip route add default via $WIFIVPNSERVERADR dev %% table $mytable" wait;
+			# dont send packets to private networks over vpn
+			program "ip rule add to 169.254.0.0/24 prio 30005 lookup main" wait;
+			program "ip rule add to 10.0.0.0/8	   prio 30004 lookup main" wait;
+			program	"ip rule add to 100.64.0.0/10  prio 30001 lookup main" wait;
+			program "ip rule add to 192.168.0.0/16 prio 30003 lookup main" wait;
+			program "ip rule add to 172.16.0.0/12  prio 30002 lookup main" wait;
+			program "ip rule add to $particpant_net prio 30001 lookup main" wait;
+			program "$lan_rule ip rule add from $LANNET/$LANPRE prio 30000 table main" wait;
+			program "ip route add default via $WIFIVPNSERVERADR dev %% table $mytable" wait;
 
-		program "ip route flush cache" wait;
-	} ;
-		# fixme! static_route must only be valid for programs on this machine
-	down {
-		program "logger -p daemon.info -t vtund.conf link_down %%:$HOSTNAME" ;
+			program "ip route flush cache" wait;
+		} ;
+			# fixme! static_route must only be valid for programs on this machine
+		down {
+			program "logger -p daemon.info -t vtund.conf link_down %%:$HOSTNAME" ;
 
-		# ordering vice versa (see above)
-		program "ip route del default via $WIFIVPNSERVERADR dev %% table $mytable" wait;
-		program "$lan_rule ip rule del from $LANNET/$LANPRE prio 30000 table main" wait;
-		program "ip rule del to $particpant_net prio 30001 lookup main" wait;
-		program "ip rule del to 100.64.0.0/10  prio 30001 lookup main" wait;
-		program "ip rule del to 172.16.0.0/12  prio 30002 lookup main" wait;
-		program "ip rule del to 192.168.0.0/16 prio 30003 lookup main" wait;
-		program "ip rule del to 10.0.0.0/8	   prio 30004 lookup main" wait;
-		program "ip rule del to 169.254.0.0/24 prio 30005 lookup main" wait;
+			# ordering vice versa (see above)
+			program "ip route del default via $WIFIVPNSERVERADR dev %% table $mytable" wait;
+			program "$lan_rule ip rule del from $LANNET/$LANPRE prio 30000 table main" wait;
+			program "ip rule del to $particpant_net prio 30001 lookup main" wait;
+			program "ip rule del to 100.64.0.0/10  prio 30001 lookup main" wait;
+			program "ip rule del to 172.16.0.0/12  prio 30002 lookup main" wait;
+			program "ip rule del to 192.168.0.0/16 prio 30003 lookup main" wait;
+			program "ip rule del to 10.0.0.0/8	   prio 30004 lookup main" wait;
+			program "ip rule del to 169.254.0.0/24 prio 30005 lookup main" wait;
 
-		program "ip rule del from $kalua_roaming_net prio 30020 table $mytable" wait; 
-		program "ip rule del from $particpant_net prio 30010 table $mytable" wait;					  
-		program "ip link set dev %% down" wait;
-	} ;
-}
-EOF
+			program "ip rule del from $kalua_roaming_net prio 30020 table $mytable" wait; 
+			program "ip rule del from $particpant_net prio 30010 table $mytable" wait;					  
+			program "ip link set dev %% down" wait;
+		} ;
+	}
+	EOF
 
 	_log it $func daemon debug "ready"
 	#while read LINE; do {
-    #		_log it $func daemon debug "${VTUN} +'$LINE'"
+	#		_log it $func daemon debug "${VTUN} +'$LINE'"
 	#} done <"$VTUN"
 }
 
@@ -293,7 +289,7 @@ _vpn_build_vars()
 
 	VPN_SERVER="${SERVER}"
 
-	_log it ${FUNC} daemon notice "using ${VPN_SERVER} - ping: ${PING}ms  clients: ${CLIENTS}	port: ${PORT}  mtu: ${MTU}"
+	_log it ${FUNC} daemon notice "using ${VPN_SERVER} - clients: ${CLIENTS}	port: ${PORT}  mtu: ${MTU}"
 	NODE_NUMBER="$( uci -q get meshnode.settings.nodenumber )"
 	HOSTNAME="$( uci -q get system.@system[0].hostname )"
 	[ -z "${HOSTNAME}" ] && HOSTNAME="node${NODE_NUMBER}"
