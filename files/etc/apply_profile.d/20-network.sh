@@ -192,14 +192,15 @@ setup_wifi() {
 		uci_set wireless "$sec" mode "ap"
 		#uci_set wireless "$sec" mcast_rate "6000"
 		#uci_set wireless "$sec" isolate 1
-		uci_set wireless "$sec" ssid "weimar.freifunk.net"
 		uci_set wireless "$sec" network "$br_name"
 
 		config_get roaming settings roaming
 		if [ "$roaming" -eq "1" ]; then
 			json_get_var ipaddr roaming_block
+		    uci_set wireless "$sec" ssid "weimar.freifunk.net"
 		else 
 			json_get_var ipaddr wifi
+			uci_set wireless "$sec" ssid "weimarnetz.de | $nodenumber"
 		fi
 		log_wifi "${cfg}: $ipaddr"
 		setup_bridge "$br_name" "$ipaddr" "$roaming"
