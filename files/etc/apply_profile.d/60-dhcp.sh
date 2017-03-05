@@ -101,7 +101,7 @@ setup_wifi() {
 
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" -eq "0" ] && return
-	config_get roaming $cfg roaming "0"
+	config_get roaming settings roaming "0"
 	config_get ipv6 settings ipv6 "0"
 	if [ "$roaming" -eq "1" ]; then 
 		setup_roaming_dhcp "$br_name" "$nodenumber"
