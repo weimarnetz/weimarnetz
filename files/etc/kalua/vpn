@@ -250,8 +250,9 @@ _vpn_build_vars()
 		HOST="${i}.${PREFIX}.${DOMAIN}"
 		URL="http://${HOST}${JSONPATH}"
 
-		if ! JSON=$( _curl it "${URL}" 2>/dev/null ); then
-			_log it ${FUNC} daemon err "error fetching ${URL}"
+		JSON=$( _curl it "${URL}" 2>/dev/null )                                    
+    		if [ -z $JSON]; then
+    			_log it ${FUNC} daemon err "error fetching ${URL}"
 		else
 			json_cleanup	# json_get_var variables are not cleaned otherwise.
 			json_load "${JSON}" 2>/dev/null
