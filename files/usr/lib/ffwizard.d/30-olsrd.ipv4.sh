@@ -1,11 +1,11 @@
 #!/bin/sh 
 # shellcheck disable=SC2039
 
-. /lib/functions/weimarnetz/ipsystem.sh
+. /usr/lib/weimarnetz/ipsystem.sh
 . /lib/functions/network.sh
 
 log_olsr4() {
-	logger -s -t apply_profile_olsrd "$@"
+	logger -s -t ffwizard_olsrd "$@"
 }
 
 setup_olsrbase() {
@@ -183,7 +183,7 @@ config_foreach remove_section LoadPlugin
 olsr_enabled=0
 
 #Setup ether and wifi
-config_load meshnode
+config_load ffwizard
 config_get nodenumber settings nodenumber
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber"

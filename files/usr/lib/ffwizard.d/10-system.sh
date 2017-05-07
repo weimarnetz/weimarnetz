@@ -2,12 +2,10 @@
 # shellcheck disable=SC2039
 
 log() {
-	logger -s -t apply_profile system "$@"
+	logger -s -t ffwizard system "$@"
 }
 
 setup_boot() {
-	/etc/init.d/generate_kalua_loader enable
-	/etc/init.d/generate_kalua_loader start
 	/etc/init.d/cron enable
 	/etc/init.d/cron start
 }
@@ -15,7 +13,7 @@ setup_boot() {
 setup_sysctl()
 {
   
-    	mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
+    mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
 	min_free=$(sysctl -n vm.min_free_kbytes)
 	[ "$mem" -lt 32768 ] && min_free=128
 
@@ -70,7 +68,7 @@ setup_system() {
 	fi
 }
 
-config_load meshnode 
+config_load ffwizard 
 config_get hostname settings hostname "LEDE"
 config_get nodenumber settings nodenumber
 

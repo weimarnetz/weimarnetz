@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. /lib/functions/weimarnetz/ipsystem.sh
+. /usr/lib/weimarnetz/ipsystem.sh
 
 uci_add_list() {
 	local PACKAGE="$1"
@@ -12,7 +12,7 @@ uci_add_list() {
 }
 
 log_dhcp() {
-	logger -s -t apply_profile_dhcp $@
+	logger -s -t ffwizard_dhcp "$@"
 }
 
 setup_dhcp() {
@@ -127,7 +127,7 @@ setup_dhcpbase() {
 	uci_remove dhcp $cfg server
 	uci_add_list dhcp $cfg server "8.8.8.8"
 	uci_add_list dhcp $cfg server "8.8.4.4"
-	config_get meshnode $cfg olsr_mesh "0"
+	config_get ffwizard $cfg olsr_mesh "0"
 	if [ "$olsr_mesh" -eq "1" ]; then
 		uci_remove dhcp $cfg addnhosts
 		uci_add_list dhcp $cfg addnhosts "/tmp/hosts/olsr.ipv4"
@@ -153,7 +153,7 @@ config_foreach setup_dhcpbase dnsmasq
 config_foreach setup_odhcpbase odhcpd
 
 #Setup ether and wifi
-config_load meshnode
+config_load ffwizard
 config_get nodenumber settings nodenumber
 nodedata=$(node2nets_json $nodenumber)
 config_foreach setup_ether ether "$nodenumber" 

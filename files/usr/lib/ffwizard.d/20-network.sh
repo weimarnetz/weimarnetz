@@ -1,14 +1,14 @@
 #!/bin/sh -x 
 # shellcheck disable=SC2039
 
-. /lib/functions/weimarnetz/ipsystem.sh
+. /usr/lib/weimarnetz/ipsystem.sh
 
 log_net() {
-	logger -s -t apply_profile_net "$@"
+	logger -s -t ffwizard_net "$@"
 }
 
 log_wifi() {
-	logger -s -t apply_profile_wifi "$@"
+	logger -s -t ffwizard_wifi "$@"
 }
 
 setup_ip() {
@@ -182,7 +182,7 @@ setup_wifi() {
 		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "Virtual AP Not Supported"
-		#uci_set meshnode $cfg vap "0"
+		#uci_set ffwizard $cfg vap "0"
 	fi
 	if [ "$vap" -eq "1" ] ; then
 		log_wifi "${cfg}: Virtual AP"
@@ -227,14 +227,14 @@ config_foreach remove_wifi wifi-iface
 uci_commit wireless
 
 #Setup ether and wifi
-config_load meshnode
+config_load ffwizard
 config_get nodenumber settings nodenumber
 nodedata=$(node2nets_json "$nodenumber")
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber" "$br_name"
 config_foreach setup_vpn vpn 
 
-config_get ip6prefix meshnode ip6prefix
+config_get ip6prefix ffwizard ip6prefix
 if [ -n "$ip6prefix" ] ; then
 	uci_set network globals ula_prefix "$ip6prefix"
 fi
