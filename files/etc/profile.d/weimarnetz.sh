@@ -70,19 +70,15 @@ prompt_set
 
 if command -V neigh.sh >/dev/null; then
 	alias n='neigh.sh 2>/dev/null'
-else 
-	alias n='_olsr txtinfo'
-fi
-if command -V nmeter >/dev/null; then
+
+	if command -V nmeter >/dev/null; then
 	echo '.... type nm for live cpu/memory/traffic stats'
 	alias nm="nmeter \"$(nmeter_cmd)\""
 fi
 alias n2='echo /nhdpinfo link | nc 127.0.0.1 2009'
 alias ll='ls -la'
 alias lr='logread'
-alias flush='_system ram_free flush'
 alias myssh='ssh -i $( _ssh key_public_fingerprint_get keyfilename )'
-alias regen='_ rebuild; _(){ false;}; . /tmp/loader'
 alias dropshell='echo >>$SCHEDULER_IMPORTANT "/etc/init.d/dropbear stop"; killall dropbear'
 
 read -r LOAD <'/proc/loadavg'
@@ -110,16 +106,9 @@ case "$USER" in
 	;;
 esac
 
-_ t 2>/dev/null || {
-	[ -e '/tmp/loader' ] && {
-		# http://unix.stackexchange.com/questions/82347/how-to-check-if-a-user-can-access-a-given-file
-		. '/tmp/loader'		# TODO: avoid "no permission" on debian user-X-session
-
-		echo
-		echo ".... hardware: $HARDWARE"
-		echo ".... type _ for an overview of available commands"
-	}
-}
+echo
+echo ".... hardware: $HARDWARE"
+echo ".... type _ for an overview of available commands"
 
 if [ -e '/tmp/REBOOT_REASON' ]; then
 	# see system_crashreboot()
