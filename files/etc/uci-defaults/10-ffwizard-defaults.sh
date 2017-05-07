@@ -1,6 +1,6 @@
 #!/bin/sh 
 
-uci -m import meshnode <<EOF
+uci -m import ffwizard <<EOF
 config node 'settings'
 	option hostname ''
 	option nodenumber ''
