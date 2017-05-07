@@ -1,25 +1,27 @@
 #!/bin/sh
 
-_curl_it()
+log() {
+        logger -s -t network.sh: "$@"
+}
+
+net_http_get()
 {
-	local funcname='curl_it'
+	local funcname='net_http_get'
 	local url="$1"
 	local max="${2:-15}"	# maximal running time [sec]
 
-	_log it $funcname daemon debug "max ${max}s, ${#url} bytes, wget -qO - '$url'"
+	log $funcname "max ${max}s, ${#url} bytes, wget -qO - '$url'"
 	timeout $max wget -qO - "$url" 
 }
-# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
-#!/bin/sh
 
-_net_dns2ip()
+net_dns2ip4()
 {
 	local dns="$1"
 	local go
 
-	# explode $( nslookup host86-139-31-49.range86-139.btcentralplus.com )
+	# set -- $( nslookup host86-139-31-49.range86-139.btcentralplus.com )
 	# Server: 127.0.0.1 Address 1: 127.0.0.1 localhost Name: host86-139-31-49.range86-139.btcentralplus.com Address 1: 86.139.31.49 host86-139-31-49.range86-139.btcentralplus.com
-	explode $( nslookup "$dns" || echo 'ERROR ERROR' )
+	set -- $( nslookup "$dns" || echo 'ERROR ERROR' )
 
 	while shift; do {
 		case "$1" in
@@ -54,13 +56,13 @@ _net_dns2ip()
 }
 
 
-_net_get_rxtx()
+net_get_rxtx()
 {
 	local dev="$1"
 	local line
 
 	while read -r line; do {
-		explode $line
+		set -- $line
 
 		case "$1" in
 			"$dev:")
@@ -71,130 +73,17 @@ _net_get_rxtx()
 	} done <'/proc/net/dev'
 }
 
-_net_tcp_port_reachable()		# please call with 2>/dev/null otherwise you
-{					# always see the 'killed' message from background job
+net_tcp_port_reachable()
+{					
 	local funcname='net_tcp_port_reachable'
 	local server="$1"		# e.g. 127.0.0.1
 	local port="$2"			# e.g. 80
-	local check_output="$3"		# pattern or <empty>
-
-	local file="$TMPDIR/$funcname"
-	local rc=0
-
-	command -v nc >/dev/null || {
-		_log it $funcname daemon info '[ERR] no netcat'
-		return 0
-	}
 
 	# we can't rely on '-w3' or '-z' because of lobotomized busybox netcat
-	timeout 5 echo "foo" | nc "$server" "$port" 2>/dev/null >"$file" || touch "$file.error" 
-	if [ -n "$check_output" ]; then
-		if ! grep -sq -- "$check_output" "$file"; then
-			rc=1
-			_log it $funcname daemon info "[ERR] '$( cat "$file" )'"
-		fi	
-	else
-		[ -e "$file.error" ] && {
-				rc=1
-		}
-	fi
-	rm "$file" "$file.error" 2>/dev/null
-
-	return $rc
+	timeout 5 echo "foo" | nc "$server" "$port" 2>/dev/null || return 1 
 }
 
-_net_my_isp()		# TODO: http://www.utrace.de/api.php
-{
-	local option="$1"
-	local cachefile="$TMPDIR/myisp"
-	local isp method
-
-	[ "$option" != 'cached' -o ! -e "$cachefile" ] && {
-		m1()
-		{
-			_curl it 'http://www.spyber.com' | grep -F 'My Host :' | cut -d'<' -f1
-		}
-
-		m2()
-		{
-			_curl it 'http://www.whoismyisp.org' | sed -n "/ (ISP) is /s/^.*'\(.*\)'.*/\1/p"
-		}
-
-		for method in m1 m2; do {
-			isp="$( $method )"
-			[ -n "$isp" ] && {
-				echo "$isp" >"$cachefile"
-				break
-			}
-		} done
-	}
-
-	[ -e "$cachefile" ] && read -r isp <"$cachefile"
-	echo "${isp:-unknownISP}"
-}
-
-_net_show_traffic()
-{
-	local iface="$1"
-	local interval="${2:-1}"
-	local bytes_rx bytes_tx old_rx old_tx diff_rx diff_tx mbit_rx mbit_tx percent_tx percent_rx txt change
-	local max_tx=1 max_rx=1
-
-	[ -z "$iface" ] && {
-		# default via 10.63.99.61 dev eth0.2  metric 2 onlink
-		explode $( ip route list exact '0.0.0.0/0' | head -n1 )
-		while test ! "$1" = 'dev' -a -n "$1"; do shift; done
-		iface="$2"
-	}
-
-	local pre="$( _net dev2name "$iface" )/$iface"
-
-	while true; do {
-		eval $( _net get_rxtx "$iface" )	# bytes_rx | bytes_tx
-
-		divisor_valid "$interval" || interval=1
-		diff_rx=$(( ( bytes_rx - ${old_rx:-0} ) / interval ))	# divisor_valid
-		diff_tx=$(( ( bytes_tx - ${old_tx:-0} ) / interval ))	# divisor_valid
-		mbit_rx=$(( diff_rx / 80000 ))
-		mbit_tx=$(( diff_tx / 80000 ))		# FIXME for small values, e.g. 0.25mbit show only '0'
-		old_rx=$bytes_rx
-		old_tx=$bytes_tx
-
-		change=
-		test $diff_rx -gt $max_rx -a -n "$txt" && { max_rx=$diff_rx; change='newMAX'; }
-		test $diff_tx -gt $max_tx -a -n "$txt" && { max_tx=$diff_tx; change='newMAX'; }
-		percent_tx="$( _math percentof $diff_tx $max_tx )"
-		percent_rx="$( _math percentof $diff_rx $max_rx )"
-
-		txt="$pre: rx/tx = down/upload: $diff_rx | $diff_tx [bytes/s] = $mbit_rx/$mbit_tx [mbit/s] = ${percent_rx%.*}/${percent_tx%.*}% $change"
-		_sanitizer run "$txt" number_humanreadable
-		echo
-
-		sleep $interval
-	} done
-}
-
-_net_get_external_ip()		# FIXME! add IPv6 and rename to 'ip4'
-{				# FIXME! add override for 'IPv6 only' and 20 ports IPv4-portfw
-	local url_user="$1"
-	local ip url
-	local url_default="$( uci -q get system.@monitoring[0].url )/getip/"
-	local url_fallback1="http://intercity-vpn.de/networks/liszt28/getip/"	# if default is unset
-	local url_fallback2='http://api.ipify.org'
-	local list_url="$url_user $url_default $url_fallback1 $url_fallback2"
-	local timeout=6
-
-	for url in $list_url; do {
-		ip="$( _curl it "$url" $timeout )"
-
-		_sanitizer run "$ip" ip4 check && {
-			echo "$ip"
-			return 0
-		}
-	} done
-}
-
-_net_ping_getlatency()
+net_ping_getlatency()
 {
 	local server="$1"	# e.g. <ip> or <host>
 	local pings="${2:-3}"
@@ -205,20 +94,20 @@ _net_ping_getlatency()
 	#						^^^
 	# rtt min/avg/max/mdev = 33.415/33.415/33.415/0.000 ms	// debian
 	# or: <empty>
-	explode $( ping -q -c${pings} -W1 "$server" 2>/dev/null | tail -n1 )
+	set -- $( ping -q -c${pings} -W1 "$server" 2>/dev/null | tail -n1 )
 
 	# bad return on error
 	test -n "$4" -a "$4" != '0' &&	{
 		# round-trip min/avg/max = 15.887/24.931/42.406 ms
 		# -> 15.887/24.931/42.406 -> 15 887 24 931 42 406
-		local oldIFS="$IFS"; IFS='[/.]'; explode $4; IFS="$oldIFS"
+		local oldIFS="$IFS"; IFS='[/.]'; set -- $4; IFS="$oldIFS"
 
 		# output 'average' round trip time: 24.931 -> 24
 		echo "$3"
 	}
 }
 
-_net_local_inet_offer()			
+net_local_inet_offer()			
 {	
 	local funcname='net_local_inet_offer'
 	local gw=''
