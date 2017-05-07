@@ -1,7 +1,0 @@
-#!/bin/sh
-
-_net local_inet_offer && {
-	_watch vpn || {
-		_vpn restart
-	}
-}
