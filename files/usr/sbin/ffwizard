@@ -2,6 +2,7 @@
 
 . /lib/functions.sh
 . /usr/share/libubox/jshn.sh
+. /usr/lib/weimarnetz/ipsystem.sh 
 
 log() {
 	logger -s -t ffwizard "$@"

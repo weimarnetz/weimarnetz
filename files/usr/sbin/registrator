@@ -1,33 +1,38 @@
 #!/bin/sh
-. /tmp/loader
+
+. /lib/functions.sh
 . /usr/share/libubox/jshn.sh
+. /usr/lib/weimarnetz/network.sh 
 
-OPTION="$1"
-[ "$OPTION" = 'show_next_free' ] || unset OPTION	# only for debug
+nodenumber=$(uci_get meshnode settings nodenumber -1)
 
-NETWORK="${CONFIG_PROFILE%_*}"
-case "$NETWORK" in
-	# share same IP-space
-	'ffweimar'|'liszt28'|'paltstadt'|'ilm1')
-		NETWORK='ffweimar'
-	;;
-	*)
-		return 0
-	;;
-esac
+[ "$nodenumber" -gt 1 ] || {
+	echo "Error! No nodenumber!"
+	exit 1
+}
 
-URL_BASE='http://reg.weimarnetz.de'
-PASS="$( _ssh key_public_fingerprint_get )"
-PASS="$( _sanitizer run "$PASS" urlvalue )"
+fingerprint=$(dropbearkey -f /etc/dropbear/dropbear_rsa_host_key  -y | awk '/Fingerprint:/ { print $3 }')
 
-if [ -e '/www/monitoring.wifimac' ]; then
-	read MAC <'/www/monitoring.wifimac'
-else
-	MAC="$( _net dev2mac "$WIFIDEV" )"
-	MAC="$( _sanitizer run "$MAC" urlvalue )"
-fi
+__getmac() {
+	. /lib/functions/network.sh
+	network_get_physdev physdev lan
+	data=$(devstatus "$physdev")
+	json_load "$data"
+	json_get_var mac macaddr
+	json_cleanup
+	echo "$mac"
+}
 
-if [ "$( _ipsystem getvar 'NODE_NUMBER_RANDOM' )" = 'false' -a -z "$OPTION" ]; then
+mac=$(__getmac)
+
+echo $fingerprint
+echo $mac
+
+
+__request() {
+	
+
+}
 
 	# API call is: Send an 'Update' for our NODENUMBER, with MAC and PASS.
 	# - if the NODENUMBER did not exist, it will be created with the supplied data
@@ -161,54 +166,3 @@ if [ "$( _ipsystem getvar 'NODE_NUMBER_RANDOM' )" = 'false' -a -z "$OPTION" ]; t
 		;;
 	esac
 
-	# cleanup env-space
-	unset HTTP_ANSWER
-	json_cleanup
-else
-	[ "$OPTION" = 'show_next_free' ] || return 0
-
-	URL="http://reg.weimarnetz.de/$NETWORK/list"
-	FILE="/tmp/LIST_NODES_REGISTRATED"
-	_curl it "$URL" >"$FILE"
-
-	# fully loaded? JSON must be closed correctly:
-	if [ "$( tail -n1 "$FILE" )" = '}' ]; then
-		NODENUMBER_TRY=290	# fixme! hardcoded, till we have this function in the API
-		NODENUMBER_MAX=969	# fixme! see ipsystem_ffweimar() every ipsystem() should implement this var
-		NODENUMBER_NEW=
-
-		# ...
-		# {
-		#    "number": 10,
-		#    "created_at": 1370952204310,
-		#    "last_seen": 1370952204310
-		# },
-		# ...
-
-		while [ $NODENUMBER_TRY -lt $NODENUMBER_MAX ]; do {
-			if fgrep -q "\"number\": $NODENUMBER_TRY," "$FILE"; then
-				NODENUMBER_TRY=$(( $NODENUMBER_TRY + 1 ))
-			else
-				NODENUMBER_NEW="$NODENUMBER_TRY"
-				break
-			fi
-		} done
-		rm "$FILE"
-
-		if [ "$OPTION" = 'show_next_free' ]; then
-			_log it request_nodenumber daemon info "next free nodenumber is '$NODENUMBER_NEW'"
-		else
-			if [ -n "$NODENUMBER_NEW" ]; then
-				_log it request_nodenumber daemon alert "apply new nodenumber '$NODENUMBER_NEW'"
-
-				NETWORK="${CONFIG_PROFILE%_*}"
-				MODE="${CONFIG_PROFILE#*_}"
-				/etc/init.d/apply_profile.code "$NETWORK" "$MODE" "$NODENUMBER_NEW"
-			else
-				_log it request_nodenumber daemon info "could not get new nodenumber"
-			fi
-		fi
-	else
-		_log it load_reglist daemon info "[ERR] invalid download from '$URL' to '$FILE'"
-	fi
-fi
