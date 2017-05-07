@@ -70,8 +70,9 @@ prompt_set
 
 if command -V neigh.sh >/dev/null; then
 	alias n='neigh.sh 2>/dev/null'
+fi
 
-	if command -V nmeter >/dev/null; then
+if command -V nmeter >/dev/null; then
 	echo '.... type nm for live cpu/memory/traffic stats'
 	alias nm="nmeter \"$(nmeter_cmd)\""
 fi
@@ -110,33 +111,7 @@ echo
 echo ".... hardware: $HARDWARE"
 echo ".... type _ for an overview of available commands"
 
-if [ -e '/tmp/REBOOT_REASON' ]; then
-	# see system_crashreboot()
-	read -r CRASH <'/tmp/REBOOT_REASON'
-	[ -e '/tmp/loader' ] && . /tmp/loader
-	_system include
-
-	case "$CRASH" in
-		'nocrash'|'nightly_reboot'|'apply_profile'|'wifimac_safed')
-			CRASH="$( _system reboots )"
-
-			test ${CRASH:-0} -gt 50 && {
-				echo "!!!! detected $CRASH reboots since last update - please check"
-			}
-		;;
-		*)
-			UNIXTIME=$( date +%s )
-			UPTIME=$( _system uptime sec )
-			printf '\n%s' "!!!! last reboot unusual @ $( date -d @$(( UNIXTIME - UPTIME )) ) - "
-
-			if [ -e '/sys/kernel/debug/crashlog' ]; then
-				printf '%s\n\n' "was: $CRASH, see with: cat /sys/kernel/debug/crashlog"
-			else
-				printf '%s\n\n' "was: $CRASH"
-			fi
-		;;
-	esac
-
-	unset CRASH UNIXTIME UPTIME
+if [ -e '/sys/kernel/debug/crashlog' ]; then
+	printf '%s\n\n' "!!!! last reboot was crash! see with: cat /sys/kernel/debug/crashlog"
 fi
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
