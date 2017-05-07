@@ -4,9 +4,8 @@ START=99
 
 uniq_machine_id()
 {
-	dropbearkey -y -f "/etc/dropbear/dropbear_rsa_host_key" |
-	 fgrep "Fingerprint:" |
-	  cut -d' ' -f3
+	dropbearkey -y -f "/etc/dropbear/dropbear_rsa_host_key" | \
+		fgrep "Fingerprint:" | cut -d' ' -f3
 }
 
 kernel_version()
