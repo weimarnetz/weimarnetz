@@ -37,18 +37,18 @@ node2nets_json()
                 json_add_string "lan" "$network.$city.$n.$((s+32+1))/28"
                 json_add_string "radio0_mesh" "$network.$city.$n.$((s+48))/32"
                 json_add_string "radio1_mesh" "$network.$city.$n.$((s+49))/32"
-                local roamingnet="$(_calc_roaming_net $nodenumber)"
+                local roamingnet="$(__calc_roaming_net $nodenumber)"
 		json_add_string "roaming_block" "100.64.0.1/10" 
                 json_add_string "roaming_net" "$roamingnet"
 		json_add_string "roaming_gw" "100.64.0.1"
-                json_add_string "roaming_dhcp_offset" "$(_dhcp_offset $roamingnet)"
+                json_add_string "roaming_dhcp_offset" "$(__dhcp_offset $roamingnet)"
                 json_dump
         else
                 return 1
         fi
 }
 
-_calc_roaming_net() {
+__calc_roaming_net() {
         local nodenumber="$1"
         local i=2
         local o2=64 
@@ -65,7 +65,7 @@ _calc_roaming_net() {
         echo "100.$o2.$o3.0/24"
 }
 
-_dhcp_offset() {
+__dhcp_offset() {
 
 awk -f - "$*" <<EOF
 

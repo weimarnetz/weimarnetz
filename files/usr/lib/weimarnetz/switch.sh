@@ -1,8 +1,11 @@
 #!/bin/sh
 
-# swconfig dev switch0 set reset 1; /etc/init.d/network restart
+log() {
+        logger -s -t switch.sh: "$@"
+}
 
-_switch_query_robocfg()
+
+__switch_query_robocfg()
 {
 	local funcname='switch_query_robocfg'
 	local port_list="$1"
@@ -11,17 +14,17 @@ _switch_query_robocfg()
 
 	for port in $port_list; do {
 		[ "$port" = 'gap' ] && {
-			_switch symbol gap
+			__switch symbol gap
 			continue
 		}
 
 		line="$( robocfg show 2>/dev/null | grep -F "Port ${port}(" )"
 		[ -n "$debug" ] && \
-			_log it $funcname daemon debug "port: $port line '$line'"
+			log $funcname daemon debug "port: $port line '$line'"
 
 		case "$line" in
 			*'DOWN'*)
-				_switch symbol down
+				__switch symbol down
 			;;
 			*)
 				case "$line" in
@@ -35,13 +38,13 @@ _switch_query_robocfg()
 
 				case "$line" in
 					*':  10'*)
-						_switch symbol "$duplex" 10
+						__switch symbol "$duplex" 10
 					;;
 					*': 100'*)
-						_switch symbol "$duplex" 100
+						__switch symbol "$duplex" 100
 					;;
 					*)
-						_switch symbol unknown
+						__switch symbol unknown
 					;;
 				esac
 			;;
@@ -49,7 +52,7 @@ _switch_query_robocfg()
 	} done
 }
 
-_switch_query_swconfig()	# SENSE: show a single switch-port of a 'swconfig'-controlled switch
+__switch_query_swconfig()	# SENSE: show a single switch-port of a 'swconfig'-controlled switch
 {
 	local funcname='switch_query_swconfig'
 	local port_list="$1"
@@ -62,7 +65,7 @@ _switch_query_swconfig()	# SENSE: show a single switch-port of a 'swconfig'-cont
 
 	for port in $port_list; do {
 		[ "$port" = "gap" ] && {
-			_switch symbol gap
+			__switch symbol gap
 			continue
 		}
 
@@ -75,16 +78,16 @@ _switch_query_swconfig()	# SENSE: show a single switch-port of a 'swconfig'-cont
 		} done
 
 		[ -n "$debug" ] && \
-			_log it $funcname daemon debug "type: $type port: $port line '$line'"
+			log $funcname daemon debug "type: $type port: $port line '$line'"
 
 		# why this lead to unknown? line: '		link: port:0 link:down'
 
 		case "$line" in
 			*"link: port:$port link: down"*)
-				_switch symbol down
+				__switch symbol down
 			;;
 			*"link: port:$port link:down"*)
-				_switch symbol down
+				__switch symbol down
 			;;
 			*"link:up"*)
 				case "$line" in
@@ -98,27 +101,27 @@ _switch_query_swconfig()	# SENSE: show a single switch-port of a 'swconfig'-cont
 
 				case "$line" in
 					*"speed:10baseT"*)
-						_switch symbol "$duplex" 10
+						__switch symbol "$duplex" 10
 					;;
 					*"speed:100baseT"*)
-						_switch symbol "$duplex" 100
+						__switch symbol "$duplex" 100
 					;;
 					*"speed:1000baseT"*)
-						_switch symbol "$duplex" 1000
+						__switch symbol "$duplex" 1000
 					;;
 					*)
-						_switch symbol "unknown" "link:up '$line'"
+						__switch symbol "unknown" "link:up '$line'"
 					;;
 				esac
 			;;
 			*)
-				_switch symbol "unknown" "port $port line: '$line'"
+				__switch symbol "unknown" "port $port line: '$line'"
 			;;
 		esac
 	} done
 }
 
-_switch_query_mii()		# SENSE: show port of a 'MII'-interface
+__switch_query_mii()		# SENSE: show port of a 'MII'-interface
 {
 	local funcname='switch_query_mii'
 	local port_list="$1"
@@ -128,7 +131,7 @@ _switch_query_mii()		# SENSE: show port of a 'MII'-interface
 
 	for port in $port_list; do {
 		[ "$port" = 'gap' ] && {
-			_switch symbol gap
+			__switch symbol gap
 			continue
 		}
 
@@ -155,11 +158,11 @@ _switch_query_mii()		# SENSE: show port of a 'MII'-interface
 		} done
 
 		[ -n "$debug" ] && \
-			_log it $funcname daemon debug "port: $port line '$line'"
+			log $funcname daemon debug "port: $port line '$line'"
 
 		case "$line" in
 			"$port: no link"|*'Link detected: no'*)
-				_switch symbol down
+				__switch symbol down
 			;;
 			*'link ok'*|*'Link detected: yes'*)
 				# "ethX: no autonegotiation, 100baseTx-HD, link ok"
@@ -185,27 +188,27 @@ _switch_query_mii()		# SENSE: show port of a 'MII'-interface
 
 				case "$line" in
 					*' 1000baseT'*|*'1000 Mbit'*|*'Speed: 1000Mb/s'*|*'1000'*)
-						_switch symbol $duplex 1000
+						__switch symbol $duplex 1000
 					;;
 					*' 100baseT'*|*'100 Mbit'*|*'Speed: 100Mb/s'*|*'100'*)
-						_switch symbol $duplex 100
+						__switch symbol $duplex 100
 					;;
 					*' 10baseT'*|*'10 Mbit'*|*'Speed: 10Mb/s'*|*'10'*)
-						_switch symbol $duplex 10
+						__switch symbol $duplex 10
 					;;
 					*)
-						_switch symbol unknown
+						__switch symbol unknown
 					;;
 				esac
 			;;
 			*)
-				_switch symbol unknown
+				__switch symbol unknown
 			;;
 		esac
 	} done
 }
 
-_switch_show()		# SENSE: show all switch-ports, e.g. 'C.bB-C' = "1GB gap 100mbit/halfduplex 100mbit nothing 1GB"
+switch_show()		# SENSE: show all switch-ports, e.g. 'C.bB-C' = "1GB gap 100mbit/halfduplex 100mbit nothing 1GB"
 {
 	local funcname='switch_show'	# TODO: annotate wanports
 	local debug="$1"		# string: <empty>, 'debug', 'html' or 'wan'
@@ -244,88 +247,88 @@ _switch_show()		# SENSE: show all switch-ports, e.g. 'C.bB-C' = "1GB gap 100mbit
 			# older revisions cannot work with 'swconfig' and use 'robocfg'
 			# WAN | 4 x LAN  - tested with r38650
 			if [ -e '/sbin/robocfg' ]; then
-				_switch query_robocfg '0 gap 1 2 3 4' "$debug"
+				__switch query_robocfg '0 gap 1 2 3 4' "$debug"
 			else
-				_switch query_swconfig '4 gap 3 2 1 0' "$debug"
+				__switch query_swconfig '4 gap 3 2 1 0' "$debug"
 			fi
 		;;
 		'Xiaomi Miwifi mini')
 			# power | WAN | LAN2 | LAN1 | USB
-			_switch query_mii 'eth0' "$debug"
-			_switch query_swconfig 'gap 1 gap 0' "$debug"
+			__switch query_mii 'eth0' "$debug"
+			__switch query_swconfig 'gap 1 gap 0' "$debug"
 		;;
 		'Nexx WT3020'*)
 			# WAN | LAN | power
-			_switch query_swconfig '0 gap 4' "$debug"
+			__switch query_swconfig '0 gap 4' "$debug"
 		;;
 		'TP-LINK CPE210'|'TP-LINK CPE220'|'TP-LINK CPE510'|'TP-LINK CPE520')
 			# LAN ("main") | WAN ("2nd")
-			_switch query_swconfig '5 gap 4' "$debug"
+			__switch query_swconfig '5 gap 4' "$debug"
 		;;
 		'TP-LINK TL-WR1043ND'|'TP-LINK TL-WR841N/ND v7'|'TP-LINK TL-WR741ND v2'|'ASUS WL-500g Premium')
 			# WAN | 4 x LAN
-			_switch query_swconfig '0 gap 1 2 3 4' "$debug"
+			__switch query_swconfig '0 gap 1 2 3 4' "$debug"
 		;;
 		'TP-LINK TL-WDR3600'|'TP-LINK TL-WDR4300'|'TP-LINK TL-WDR4310'|'TP-LINK TL-WDR4900 v1'|\
 		'TP-LINK TL-WDR3600/4300/4310'|'TP-LINK Archer C7 v2')
 			# WAN | 4 x LAN | CPU = port0
-			_switch query_swconfig '1 gap 2 3 4 5' "$debug"
+			__switch query_swconfig '1 gap 2 3 4 5' "$debug"
 		;;
 		'TP-LINK TL-WR1043ND v2')
 			# WAN | 4 x LAN
-			_switch query_swconfig '5 gap 4 3 2 1' "$debug"
+			__switch query_swconfig '5 gap 4 3 2 1' "$debug"
 		;;
 		'TP-LINK TL-WR841N/ND v8')
 			# WAN | 4 x LAN
-			_switch query_mii 'eth0' "$debug"
-			_switch query_swconfig 'gap 2 3 4 1' "$debug"
+			__switch query_mii 'eth0' "$debug"
+			__switch query_swconfig 'gap 2 3 4 1' "$debug"
 		;;
 		'TP-LINK TL-WR940N'|'MERCURY MAC1200R')
 			# WAN | 4 x LAN
-			_switch query_mii 'eth1' "$debug"
-			_switch query_swconfig 'gap 4 3 2 1' "$debug"
+			__switch query_mii 'eth1' "$debug"
+			__switch query_swconfig 'gap 4 3 2 1' "$debug"
 		;;
 		'MQmaker WiTi')
 			# WAN1 | WAN2 | 4 x LAN
-			_switch query_mii "$WANDEV" "$debug"
-			_switch query_swconfig 'gap 5 gap 4 3 2 1' "$debug"
+			__switch query_mii "$WANDEV" "$debug"
+			__switch query_swconfig 'gap 5 gap 4 3 2 1' "$debug"
 		;;
 		'Buffalo WZR-HP-AG300H')
 			# WAN | 4 x LAN
-			_switch query_mii 'eth1' "$debug"
-			_switch query_swconfig 'gap 1 2 3 4' "$debug"
+			__switch query_mii 'eth1' "$debug"
+			__switch query_swconfig 'gap 1 2 3 4' "$debug"
 		;;
 		'Ubiquiti Nanostation M'*)
 			# LAN ("main") | WAN ("secondary")
-			_switch query_swconfig '1' "$debug"
-			_switch query_mii 'eth0' "$debug"
+			__switch query_swconfig '1' "$debug"
+			__switch query_mii 'eth0' "$debug"
 		;;
 		'Ubiquiti Nanostation'*|'TP-LINK TL-WR703N v1'|'Speedport W500V'|'T-Mobile InternetBox'|\
 		'Ubiquiti Picostation'*|'Ubiquiti Bullet M'*|'Ubiquiti Picostation M'*|'Seagate GoFlex Home'|\
 		'D-Link DIR-505 A1'|'D-Link DIR-505L A1'|'D-Link DIR-505L A2'|'Cubietruck')
-			_switch query_mii "${LANDEV:-$WANDEV}" "$debug"
+			__switch query_mii "${LANDEV:-$WANDEV}" "$debug"
 		;;
 		'PC Engines ALIX.2'|'Mikrotik Routerboard 532')		# TODO: rb532
 			# power | WAN | LAN | LAN2 | serial
-			_switch query_mii "eth0 gap eth1 gap eth2" "$debug"
+			__switch query_mii "eth0 gap eth1 gap eth2" "$debug"
 		;;
 		'PC Engines WRAP')
 			# power | LAN | WAN | serial			# BOOTP via WAN
-			_switch query_mii 'eth1 gap eth0' "$debug"
+			__switch query_mii 'eth1 gap eth0' "$debug"
 		;;
 		'Soekris net5501')
 			# power | serial | WAN | LAN | LAN | LAN
-			_switch query_mii 'eth0 eth1 eth2 eth3' "$debug"
+			__switch query_mii 'eth0 eth1 eth2 eth3' "$debug"
 		;;
 		'UML'|'Intel'*|'AMD Opteron'*|*'QEMU Virtual CPU'*|'x86_64'|*'ARMv7'*)
 			# sane (but maybe wrong) fallback for e.g. VPN-Server
-			_switch symbol full 1000
-			_switch symbol gap
-			_switch symbol full 1000
+			__switch symbol full 1000
+			__switch symbol gap
+			__switch symbol full 1000
 		;;
 		*)
-			_log it $funcname daemon debug "unknown hardware: '$HARDWARE'"
-			_switch symbol unimplemented
+			log $funcname daemon debug "unknown hardware: '$HARDWARE'"
+			__switch symbol unimplemented
 		;;
 	esac
 
@@ -333,35 +336,35 @@ _switch_show()		# SENSE: show all switch-ports, e.g. 'C.bB-C' = "1GB gap 100mbit
 	unset I SWITCH_SYMBOL_HTML	# I = port counter, see symbol()
 }
 
-_switch_test()
+__switch_test()
 {
-	_switch symbol html_init
+	__switch symbol html_init
 
-	_switch symbol html		 'Cisco Catalyst WS-C2960G-24TC-L'
-	_switch symbol newline
+	__switch symbol html		 'Cisco Catalyst WS-C2960G-24TC-L'
+	__switch symbol newline
 
-	_switch symbol full		 100  1    'X'
-	_switch symbol full		 100  3
-	_switch symbol down		 -	  5
-	_switch symbol full		 100  7    '&clubs;'
-	_switch symbol gap
-	_switch symbol downFIBER -	 LWL-1
-	_switch symbol downFIBER -	 LWL-2
+	__switch symbol full		 100  1    'X'
+	__switch symbol full		 100  3
+	__switch symbol down		 -	  5
+	__switch symbol full		 100  7    '&clubs;'
+	__switch symbol gap
+	__switch symbol downFIBER -	 LWL-1
+	__switch symbol downFIBER -	 LWL-2
 
-	_switch symbol newline
+	__switch symbol newline
 
-	_switch symbol error
-	_switch symbol down		 -	  4
-	_switch symbol full		 10   6
-	_switch symbol down		 -	  8
-	_switch symbol gap
-	_switch symbol FIBER	 1G  LWL-3 'X'
-	_switch symbol FIBER	 1G  LWL-4 'Y'
+	__switch symbol error
+	__switch symbol down		 -	  4
+	__switch symbol full		 10   6
+	__switch symbol down		 -	  8
+	__switch symbol gap
+	__switch symbol FIBER	 1G  LWL-3 'X'
+	__switch symbol FIBER	 1G  LWL-4 'Y'
 
-	_switch symbol html_end
+	__switch symbol html_end
 }
 
-_switch_symbol()	# SENSE: represent each port with a short letter: [a-cA-C] = 10/100/100 half-duplex / full-duplex (capitalized)
+__switch_symbol()	# SENSE: represent each port with a short letter: [a-cA-C] = 10/100/100 half-duplex / full-duplex (capitalized)
 {
 	local funcname="switch_symbol"
 	local duplex="$1"		# gap|full|half|FIBER|unknown
@@ -468,7 +471,7 @@ _switch_symbol()	# SENSE: represent each port with a short letter: [a-cA-C] = 10
 		*)
 			[ -e "/tmp/switch_unknown_$port" ] || {
 				touch "/tmp/switch_unknown_$port"
-				_log it $funcname daemon alert "$duplex: ${speed:-nospeed} $port"
+				log $funcname  "$duplex: ${speed:-nospeed} $port"
 			}
 
 			symbol_text='Z'		# means: 'unknown/error'
@@ -482,7 +485,7 @@ _switch_symbol()	# SENSE: represent each port with a short letter: [a-cA-C] = 10
 		*)
 			[ -e "/tmp/switch_unknown_$port" ] && {
 				rm "/tmp/switch_unknown_$port"
-				_log it $funcname daemon alert "recover from error: $symbol_text $duplex: ${speed:-nospeed} $port"
+				log $funcname  "recover from error: $symbol_text $duplex: ${speed:-nospeed} $port"
 			}
 		;;
 	esac
@@ -493,4 +496,5 @@ _switch_symbol()	# SENSE: represent each port with a short letter: [a-cA-C] = 10
 		printf '%s' "$symbol_text"
 	fi
 }
+
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

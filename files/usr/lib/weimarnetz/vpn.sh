@@ -1,6 +1,8 @@
 #!/bin/sh
 # shellcheck disable=SC2039
 
+
+
 _vpn_needed()
 {
 	[ -z "$INETOFFER" ] && INETOFFER="$( _net local_inet_offer )"
