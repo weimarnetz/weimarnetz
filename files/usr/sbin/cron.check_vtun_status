@@ -1,32 +1,4 @@
 #!/bin/sh
-# http://unix.stackexchange.com/a/22062
-
-log() {
-        logger -s -t "$0" system "$@"
-}
-
-lockfile=/tmp/$0.lock
-tmpfile=${lockfile}.$$
-echo $$ > $tmpfile
-if ln $tmpfile $lockfile 2>&-; then
-    : 
-else
-    log "locked by $(<$lockfile)"
-    rm $tmpfile
-    exit
-fi
-trap "rm ${tmpfile} ${lockfile}" 0 1 2 3 15
-# do what you need to
-. /tmp/loader
-
-# here we check if we have a local inet connection and start vtun if it isn't already running
-# DATE=2011jan24_11:15; HOSTNAME=ejbw-mesh-dhcp-99.olsr; COST_INT=1000; GATEWAY=10.10.99.33; NEXTHOP=192.168.100.22; METRIC=1
-
-test   -e "/tmp/LOWMEM"                         && exit
-test   -n "$FAILSAFE"                           && exit
-test ! -e "/www/SOFTWARE_FULLY_INSTALLED"       && exit
-
-_olsr uptime is_short && exit
 
 _net local_inet_offer && {
 	_watch vpn || {

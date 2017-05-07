@@ -4,12 +4,12 @@
 . /usr/share/libubox/jshn.sh
 
 log() {
-	logger -s -t apply_profile "$@"
+	logger -s -t ffwizard "$@"
 }
 
-[ -n "$(uci -q get meshnode.settings.nodenumber)" ] || return 1
+[ -n "$(uci -q get ffwizard.settings.nodenumber)" ] || return 1
 
-wdir="/etc/apply_profile.d"
+wdir="/usr/lib/ffwizard.d"
 [ -d $wdir ] || return 0
 files="$(find $wdir -type f | sort)"
 [ -z "$files" ] && return 0

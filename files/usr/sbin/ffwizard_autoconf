@@ -4,7 +4,7 @@
 . /usr/share/libubox/jshn.sh
 
 log() {
-	logger -s -t apply_profile_autoconf $@
+	logger -s -t ffwizard_autoconf $@
 }
 
 log "autoconf started"

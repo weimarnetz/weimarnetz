@@ -48,43 +48,6 @@ _scheduler_queue_list()
 	}
 }
 
-_scheduler_print_usage()
-{
-	:
-}
-
-_scheduler_wait_till_cpuload_is_low()
-{
-	local funcname='scheduler_wait_till_cpuload_is_low'
-	local task="$1"
-	local pause=23
-
-	LOAD=
-	while _system load 1min quiet; test $LOAD -gt 80 ; do {
-		_log it $funcname daemon info "PID: $$ - load: $LOAD - waiting $pause sec for '$task'"
-		sleep $pause
-		[ $( _system uptime sec ) -lt 3600 ] && return 0
-	} done
-}
-
-_scheduler_allow_run()
-{
-	local funcname='scheduler_allow_run'
-	local lockfile="$1"
-
-	[ -e "$lockfile" ] || return 0
-	[ -e "$TMPDIR/$funcname" -o -e "/tmp/$funcname" ] && return 0		# override: FIXME!
-
-	if [ $( _stopwatch stop "$lockfile.start" interim,nolog,seconds ) -gt 3600 ]; then
-		_log it $funcname daemon alert 'removing lockfile, which seems to be left by accident'
-		rm "$lockfile" "$lockfile.start"
-		return 0
-	else
-		_log it $funcname daemon info "will not allow, see lockfile '$lockfile'"
-		return 1
-	fi
-}
-
 _scheduler_run()
 {
 	local funcname='scheduler_run'
@@ -92,7 +55,6 @@ _scheduler_run()
 	local logfile='/tmp/scheduler.log'
 	local newline='
 '
-	_scheduler allow_run "$logfile" || return 1
 	touch "$logfile" '/tmp/scheduler.mark_starttime'
 
 	# SCHEDULER_QUEUE includes IMPORTANT (e.g. important_*) and
