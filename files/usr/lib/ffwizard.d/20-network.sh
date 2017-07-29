@@ -62,7 +62,6 @@ setup_ether() {
 	[ "$enabled" -eq "1" ] || return 
 	config_get device "$cfg" device "none"
 	[ "$device" = "none" ] && return
-	log_net "$nodedata"
 	json_init
 	json_load "$nodedata"
 	json_get_var ipaddr "$device"
@@ -117,9 +116,8 @@ setup_wifi() {
 	#wifi-iface
 
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
-
 	json_init	
-	json_load "$nodedata"  
+	json_load "$nodedata"
 	json_get_var ipaddr "${device}_mesh"
 
 	if [ "$olsr_mesh" -eq "1" ] || [ "$bat_mesh" -eq "1" ]; then
@@ -192,9 +190,9 @@ wifi config
 uci_commit wireless
 #Remove wifi ifaces
 # FIXME leave disabled iface alone
-#config_load wireless
-#config_foreach remove_wifi wifi-iface
-#uci_commit wireless
+config_load wireless
+config_foreach remove_wifi wifi-iface
+uci_commit wireless
 
 #Setup ether and wifi
 config_load ffwizard
