@@ -1,7 +1,6 @@
 #!/bin/sh 
 # shellcheck disable=SC2039
 
-. /usr/lib/weimarnetz/ipsystem.sh
 . /lib/functions/network.sh
 
 log_olsr4() {
@@ -190,7 +189,6 @@ config_foreach setup_wifi wifi "$nodenumber"
 config_foreach setup_vpn vpn "$nodenumber"
 
 # setup hna4 
-nodedata=$(node2nets_json "$nodenumber")
 json_init
 json_load "$nodedata"
 json_get_var node_net node_net

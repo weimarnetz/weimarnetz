@@ -108,8 +108,9 @@ case "$USER" in
 esac
 
 echo
-echo ".... hardware: $HARDWARE"
-echo ".... type _ for an overview of available commands"
+if [ -e "/tmp/sysinfo/model" ]; then
+	echo ".... hardware: $(cat /tmp/sysinfo/model)"
+fi
 
 if [ -e '/sys/kernel/debug/crashlog' ]; then
 	printf '%s\n\n' "!!!! last reboot was crash! see with: cat /sys/kernel/debug/crashlog"

@@ -1,7 +1,5 @@
-#!/bin/sh -x 
+#!/bin/sh 
 # shellcheck disable=SC2039
-
-. /usr/lib/weimarnetz/ipsystem.sh
 
 log_net() {
 	logger -s -t ffwizard_net "$@"
@@ -27,6 +25,7 @@ setup_ip() {
 	fi
 	uci_set network "$cfg" proto 'static'
 	uci_set network "$cfg" ip6assign '64'
+	log_net ${cfg}: $ipaddr
 }
 
 setup_bridge() {
@@ -42,10 +41,10 @@ setup_bridge() {
 
 setup_vpn() {
 	local cfg="$1"
-	if uci_get network "$cfg"; then 
+	if uci_get network "$cfg" >/dev/null; then 
 		uci_remove network "$cfg"
 	fi 
-	if uci_get network "tap0"; then 
+	if uci_get network "tap0" >/dev/null; then 
 		uci_remove network "tap0"
 	fi
 	uci_add network interface "$cfg"
@@ -66,8 +65,10 @@ setup_ether() {
 	json_init
 	json_load "$nodedata"
 	json_get_var ipaddr "$device"
-	[ -z "$ipaddr" ] && log_net "ERR $cfg - missing IP" 
-	log_net "Setup $cfg | IP $ipaddr"
+	[ -n "$ipaddr" ] || {
+		log_net "ERR $cfg - missing ip" 
+		return 1
+	}
 	setup_ip "$cfg" "$ipaddr"
 	json_cleanup
 }
@@ -80,62 +81,30 @@ setup_wifi() {
 	config_get enabled "$cfg" enabled "0"
 	[ -z "$enabled" ] && return
 	config_get idx "$cfg" idx "-1"
-	[ "$idx" -eq "-1" ] return
+	[ "$idx" -ge 0 ] || return
 	
 	local device="radio$idx"
-	log_wifi "Setup $cfg"
 
-	#get valid hwmods
-	local hw_ac=0
-	local hw_a=0
-	local hw_b=0
-	local hw_g=0
-	local hw_n=0
-	local info_data
-	info_data=$(ubus call iwinfo info '{ "device": "wlan'"$idx"'" }' 2>/dev/null)
-	[ -z "$info_data" ] && {
-		log_wifi "ERR No iwinfo data for wlan$idx"
-		return 1
-	}
-	json_init
-	json_load "$info_data"
-	json_select hwmodes
-	json_get_values hw_res
-	json_cleanup
-	[ -z "$hw_res" ] && {
-		log_wifi "ERR No iwinfo hwmodes for wlan$idx"
-		return 1
-	}
-	for i in $hw_res; do
-		case $i in
-			a)	hw_a=1	;;
-			ac) hw_ac=1 ;;
-			b)	hw_b=1	;;
-			g)	hw_g=1	;;
-			n)	hw_n=1	;;
-		esac
-	done
+	local channel 
+	local hwmode 
+	
+	hwmode=$(uci_get wireless "$device" hwmode)
+	
+	case $hwmode in 
+		11a*)
+			channel=40
+			;;
+		11g)
+			channel=5
+			;;
+		*)	log_wifi "ERR unknown hwmode: $hwmode"
+			;;
+	esac
+			
 
-	[  "$hw_a"	-eq "1" ] && log_wifi "$cfg: HWmode a"
-	[  "$hw_b"	-eq "1" ] && log_wifi "$cfg: HWmode b"
-	[  "$hw_g"	-eq "1" ] && log_wifi "$cfg: HWmode g"
-	[  "$hw_n"	-eq "1" ] && log_wifi "$cfg: HWmode n"
-	[  "$hw_ac" -eq "1" ] && log_wifi "$cfg: HWmode ac"
-
-	#get default channel depending on hw_mod
-	[ "$hw_ac" -eq "1" ] && channel=40
-	[ "$hw_a" -eq "1"  ] && channel=40
-	[ "$hw_b" -eq "1"  ] && channel=5
-	[ "$hw_g" -eq "1"  ] && channel=5
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
-	[  "$hw_g" -eq "1" ] || [ "$hw_n" -eq "1"  ] && uci_set wireless "$device" noscan "1"
-	[  "$hw_n" ]					 && uci_set wireless "$device" htmode "HT20"
-	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "1" ] && uci_set wireless "$device" htmode "VHT80"
-	[  "$hw_a" -eq "1" ] && [ "$hw_ac" -eq "0" ] && uci_set wireless "$device" htmode "HT40"
-
 	uci_set wireless "$device" country "DE"
-
 	uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
 	#Not working on wdr4300 with AP and ad-hoc
@@ -147,9 +116,8 @@ setup_wifi() {
 	#wifi-iface
 
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
-
 	json_init	
-	json_load "$nodedata"  
+	json_load "$nodedata"
 	json_get_var ipaddr "${device}_mesh"
 
 	if [ "$olsr_mesh" -eq "1" ] || [ "$bat_mesh" -eq "1" ]; then
@@ -181,11 +149,11 @@ setup_wifi() {
 	if [ "$vap" -eq "1" ] && \
 		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
-		log_wifi "Virtual AP Not Supported"
+		log_wifi "{cfg}: virtual ap not supported"
 		#uci_set ffwizard $cfg vap "0"
 	fi
-	if [ "$vap" -eq "1" ] ; then
-		log_wifi "${cfg}: Virtual AP"
+	if [ "$vap" -eq 1 ] ; then
+		log_wifi "${cfg}: virtual ap supported"
 		cfg_vap="${cfg}_vap"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
@@ -195,14 +163,13 @@ setup_wifi() {
 		uci_set wireless "$sec" network "$br_name"
 
 		config_get roaming settings roaming
-		if [ "$roaming" -eq "1" ]; then
+		if [ "$roaming" -eq 1 ]; then
 			json_get_var ipaddr roaming_block
 		    uci_set wireless "$sec" ssid "weimar.freifunk.net"
 		else 
 			json_get_var ipaddr wifi
 			uci_set wireless "$sec" ssid "weimarnetz.de | $nodenumber"
 		fi
-		log_wifi "${cfg}: $ipaddr"
 		setup_bridge "$br_name" "$ipaddr" "$roaming"
 	fi
 	json_cleanup
@@ -216,10 +183,11 @@ remove_wifi() {
 br_name="vap"
 
 #Remove wireless config
-rm /etc/config/wireless
-/sbin/wifi config 
-uci commit wireless 
-
+config_load wireless
+config_foreach remove_wifi wifi-device
+uci_commit wireless 
+wifi config
+uci_commit wireless
 #Remove wifi ifaces
 # FIXME leave disabled iface alone
 config_load wireless
@@ -228,8 +196,6 @@ uci_commit wireless
 
 #Setup ether and wifi
 config_load ffwizard
-config_get nodenumber settings nodenumber
-nodedata=$(node2nets_json "$nodenumber")
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber" "$br_name"
 config_foreach setup_vpn vpn 

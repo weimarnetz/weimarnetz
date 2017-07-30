@@ -1,8 +1,8 @@
-#!/bin/sh -x
+#!/bin/sh
 # shellcheck disable=SC2039
 
-log() {
-	logger -s -t ffwizard system "$@"
+log_system() {
+	logger -s -t ffwizard_system "$@"
 }
 
 setup_boot() {
@@ -13,7 +13,7 @@ setup_boot() {
 setup_sysctl()
 {
   
-    mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
+	mem=$(awk '/MemTotal/ { print $2}' < /proc/meminfo)
 	min_free=$(sysctl -n vm.min_free_kbytes)
 	[ "$mem" -lt 32768 ] && min_free=128
 
@@ -32,7 +32,7 @@ setup_sysctl()
 			echo "$entry" >>'/etc/sysctl.conf'
 		}
 	} done
-	/sbin/sysctl -p
+	/sbin/sysctl -qp 2> /dev/null
     
 }
 
@@ -41,13 +41,13 @@ setup_system() {
 	
 	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" ] ; then
 		config_get hostname "$cfg" hostname "$hostname"
-		log "No custom Hostname! Get sys Hostname $hostname"
+		log_system "No custom hostname! Using $hostname"
 	fi
 	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" ] ; then
 		hostname="weimarnetz-$nodenumber"
 		uci_set system "$cfg" hostname "$hostname"
 	else
-		log "Set Hostname $hostname"
+		log_system "Using $hostname"
 		uci_set system "$cfg" hostname "$hostname"
 	fi
 
