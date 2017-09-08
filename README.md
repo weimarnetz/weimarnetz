@@ -1,9 +1,9 @@
-kalua - build mesh-networks _without_ pain
-==========================================
+weimarnetz
+==========
 
-* community: http://wireless.subsignal.org | http://weimarnetz.de
+* community: http://wireless.subsignal.org | https://weimarnetz.de
 * monitoring: http://weimarnetz.de/monitoring
-* documentation: [API](http://wireless.subsignal.org/index.php?title=Firmware-Dokumentation_API)
+* documentation: [Wiki](https://github.com/weimarnetz/weimarnetz/wiki)
 
 
 Need support?
@@ -20,7 +20,7 @@ The `GebrannteMandeln` branch is the current stable version that is running on m
 how to get a release for a specific hardware
 --------------------------------------------
 
-for building this firmware yourself please see our builder at https://github.com/weimarnetz/builder or use the new build code here: https://gitlab.bau-ha.us/weimarnetz/firmware
+https://gitlab.bau-ha.us/weimarnetz/firmware
 
 Bleeding Edge Images with LEDE and the current master branch can be found here: http://weimarnetz.segfault.gq/firmwares/ 
 
