@@ -3,7 +3,7 @@
 uci -m import ffwizard <<EOF
 config node 'settings'
 	option hostname ''
-	option nodenumber ''
+	option nodenumber '-1'
 	option ipschema 'ffweimar'
 	option roaming '0'
 	option ipv6 '0'
