@@ -23,7 +23,7 @@ up_rules() {
 			# nat
 			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			[ "$(uci_get meshnode wan restrict)" -eq 1 ] && {
+			[ "$(uci_get ffwizard wan restrict)" -eq 1 ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ]  && {
@@ -42,7 +42,7 @@ up_rules() {
 				} 
 			}
 			# no internet without vpn
-			[ "$(uci_get meshnode vpn disabled)" -eq 0 ] && {
+			[ "$(uci_get ffwizard vpn disabled)" -eq 0 ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
@@ -79,7 +79,7 @@ down_rules() {
 			# nat
 			iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			[ "$(uci_get meshnode wan restrict)" -eq 1 ] && {
+			[ "$(uci_get ffwizard wan restrict)" -eq 1 ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ] && {
@@ -94,7 +94,7 @@ down_rules() {
 				}
 			}
 			# no internet without vpn
-			[ "$(uci_get meshnode vpn disabled)" -eq 0 ] && {
+			[ "$(uci_get ffwizard vpn disabled)" -eq 0 ] && {
 				iptables -D FORWARD -j paranoia-vpn
 				iptables -F paranoia-vpn
 				iptables -X paranoia-vpn
