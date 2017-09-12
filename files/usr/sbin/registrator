@@ -4,165 +4,142 @@
 . /usr/share/libubox/jshn.sh
 . /usr/lib/weimarnetz/network.sh 
 
-nodenumber=$(uci_get meshnode settings nodenumber -1)
 
-[ "$nodenumber" -gt 1 ] || {
-	echo "Error! No nodenumber!"
-	exit 1
+log() {
+        logger -s -t registrator "$@"
 }
 
-fingerprint=$(dropbearkey -f /etc/dropbear/dropbear_rsa_host_key  -y | awk '/Fingerprint:/ { print $3 }')
+
+change=0
+nodenumber=$(uci_get ffwizard settings nodenumber -1)
+network=$(uci_get ffwizard settings ipschema ffweimar)
+host=$(uci_get ffwizard settings registrator "reg.weimarnetz.de")
+
+for type in rsa dss; do
+        path="/etc/dropbear/dropbear_${type}_host_key"
+        [ -e "$path" ] || continue
+        fingerprint=$(dropbearkey -f "$path" -y | awk '/Fingerprint:/ { print $3 }')
+done 
 
 __getmac() {
-	. /lib/functions/network.sh
-	network_get_physdev physdev lan
-	data=$(devstatus "$physdev")
-	json_load "$data"
-	json_get_var mac macaddr
-	json_cleanup
-	echo "$mac"
+        . /lib/functions/network.sh
+        network_get_physdev physdev lan
+        data=$(devstatus "$physdev")
+        json_load "$data"
+        json_get_var mac macaddr
+        json_cleanup
+        echo "$mac"
 }
 
 mac=$(__getmac)
 
-echo $fingerprint
-echo $mac
-
-
 __request() {
-	
+        local type="$1"
+        local userknoten="${2-nodenumber}"
 
+        case "$type" in
+                create)
+                        local method='POST' 
+                        url="http://${host}/${method}/${network}/knoten?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"
+
+                        json_init 
+                        json_load "$answer"
+                        json_get_var status 'status'
+
+                        case "$status" in
+                                '20*')
+                                        newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')  
+                                        [ -n "$newnumber" ] && {                                       
+                                                log "node got a new knotennummer: $newnumber"            
+                                        }                                                              
+                                        uci_set ffwizard settings nodenumber "$newnumber"
+                                        change=1
+                                ;;
+                                '*')
+                                        log "error: $answer"
+                                ;;
+                                '303')
+                                        newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')
+                                        [ -n "$newnumber" ] && { 
+                                                log "node already has a number: $newnumber" 
+                                        }
+                                        uci_set ffwizard settings nodenumber "$newnumber"
+                                        change=1
+                                ;;
+                        esac
+                ;;
+                heartbeat)
+                        [ "$nodenumber" -gt 1 ] || {
+                            log "Error! No nodenumber!"
+                            exit 1
+                        }
+                        local method='GET'                                                            
+                        url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"                                                
+                                                                                                       
+                        json_init                                                                      
+                        json_load "$answer"                                                            
+                        json_get_var status 'status'                                                   
+                                                                                                       
+                        case "$status" in                                                              
+                                '200')
+                                        method='PUT'
+                                        answer="$(net_http_get "$url")"
+                                        log "heartbeat: $(echo "$answer" | jsonfilter -e '$.message')"                                                                 
+                                ;;                                                                     
+                                '*')                                                                   
+                                        json_dump                                                      
+                                        log "heartbeat: error: $answer"                                           
+                                ;;                                                                     
+                        esac                      
+                ;;
+                register)
+                        [ "$userknoten" -gt 1 ] || {
+                            log "Error! No nodenumber!"
+                            exit 1
+                        }
+                        local method='GET'                                                             
+                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"                                                              
+                        echo "$answer"                                                                                             
+                        json_init                                                                                    
+                        json_load "$answer"                                                                          
+                        json_get_var status 'status'                                                                 
+                                                                                                                     
+                        case "$status" in                                                                            
+                                '404')                                                                               
+                                        method='PUT'                                                                 
+                                        answer="$(net_http_get "$url")"                                              
+                                        log "register: $(echo "$answer" | jsonfilter -e '$.result')"
+                                        change=1
+                                        uci set ffwizard settings nodenumber "$userknoten"
+                                                       
+                                ;;
+                                '200')
+                                        log "register: already exists: $(echo "$answer" | jsonfilter -e '$.result')"                                                                                    
+                                ;;
+                                '*')                                                                                 
+                                        json_dump                                                                    
+                                        log "register: error: $answer"                                                                      
+                                ;;                                                                                   
+                        esac      
+                ;;
+        esac
 }
 
-	# API call is: Send an 'Update' for our NODENUMBER, with MAC and PASS.
-	# - if the NODENUMBER did not exist, it will be created with the supplied data
-	# - if the NODENUMBER did exist,
-	#     - and the PASS did not match: Error
-	#     - and PASS did match: Success (and extension of lease in registrator)
-	URL="$URL_BASE/PUT/$NETWORK/knoten/$NODENUMBER?mac=${MAC}&pass=${PASS}"
-	HTTP_ANSWER="$( _curl it "$URL" 30 )"
 
-	# call API and convert JSON answer to shell variables
-	# answer e.g.:
-	# {
-	#  "status": 200,
-	#  "message": "updated",
-	#  "result": {
-	#    "number": 261,
-	#    "mac": "106f3f0e318e",
-	#    "last_seen": 1395749203533,
-	#    "network": "ffweimar",
-	#    "location": "/ffweimar/knoten/261"
-	#  }
-	# }
-	#
-	# or:
-	#
-	# {
-	#  "status": 201,
-	#  "message": "Created!",
-	#  "result": {
-	#    "number": 269,
-	#    "mac": "6466b3ded9d7",
-	#    "last_seen": 1395752262820,
-	#    "network": "ffweimar",
-	#    "location": "/ffweimar/knoten/269"
-	#  }
-	# }
-
-	json_load "$HTTP_ANSWER"
-	json_get_var 'JSON_VAR_status' 'status'
-	json_get_var 'JSON_VAR_message' 'message'
-
-	# check if we've got HTTP Status 401 'Not Authorized'
-	case "$JSON_VAR_status" in
-		'401')
-			# {
-			#   "status": 401,
-			#   "msg": "Unauthorized!",
-			#   "result": "Wrong $PASS"
-			# }
-
-			# TODO: resetting the number here would auto-recover lost passwords
-			#       and assign new NODENUMBER on next try. like this:
-			#	uci delete system.profile.nodenumber
-			_log it registrator daemon alert "[ERR] somebody has your number '$NODENUMBER' or your pass/sshkey-fingerprint has changed"
-
-			# API call is: Send a 'Create', with MAC and PASS.
-			# - successful answer *always* contains our NODENUMBER
-			# - if a new NODENUMBER was registered for us, status is 201 Created
-			# - if a NODENUMBER with same MAC already existed, status is 303 Redirect
-			URL="$URL_BASE/POST/$NETWORK/knoten?mac=${MAC}&pass=${PASS}"
-			HTTP_ANSWER="$( _curl it "$URL" 30 )"
-
-			# call API and convert JSON answer to shell variables
-			#
-			# {
-			#   "status": 404,
-			#   "msg": "Not Found!",
-			#   "result": "Network liszt28 not found!"
-			# }
-			#
-			# {
-			#   "status": 303,
-			#   "msg": "MAC already registered!",
-			#   "result": {
-			#     "number": 808,
-			#     "mac": "00049fef0101",
-			#     "last_seen": 1414295261121,
-			#     "network": "ffweimar",
-			#     "location": "/ffweimar/knoten/808"
-			#   }
-			# }
-			#
-			# {
-			#   "status": 201,
-			#   "message": "Created!",
-			#   "result": {
-			#     "number": 4,
-			#     "mac": "345678123499",
-			#     "last_seen": 1417554501131,
-			#     "network": "ffweimar",
-			#     "location": "/ffweimar/knoten/4"
-			#   }
-			# }
-
-			json_load "$HTTP_ANSWER"
-			json_get_var 'JSON_VAR_status' 'status'
-			json_get_var 'JSON_VAR_message' 'message'
-			json_get_var 'JSON_VAR_result_number' 'number'
-
-			# if the status is >400, there was some kind of error
-			if [ 2>/dev/null "${JSON_VAR_status:-0}" -lt 400 ]; then
-				# check if the answer contains a NODENUMBER
-				if [ 2>/dev/null "$JSON_VAR_result_number" -gt 1 -a "$JSON_VAR_result_number" != "$NODENUMBER" ]; then
-					_log it registrator daemon alert "[OK] new nodenumber: '$JSON_VAR_result_number'"
-					# check with `_ipsystem` if it is a *valid* NODENUMBER
-					if _ipsystem get "$JSON_VAR_result_number" >/dev/null ; then
-						# TODO: does one of these already save the number to uci ???
-						NETWORK="$( echo "$CONFIG_PROFILE" | cut -d'_' -f1 )"
-						MODE="$( echo "$CONFIG_PROFILE" | cut -d'_' -f2 )"
-						/etc/init.d/apply_profile.code "$NETWORK" "$MODE" "$JSON_VAR_result_number"
-					else
-						_log it error daemon info "nodenumber invalid: '$JSON_VAR_result_number'"
-					fi
-				else
-					_log it error daemon info "new number invalid: '$JSON_VAR_result_number'"
-				fi
-			else
-				_log it error daemon info "message: '$JSON_VAR_message'"
-			fi
-		;;
-		'201')
-			_log it heartbeat daemon alert "OK: HTTP-Status: '$JSON_VAR_status' -> '$JSON_VAR_message'"
-			_log it heartbeat daemon alert "OK: HTTP-Answer: '$HTTP_ANSWER'"
-		;;
-		'200')
-			_log it heartbeat daemon info 'OK'
-		;;
-		*)
-			_log it heartbeat daemon alert "[ERR] HTTP-Status: '$JSON_VAR_status' -> '$JSON_VAR_message'"
-			_log it heartbeat daemon alert "[ERR] HTTP-Answer: '$HTTP_ANSWER'"
-		;;
-	esac
-
+if [ "$#" -lt 1 ]; then
+        cat <<- EOF
+        usage: $0 create - create and apply a new knotennummer 
+               $0 register <nodenumber> - register and apply a nodenumber
+               $0 heartbeat - update last-seen  
+        EOF
+else
+        __request "$1" "$2"
+fi
+ 
+[ "$change" -eq 1 ] && {
+        log "configuration change detected: running ffwizard" 
+        ffwizard 
+}
