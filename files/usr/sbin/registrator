@@ -6,7 +6,7 @@
 
 
 log() {
-	logger -s -t registrator "$@"
+        logger -s -t registrator "$@"
 }
 
 
@@ -49,12 +49,12 @@ __request() {
 
 			case "$status" in
 				'20*')
-					newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')  
-					[ -n "$newnumber" ] && {				       
-						log "node got a new knotennummer: $newnumber"		 
-						uci_set ffwizard settings nodenumber "$newnumber"
+                                        newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')  
+                                        [ -n "$newnumber" ] && {                                       
+                                                log "node got a new knotennummer: $newnumber"            
+                                        	uci_set ffwizard settings nodenumber "$newnumber"
 						change=1
-					}
+					}	
 				;;
 				'*')
 					log "error: $answer"
@@ -70,60 +70,51 @@ __request() {
 			esac
 		;;
 		heartbeat)
-			[ "$nodenumber" -gt 1 ] || {
-			    log "Error! No nodenumber!"
-			    exit 1
-			}
-			local method='GET'							      
-			url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
-			answer="$(net_http_get "$url")"						       
-												       
-			json_init								       
-			json_load "$answer"							       
-			json_get_var status 'status'						       
-												       
-			case "$status" in							       
-				'200')
+			local method='GET'                                                            
+                        url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"                                                
+                                                                                                       
+                        json_init                                                                      
+                        json_load "$answer"                                                            
+                        json_get_var status 'status'                                                   
+                                                                                                       
+                        case "$status" in                                                              
+                                '200')
 					method='PUT'
+					url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
 					answer="$(net_http_get "$url")"
-					log "heartbeat: $(echo "$answer" | jsonfilter -e '$.message')"								       
-				;;								       
-				'*')								       
-					json_dump						       
-					log "heartbeat: error: $answer"						  
-				;;								       
-			esac			  
+					log "heartbeat: $(echo "$answer" | jsonfilter -e '$.message')"                                                                 
+                                ;;                                                                     
+                                '*')                                                                   
+                                        log "heartbeat: error: $answer"                                           
+                                ;;                                                                     
+                        esac                      
 		;;
 		register)
-			[ "$userknoten" -gt 1 ] || {
-			    log "Error! No nodenumber!"
-			    exit 1
-			}
-			local method='GET'							       
-			url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
-			answer="$(net_http_get "$url")"								     
-			echo "$answer"												   
-			json_init										     
-			json_load "$answer"									     
-			json_get_var status 'status'								     
-														     
-			case "$status" in									     
-				'404')										     
-					method='PUT'								     
-					answer="$(net_http_get "$url")"						     
-					log "register: $(echo "$answer" | jsonfilter -e '$.result')"
+			local method='GET'                                                             
+                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"                                                              
+                        json_init                                                                                    
+                        json_load "$answer"                                                                          
+                        json_get_var status 'status'                                                                 
+                                                                                                                     
+                        case "$status" in                                                                            
+                                '404')                                                                               
+                                        method='PUT'  
+                                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
+					answer="$(net_http_get "$url")"                                              
+                                        log "register: $(echo "$answer" | jsonfilter -e '$.result')"
 					change=1
 					uci set ffwizard settings nodenumber "$userknoten"
-						       
-				;;
+					               
+                                ;;
 				'200')
-					log "register: already exists: $(echo "$answer" | jsonfilter -e '$.result')"											
-				;;
-				'*')										     
-					json_dump								     
-					log "register: error: $answer"									    
-				;;										     
-			esac	  
+					log "register: already exists: $(echo "$answer" | jsonfilter -e '$.result')"                                                                                    
+                                ;;
+				'*')                                                                                 
+                                        log "register: error: $answer"                                                                      
+                                ;;                                                                                   
+                        esac      			
 		;;
 	esac
 }
@@ -133,7 +124,7 @@ if [ "$#" -lt 1 ]; then
 	cat <<- EOF
 	usage: $0 create - create and apply a new knotennummer 
 	       $0 register <nodenumber> - register and apply a nodenumber
-	       $0 heartbeat - update last-seen	
+	       $0 heartbeat - update last-seen  
 	EOF
 else
 	__request "$1" "$2"
@@ -142,7 +133,4 @@ fi
 [ "$change" -eq 1 ] && {
 	log "configuration change detected: running ffwizard" 
 	ffwizard 
-}
-
-# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
-
+} || :
