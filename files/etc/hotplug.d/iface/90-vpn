@@ -2,7 +2,7 @@
 
 [ "$INTERFACE" = "wan" ] && {
 
-	. /tmp/loader 
+	. /usr/lib/weimarnetz/vpn.sh 
  
 	case "$ACTION" in 
 		ifup) 

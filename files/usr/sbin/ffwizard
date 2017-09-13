@@ -1,0 +1,29 @@
+#!/bin/sh
+
+. /lib/functions.sh
+. /usr/share/libubox/jshn.sh
+. /usr/lib/weimarnetz/ipsystem.sh 
+
+log() {
+        logger -s -t ffwizard "$@"
+}
+
+nodenumber=$(uci -q get ffwizard.settings.nodenumber)
+[ -n "$nodenumber" ] || {
+        log "error: no node number"
+        return 1
+}
+
+nodedata="$(node2nets_json $(uci -q get ffwizard.settings.nodenumber))" 
+
+wdir="/usr/lib/ffwizard.d"
+[ -d $wdir ] || return 0
+files="$(find $wdir -type f | sort)"
+[ -z "$files" ] && return 0
+for file in $files; do
+        log "procesing $file"
+        . "$file"
+done
+
+ubus call uci "reload_config"
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
