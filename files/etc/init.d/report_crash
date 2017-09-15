@@ -5,7 +5,7 @@ START=99
 uniq_machine_id()
 {
 	dropbearkey -y -f "/etc/dropbear/dropbear_rsa_host_key" | \
-		fgrep "Fingerprint:" | cut -d' ' -f3
+	fgrep "Fingerprint:" | cut -d' ' -f3
 }
 
 kernel_version()
@@ -15,10 +15,10 @@ kernel_version()
 
 box_hardware()
 {
-	if [ -e "/etc/HARDWARE" ]; then
-		cat "/etc/HARDWARE"
+	if [ -e "/tmp/sysinfo/model" ]; then
+		cat "/tmp/sysinfo/model"
 	else
-		echo "unknown hardware"
+		echo "unknown hardware - $(uname -m)"
 	fi
 }
 
@@ -27,7 +27,7 @@ openwrt_revision()
 	if [ -e "/etc/openwrt_version" ]; then
 		cat /etc/openwrt_version
 	else
-		echo "UNKNOWN REVISION"
+		echo "unknown version"
 	fi
 }
 
