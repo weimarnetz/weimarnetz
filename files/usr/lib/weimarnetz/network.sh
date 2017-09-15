@@ -10,7 +10,7 @@ net_http_get()
 	local url="$1"
 	local max="${2:-15}"	# maximal running time [sec]
 
-	log $funcname "max ${max}s, ${#url} bytes, wget -qO - '$url'"
+	# log $funcname "max ${max}s, ${#url} bytes, wget -qO - '$url'"
 	timeout $max wget -qO - "$url" 
 }
 
