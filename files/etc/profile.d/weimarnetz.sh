@@ -9,14 +9,14 @@
 }
 
 nmeter_cmd() {
- . /lib/functions/network.sh 
- local cmd='%t %20c '
- for dev in vap radio0_mesh radio1_mesh lan wan; do
-	network_get_physdev physdev "$dev"
-	[ -n "$physdev" ] && cmd="$cmd ${physdev}: %[n$physdev]"
- done
- cmd="$cmd ctx: %x mem: %m"
- echo $cmd
+	. /lib/functions/network.sh 
+	local cmd='%t %20c '
+	for dev in vap radio0_mesh radio1_mesh lan wan; do
+		network_get_physdev physdev "$dev"
+		[ -n "$physdev" ] && cmd="$cmd ${physdev}: %[n$physdev]"
+	done
+	cmd="$cmd ctx: %x mem: %m"
+	echo $cmd
 }
 
 check_weak_passwd() 
@@ -79,8 +79,6 @@ fi
 alias n2='echo /nhdpinfo link | nc 127.0.0.1 2009'
 alias ll='ls -la'
 alias lr='logread'
-alias myssh='ssh -i $( _ssh key_public_fingerprint_get keyfilename )'
-alias dropshell='echo >>$SCHEDULER_IMPORTANT "/etc/init.d/dropbear stop"; killall dropbear'
 
 read -r LOAD <'/proc/loadavg'
 case "$LOAD" in
