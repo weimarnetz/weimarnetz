@@ -30,19 +30,19 @@ validate_wifi_section()
 		'vap:bool' 
 }
 
-start_apply_profile() {
+start_ffwizard() {
 	enabled=$(uci_get ffwizard settings enabled "0")
 	[ "$enabled" == "0" ] && return
 	config_load ffwizard
 	config_foreach system_config system
-	/usr/sbin/ffwizard_apply
+	/usr/sbin/ffwizard
 	uci_set ffwizard settings enabled 0
 	uci_commit ffwizard
 }
 
 reload_service() {
 	logger -s -t ffwizard_init "Reload Service"
-	start_apply_profile
+	start_ffwizard
 }
 
 service_triggers()
