@@ -17,8 +17,19 @@ proto_vtun-ffwe_init_config() {
 }
 
 proto_vtun-ffwe_setup() {
-	local cfg="$1"
-	local iface="$2"
+	local config="$1"
+
+	json_get_vars server port random probe mtu
+
+	logger -t "vpn-ffwe" "initializing..."
+	logger -t "vpn-ffwe" "adding host dependency for $server at $config"
+
+	for ip in $(resolveip -t 10 "$server"); do
+		logger -t "vpn-ffwe" "adding host dependency for $ip at $config"
+		proto_add_host_dependency "$config" "$ip"
+	done
+
+	logger -t "vpn-ffwe" "executing vtun"
 
 	proto_run_command "$cfg" /usr/sbin/vtund -n \ 
 		-f "/var/run/vtund-${cfg}" \
