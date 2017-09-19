@@ -43,7 +43,8 @@ setup_vpn() {
 	local cfg="$1"
 	if uci_get network "$cfg" >/dev/null; then 
 		uci_remove network "$cfg"
-	fi 
+	fi
+	# remove old settings
 	if uci_get network "tap0" >/dev/null; then 
 		uci_remove network "tap0"
 	fi
@@ -51,6 +52,16 @@ setup_vpn() {
 	config_get type "$cfg" type "vtun"
 	if [ "$type" = "vtun" ]; then
 		uci_set network "$cfg" ifname "tap0"
+		uci_set network "$cfg" proto "vtun-ffwe"
+		json_init
+		json_load "$nodedata"
+		json_get_var ipaddr vpn
+		[ -n "$ipaddr" ] || {
+			log_net "ERR $cfg - missing ip" 
+			return 1
+		}
+		setup_ip "$cfg" "$ipaddr"
+		json_cleanup
 	fi
 }
 
