@@ -4,7 +4,7 @@
 
 uci -m import profile_Weimar <<EOF
 config community 'profile'
-	option 'name' 'Weimarnetz e.V.'
+	option 'name' 'Weimar'
 	option 'homepage' 'http://www.weimarnetz.de'
 	option 'ssid' 'weimar.freifunk.net'
 	option 'mesh_network' '10.63.0.0/16'
@@ -13,7 +13,16 @@ config community 'profile'
 EOF
 
 
-uci_set freifunk community "public"
+uci -m import profile_Camburg <<EOF
+config community 'profile'
+	option 'name' 'Camburg'
+	option 'homepage' 'http://camburg.freifunk.net'
+	option 'ssid' 'camburg.freifunk.net'
+	option 'mesh_network' '10.63.0.0/16'
+	option 'latitude' '51.053889'
+	option 'longitude' '11.7075'
+EOF
+
 uci_set freifunk community name "Weimar"
 uci_set freifunk community owm_api "http://mapapi.weimarnetz.de"
 uci_set freifunk community mapserver "http://map.weimarnetz.de"
