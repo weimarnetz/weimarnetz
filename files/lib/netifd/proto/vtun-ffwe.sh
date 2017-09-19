@@ -9,14 +9,14 @@
 	init_proto "$@"
 }
 
-proto_vtun_init_config() {
+proto_vtun-ffwe_init_config() {
 	available=1
 	no_device=1
 	proto_config_add_string "ifname"
 	proto_config_add_defaults
 }
 
-proto_vtun_setup() {
+proto_vtun-ffwe_setup() {
 	local cfg="$1"
 	local iface="$2"
 
@@ -25,12 +25,12 @@ proto_vtun_setup() {
 		"$nodeconfig" \
 		"$server" 
 
-proto_vtun_teardown() {
+proto_vtun-ffwe_teardown() {
 	local cfg="$1"
 	proto_kill_command "$cfg"
 }
 
-probe_vtun_serverlist() {
+probe_vtun-ffwe_serverlist() {
 	# todo
 	local cfg="$1"
 	local rand
@@ -40,7 +40,7 @@ probe_vtun_serverlist() {
 
 }
 
-generate_vtun_conf() {
+generate_vtun-ffwe_conf() {
 	local cfg="$1"
 	local nodenumber="$2"
 
@@ -54,5 +54,5 @@ cat <<- EOF > /var/run/vtun-${cfg}.conf
 }
 
 [ -n "$INCLUDE_ONLY" ] || {
-	add_protocol vtun 
+	add_protocol vtun-ffwe 
 }
