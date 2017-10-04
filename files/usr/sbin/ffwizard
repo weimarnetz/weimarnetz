@@ -8,13 +8,15 @@ log() {
         logger -s -t ffwizard "$@"
 }
 
+community=$(uci -q get freifunk.community.name)
+
 nodenumber=$(uci -q get ffwizard.settings.nodenumber)
-[ -n "$nodenumber" ] || {
+[ "$nodenumber" -lt 1 ] || {
         log "error: no node number"
-        return 1
+        exit 1
 }
 
-nodedata="$(node2nets_json $(uci -q get ffwizard.settings.nodenumber))" 
+nodedata="$(node2nets_json $("$nodenumber"))" 
 
 wdir="/usr/lib/ffwizard.d"
 [ -d $wdir ] || return 0
