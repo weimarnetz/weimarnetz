@@ -34,7 +34,8 @@ setup_bridge() {
 	local roaming="$3"
 	setup_ip "$cfg" "$ipaddr"
 	if [ "$roaming" -eq "1" ]; then 
-		uci_set network "$cfg" macaddr '02:ff:ff:ff:00:00'
+		#uci_set network "$cfg" macaddr '02:ff:ff:ff:00:00'
+		true
 	fi
 	uci_set network "$cfg" type 'bridge'
 }
@@ -116,7 +117,7 @@ setup_wifi() {
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	uci_set wireless "$device" country "DE"
-	uci_set wireless $device distance "1000"
+	#uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
 	#Not working on wdr4300 with AP and ad-hoc
 	#[ $hw_n == 1 ] && uci_set wireless $device basic_rate "5500 6000 9000 11000 12000 18000 24000 36000 48000 54000"
@@ -139,7 +140,9 @@ setup_wifi() {
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" encryption "none"
 		uci_set wireless "$sec" mode "adhoc"
-		uci_set wireless "$sec" ssid "intern.$nodenumber.ch$channel.weimarnetz.de"
+		uci_get profile_${community} mesh_ssid mesh_ssid
+		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32) 
+		uci_set wireless "$sec" ssid "$mesh_ssid" 
 		bssid="02:CA:FF:EE:BA:BE"
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
 		#	bssid="12:"$(printf "%02d" "$(expr $valid_channel - 100)")":CA:FF:EE:EE"
@@ -176,10 +179,14 @@ setup_wifi() {
 		config_get roaming settings roaming
 		if [ "$roaming" -eq 1 ]; then
 			json_get_var ipaddr roaming_block
-		    uci_set wireless "$sec" ssid "weimar.freifunk.net"
+			uci_get profile_${community} ssid ssid
+		    uci_set wireless "$sec" ssid "$ssid"
 		else 
 			json_get_var ipaddr wifi
-			uci_set wireless "$sec" ssid "weimarnetz.de | $nodenumber"
+			uci_get profile_${community} ap_ssid ap_ssid
+			# fixme - hostname support
+			ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32) 
+			uci_set wireless "$sec" ssid "$ap_ssid"
 		fi
 		setup_bridge "$br_name" "$ipaddr" "$roaming"
 	fi
