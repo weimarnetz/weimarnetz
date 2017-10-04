@@ -3,7 +3,7 @@
 
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 [ -n "$FFF_VERSION" ] && { 
-	echo ".oo/ weimarnetz $FFF_VERSION (${FFF_SOURCE_URL#*://})"
+	echo ".oo/ weimarnetz $FFF_SOURCE_BRANCH-$FFF_VERSION (${FFF_SOURCE_URL#*://})"
 	echo '/[]. Welcome!'
 	echo ''
 }
