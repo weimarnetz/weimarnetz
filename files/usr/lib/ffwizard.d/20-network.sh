@@ -24,7 +24,7 @@ setup_ip() {
 		uci_remove network "$cfg" type
 	fi
 	uci_set network "$cfg" proto 'static'
-	uci_set network "$cfg" ip6assign '64'
+	# uci_set network "$cfg" ip6assign '64'
 	log_net ${cfg}: $ipaddr
 }
 
