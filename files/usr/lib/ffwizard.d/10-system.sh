@@ -44,7 +44,7 @@ setup_system() {
 		log_system "No custom hostname! Using $hostname"
 	fi
 	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" ] ; then
-		hostname=$(echo ff${community} | tr '[:upper:]' '[:lower:]')-$nodenumber 
+		hostname=$(echo ff${community} | tr '[A-Z]' '[a-z]')-$nodenumber 
 		uci_set system "$cfg" hostname "$hostname"
 	else
 		log_system "Using $hostname"
