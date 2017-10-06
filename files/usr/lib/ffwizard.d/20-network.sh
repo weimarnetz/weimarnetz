@@ -133,15 +133,15 @@ setup_wifi() {
 	json_get_var ipaddr "${device}_mesh"
 
 	if [ "$olsr_mesh" -eq "1" ] || [ "$bat_mesh" -eq "1" ]; then
-		local bssid
+		local bssid mesh_ssid
 		log_wifi "${cfg}: mesh"
 		local network="${cfg}_mesh"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" encryption "none"
 		uci_set wireless "$sec" mode "adhoc"
-		uci_get profile_${community} mesh_ssid mesh_ssid
-		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32) 
+		mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
+		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
 		uci_set wireless "$sec" ssid "$mesh_ssid" 
 		bssid="02:CA:FF:EE:BA:BE"
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
@@ -179,13 +179,13 @@ setup_wifi() {
 		config_get roaming settings roaming
 		if [ "$roaming" -eq 1 ]; then
 			json_get_var ipaddr roaming_block
-			uci_get profile_${community} ssid ssid
-		    uci_set wireless "$sec" ssid "$ssid"
+			ssid=$(uci_get profile_${community} profile ssid)
+		    	uci_set wireless "$sec" ssid "$ssid"
 		else 
 			json_get_var ipaddr wifi
-			uci_get profile_${community} ap_ssid ap_ssid
+			ap_ssid=$(uci_get profile_${community} profile ap_ssid)
 			# fixme - hostname support
-			ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32) 
+			ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32)
 			uci_set wireless "$sec" ssid "$ap_ssid"
 		fi
 		setup_bridge "$br_name" "$ipaddr" "$roaming"
