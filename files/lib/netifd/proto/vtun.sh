@@ -23,12 +23,14 @@ proto_vtun_setup() {
 	local ifname $PROTO_DEFAULT_OPTIONS
 	json_get_vars ifname server port random probe mtu $PROTO_DEFAULT_OPTIONS
 
+	server=3.v.weimarnetz.de
+	port=5001
+	ifname=tap0	
 
 	logger -t "vtun-${config}" "initializing..."
-	logger -t "vtun" "adding host dependency for $server at $config"
 
-	for ip in $(resolveip -t 10 "$server"); do
-		logger -t "vtun" "adding host dependency for $ip at $config"
+	for ip in $(resolveip -4 -t 10 "$server"); do
+		logger -t "vtun-${config}" "adding host dependency for $ip at $config"
 		proto_add_host_dependency "$config" "$ip"
 	done
 
@@ -38,14 +40,14 @@ proto_vtun_setup() {
 		proto_notify_error "$cfg" "NODENUMBER_MISSING"
 		proto_block_restart "$cfg"
 	}
+	nodeconfig="Node${nodenumber}"
 
-	generate_vtun_conf $config $ifname $nodenumber
+	generate_vtun_conf "$config" "$ifname" "$nodenumber"
 	logger -t "vtun-${config}" "executing vtun"
 
-	proto_run_command "$cfg" /usr/sbin/vtund -n \ 
-		-f "/var/run/vtund-${cfg}" \
-		"$nodeconfig" \
-		"$server" 
+	proto_run_command "$config" /usr/sbin/vtund \
+		-f /var/run/vtun-${config}.conf \
+		-P "$port" "$nodeconfig" "$ip"
 }
 
 proto_vtun_teardown() {
@@ -73,9 +75,9 @@ cat <<- EOF > /var/run/vtun-${cfg}.conf
 		passwd ff;
 		type ether;	
 		persist yes;
-		device ${ifname}
-		up { /lib/netifd/vtun-up %d wait };
-		down { /lib/netifd/vtund-down %d wait };
+		device ${ifname};
+		up { program "/lib/netifd/vtun-up %d" ; };
+		down { program "/lib/netifd/vtund-down %d" ; };
 		}
 	EOF
 }
