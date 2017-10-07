@@ -1,0 +1,15 @@
+#!/bin/sh
+
+#DBG=1
+
+[ -n "$INTERFACE" ] || {
+	echo "openvpn-down no INTERFACE variable appended"
+	exit 1
+}
+
+
+. /lib/netifd/netifd-proto.sh
+proto_init_update "$dev" 0
+proto_send_update "$INTERFACE"
+
+exit 0
