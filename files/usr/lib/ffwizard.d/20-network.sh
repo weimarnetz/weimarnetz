@@ -23,7 +23,11 @@ setup_ip() {
 	if uci_get network "$cfg" type bridge >/dev/null; then 
 		uci_remove network "$cfg" type
 	fi
-	uci_set network "$cfg" proto 'static'
+	if [ "$cfg" = "vpn" ] ; then
+		uci_set network "$cfg" proto 'vtun'
+	else
+		uci_set network "$cfg" proto 'static'
+	fi
 	# uci_set network "$cfg" ip6assign '64'
 	log_net ${cfg}: $ipaddr
 }
@@ -52,8 +56,7 @@ setup_vpn() {
 	uci_add network interface "$cfg"
 	config_get type "$cfg" type "vtun"
 	if [ "$type" = "vtun" ]; then
-		uci_set network "$cfg" ifname "tap0"
-		uci_set network "$cfg" proto "vtun-ffwe"
+		uci_set network "$cfg" proto "vtun"
 		json_init
 		json_load "$nodedata"
 		json_get_var ipaddr vpn

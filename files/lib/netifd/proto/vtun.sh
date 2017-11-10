@@ -17,20 +17,24 @@ proto_vtun_init_config() {
 
 proto_vtun_setup() {
 	local config="$1"
-
+	
 	# load configuration
 	config_load network
-        config_get addresses     "${config}" "ipaddr"
-        config_get mtu           "${config}" "mtu"
-        config_get fwmark        "${config}" "fwmark"
-        config_get gateway 	    "${config}" "gateway"
+        config_get ipaddr     "${config}" "ipaddr"
+	config_get netmask    "${config}" "netmask"
+        config_get mtu        "${config}" "mtu"
+        # config_get fwmark   "${config}" "fwmark"
+        config_get gateway    "${config}" "gateway"
+	config_get server     "${config}" "server"
+	config_get port       "${config}" "port"
 
-	server=3.v.weimarnetz.de
-	port=5001
-	ifname=tap0
-	mtu=1280	
-
-	logger -t "vtun-${config}" "initializing... vtun-${config} $iface"
+	[ -n "$server" ] || {                                                  
+                proto_notify_error "$config" "server missing"                        
+                proto_block_restart "$config"                                            
+        }
+         
+	port=${port:-5001}
+	mtu=${mtu:-1280}
 
 	for ip in $(resolveip -4 -t 10 "$server"); do
 		logger -t "vtun-${config}" "adding host dependency for $ip at $config"
@@ -39,8 +43,8 @@ proto_vtun_setup() {
 
 	nodenumber=$(uci_get ffwizard settings nodenumber -1)
 	[ "$nodenumber" -lt 0 ] || {
-		proto_notify_error "$cfg" "NODENUMBER_MISSING"
-		proto_block_restart "$cfg"
+		proto_notify_error "$config" "NODENUMBER_MISSING"
+		proto_block_restart "$config"
 	}
 	nodeconfig="Node${nodenumber}"
 
@@ -59,7 +63,7 @@ proto_vtun_teardown() {
 
 probe_vtun_serverlist() {
 	# todo
-	local cfg="$1"
+	local config="$1"
 	local rand
 	local count 
 	rand=$(tr -dc '1-65000' </dev/urandom | head -c 1)
@@ -68,16 +72,17 @@ probe_vtun_serverlist() {
 }
 
 generate_vtun_conf() {
-	local cfg="$1"
+	local config="$1"
 	local nodenumber="$3"
 
-cat <<- EOF > /var/run/vtun-${cfg}.conf
+cat <<- EOF > /var/run/vtun-${config}.conf
 	Node${nodenumber} {
 		passwd ff;
 		type ether;	
 		persist no;
-		up { program "/lib/netifd/vtun-up config=${cfg} dev=%% addresses=${addresses} gw=${gateway} mtu=${mtu}" ; };
-		down { program "/lib/netifd/vtund-down config=${cfg} dev=%% addresses=${addresses} gw=${gateway} mtu=${mtu}" ; };
+		timeout 5;
+		up { program "/lib/netifd/vtun-up config=${config} dev=%% address=${ipaddr} netmask=${netmask} gw=${gateway} mtu=${mtu}" ; };
+		down { program "/lib/netifd/vtund-down config=${config} dev=%% " ; };
 	}
 	EOF
 }

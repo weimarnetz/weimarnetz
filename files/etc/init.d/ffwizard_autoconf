@@ -14,7 +14,7 @@ validate_autoconf_section()
 
 setup_ether() {
 	local cfg="$1"
-	if [ "$cfg" = "lan" ] ; then
+	if [ "$cfg" = "lan" ] || [ "$cfg" = "vpn" ] ; then
 		if ! uci_get ffwizard $cfg >/dev/null ; then
 			uci_add ffwizard ether "$cfg"
 		fi
@@ -37,6 +37,14 @@ setup_wifi() {
 	uci_set ffwizard $cfg vap "1"
 }
 
+setup_vpn() {
+	local cfg="$1"
+        if ! uci_get ffwizard $cfg >/dev/null ; then        
+                uci_add ffwizard ether "$cfg"                
+        fi                                                  
+        uci_set ffwizard $cfg enabled "1"                   
+        uci_set ffwizard $cfg olsr_mesh "1"                 
+}
 
 start_autoconf() {
 	firstboot=$(uci_get ffwizard settings firstboot "0")

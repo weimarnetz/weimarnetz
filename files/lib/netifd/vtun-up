@@ -4,8 +4,6 @@ logger -t "vtun-up" "params: $@"
 
 eval "$@"
 
-defaultroute=1
-
 [ -n "$dev" ] || {
 	logger -t "vtun-up" -p "user.error" "error: no device"
 	exit 1
@@ -17,25 +15,21 @@ ip link set dev "$dev" mtu "${mtu}"
 proto_init_update "$dev" 1 1
 proto_set_keep 1
 
-for address in ${addresses}; do
-  logger -t "vtun-up" "addr: $address"
-
-  case "${address}" in
+case "${address}" in
       *.*/*)
 	 ip a add dev "$dev" "${address}"
          proto_add_ipv4_address "${address%%/*}" "${address##*/}"
       ;;
       *.*)
-	ip a add dev "$dev" "${address}"
-        proto_add_ipv4_address "${address%%/*}" "32"
+	ip a add dev "$dev" "${address}/${netmask}"
+        proto_add_ipv4_address "${address%%/*}" "${netmask}"
       ;;
-  esac
-done
+esac
 
 
 proto_send_update "$config"
 # set default route
-[ -n "$defaultroute" ] && {
+[ -n "$gw" ] && {
 	proto_add_ipv4_route "0.0.0.0" "0" "$gw" "0.0.0.0/0" "$METRIC"
 }
 
