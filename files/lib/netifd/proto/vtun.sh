@@ -32,7 +32,8 @@ proto_vtun_setup() {
                 proto_notify_error "$config" "server missing"                        
                 proto_block_restart "$config"                                            
         }
-         
+       
+        server=${server:-3.v.weimarnetz.de}	
 	port=${port:-5001}
 	mtu=${mtu:-1280}
 
