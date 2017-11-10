@@ -32,8 +32,8 @@ proto_vtun_setup() {
                 proto_notify_error "$config" "server missing"                        
                 proto_block_restart "$config"                                            
         }
-       
-        server=${server:-3.v.weimarnetz.de}	
+
+	server=${server:-3.v.weimarnetz.de}         
 	port=${port:-5001}
 	mtu=${mtu:-1280}
 
@@ -42,8 +42,10 @@ proto_vtun_setup() {
 		proto_add_host_dependency "$config" "$ip"
 	done
 
-	nodenumber=$(uci_get ffwizard settings nodenumber -1)
-	[ "$nodenumber" -lt 0 ] || {
+	proto_add_data "$server:$port mtu: $mtu"
+
+	nodenumber=$(uci -q get ffwizard.settings.nodenumber)
+	[ -n "$nodenumber" ] || {
 		proto_notify_error "$config" "NODENUMBER_MISSING"
 		proto_block_restart "$config"
 	}
