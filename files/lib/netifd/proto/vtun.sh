@@ -5,38 +5,40 @@
 [ -n "$INCLUDE_ONLY" ] || {
 	. /lib/functions.sh
 	. /lib/functions/network.sh
-	. ../netifd-proto.sh
+	. /lib/netifd/netifd-proto.sh
 	init_proto "$@"
 }
 
 proto_vtun_init_config() {
-	available=1
 	no_device=1
-	proto_config_add_string "ifname"
+	available=1	
 	proto_config_add_defaults
 }
 
 proto_vtun_setup() {
 	local config="$1"
-	local iface="$2"
 
-	local ifname $PROTO_DEFAULT_OPTIONS
-	json_get_vars ifname server port random probe mtu $PROTO_DEFAULT_OPTIONS
+	# load configuration
+	config_load network
+        config_get addresses     "${config}" "ipaddr"
+        config_get mtu           "${config}" "mtu"
+        config_get fwmark        "${config}" "fwmark"
+        config_get gateway 	    "${config}" "gateway"
 
 	server=3.v.weimarnetz.de
 	port=5001
-	ifname=tap0	
+	ifname=tap0
+	mtu=1280	
 
-	logger -t "vtun-${config}" "initializing..."
+	logger -t "vtun-${config}" "initializing... vtun-${config} $iface"
 
 	for ip in $(resolveip -4 -t 10 "$server"); do
 		logger -t "vtun-${config}" "adding host dependency for $ip at $config"
 		proto_add_host_dependency "$config" "$ip"
 	done
 
-	logger -t "vtun-${config}"
 	nodenumber=$(uci_get ffwizard settings nodenumber -1)
-	[ "$nodenumber" -gt 0 ] || {
+	[ "$nodenumber" -lt 0 ] || {
 		proto_notify_error "$cfg" "NODENUMBER_MISSING"
 		proto_block_restart "$cfg"
 	}
@@ -45,14 +47,14 @@ proto_vtun_setup() {
 	generate_vtun_conf "$config" "$ifname" "$nodenumber"
 	logger -t "vtun-${config}" "executing vtun"
 
-	proto_run_command "$config" /usr/sbin/vtund \
+	proto_run_command "$config" /usr/sbin/vtund -n \
 		-f /var/run/vtun-${config}.conf \
 		-P "$port" "$nodeconfig" "$ip"
 }
 
 proto_vtun_teardown() {
-	local cfg="$1"
-	proto_kill_command "$cfg"
+	proto_kill_command "$interface"
+	return
 }
 
 probe_vtun_serverlist() {
@@ -67,18 +69,16 @@ probe_vtun_serverlist() {
 
 generate_vtun_conf() {
 	local cfg="$1"
-	local ifname="$2"
 	local nodenumber="$3"
 
 cat <<- EOF > /var/run/vtun-${cfg}.conf
 	Node${nodenumber} {
 		passwd ff;
 		type ether;	
-		persist yes;
-		device ${ifname};
-		up { program "/lib/netifd/vtun-up %d" ; };
-		down { program "/lib/netifd/vtund-down %d" ; };
-		}
+		persist no;
+		up { program "/lib/netifd/vtun-up config=${cfg} dev=%% addresses=${addresses} gw=${gateway} mtu=${mtu}" ; };
+		down { program "/lib/netifd/vtund-down config=${cfg} dev=%% addresses=${addresses} gw=${gateway} mtu=${mtu}" ; };
+	}
 	EOF
 }
 
