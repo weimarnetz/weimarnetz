@@ -6,6 +6,7 @@ eval "$@"
 	exit 1
 }
 
+/sbin/ip link set dev "$dev" down
 
 . /lib/netifd/netifd-proto.sh
 proto_init_update "$dev" 0

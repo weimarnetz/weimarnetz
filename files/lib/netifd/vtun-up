@@ -1,38 +1,32 @@
 #!/bin/sh
+. /lib/functions.sh
+. /lib/netifd/netifd-proto.sh
 
-logger -t "vtun-up" "params: $@"
 
+#fixme
 eval "$@"
 
 [ -n "$dev" ] || {
 	logger -t "vtun-up" -p "user.error" "error: no device"
 	exit 1
 }
-
 ip link set dev "$dev" up
 ip link set dev "$dev" mtu "${mtu}"
-. /lib/netifd/netifd-proto.sh
-proto_init_update "$dev" 1 1
-proto_set_keep 1
 
-case "${address}" in
-      *.*/*)
-	 ip a add dev "$dev" "${address}"
-         proto_add_ipv4_address "${address%%/*}" "${address##*/}"
-      ;;
-      *.*)
-	ip a add dev "$dev" "${address}/${netmask}"
-        proto_add_ipv4_address "${address%%/*}" "${netmask}"
-      ;;
-esac
+proto_init_update "$dev" 1
 
+eval $(ipcalc.sh $address $netmask)
+proto_add_ipv4_address ${IP} ${PREFIX} ${BROADCAST}
 
-proto_send_update "$config"
-# set default route
-[ -n "$gw" ] && {
-	proto_add_ipv4_route "0.0.0.0" "0" "$gw" "0.0.0.0/0" "$METRIC"
-}
+# fixme
+#[ -n "$gw" ] && {
+#	proto_add_ipv4_route ${NETWORK} ${PREFIX} ${gw}
+#}
+
+proto_add_data                                               
+json_add_string server "$server" 
+json_add_string port "$port"
+proto_close_data   
 
 proto_send_update "$config"
-
 exit 0
