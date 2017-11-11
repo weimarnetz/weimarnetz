@@ -23,7 +23,7 @@ up_rules() {
 			# nat
 			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			[ "$(uci_get ffwizard wan restrict)" -eq 1 ] && {
+			#[ "$(uci_get ffwizard settings restrict)" -eq 1 ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ]  && {
@@ -40,14 +40,14 @@ up_rules() {
 					ip6tables -A FORWARD \
 						-j paranoia-local6
 				} 
-			}
+			#}
 			# no internet without vpn
-			[ "$(uci_get ffwizard vpn disabled)" -eq 0 ] && {
+			#[ "$(uci_get ffwizard settings )" -eq 0 ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
 				iptables -A FORWARD -j paranoia-vpn
-			}
+			#}
 		;;
 		vpn)
 			# mss clamping 
