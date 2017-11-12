@@ -71,7 +71,7 @@ setup_vpn() {
 			log_net "ERR $cfg - missing ip" 
 			return 1
 		}
-		setup_ip "$cfg" "$ipaddr" "$vpn_gw"
+		setup_ip "$cfg" "$ipaddr" "$gw"
 		json_cleanup
 	fi
 }
