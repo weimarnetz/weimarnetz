@@ -12,6 +12,8 @@ log_wifi() {
 setup_ip() {
 	local cfg="$1"
 	local ipaddr="$2"
+	local gateway="$3"
+
 	if ! uci_get network "$cfg" >/dev/null ; then
 		uci_add network interface "$cfg"
 	fi
@@ -20,6 +22,10 @@ setup_ip() {
 		uci_set network "$cfg" ipaddr "$IP"
 		uci_set network "$cfg" netmask "$NETMASK"
 	fi
+	if [ -n "$gateway" ] ; then
+		eval "$(ipcalc.sh "$gateway")"
+		uci_set network "$cfg" gateway "$IP"
+	fi 
 	if uci_get network "$cfg" type bridge >/dev/null; then 
 		uci_remove network "$cfg" type
 	fi
@@ -60,11 +66,12 @@ setup_vpn() {
 		json_init
 		json_load "$nodedata"
 		json_get_var ipaddr vpn
+		json_get_var gw vpn_gw
 		[ -n "$ipaddr" ] || {
 			log_net "ERR $cfg - missing ip" 
 			return 1
 		}
-		setup_ip "$cfg" "$ipaddr"
+		setup_ip "$cfg" "$ipaddr" "$vpn_gw"
 		json_cleanup
 	fi
 }
