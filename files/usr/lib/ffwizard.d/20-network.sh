@@ -35,7 +35,7 @@ setup_ip() {
 		uci_set network "$cfg" proto 'static'
 	fi
 	# uci_set network "$cfg" ip6assign '64'
-	log_net ${cfg}: $ipaddr
+	log_net ${cfg}: $ipaddr $gateway
 }
 
 setup_bridge() {

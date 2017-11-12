@@ -80,7 +80,7 @@ net_tcp_port_reachable()
 	local port="$2"			# e.g. 80
 
 	# we can't rely on '-w3' or '-z' because of lobotomized busybox netcat
-	timeout 5 echo "foo" | nc "$server" "$port" 2>/dev/null || return 1 
+	timeout 5 echo "foo" | nc "$server" "$port" 1>/dev/null 2>/dev/null || return 1 
 }
 
 net_ping_getlatency()

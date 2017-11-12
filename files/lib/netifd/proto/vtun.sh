@@ -79,7 +79,7 @@ probe_vtun_endpoints() {
 	        json_get_var server server
 		json_get_var port port_vtun_nossl_nolzo
 		json_cleanup
-		net_tcp_port_reachable "$server" "$port" 2>/dev/null
+		net_tcp_port_reachable "$server" "$port" 
 		[ "$?" -eq 0 ] && {
 			c="$c $e"
 			count=$((count+1))
@@ -92,7 +92,6 @@ probe_vtun_endpoints() {
 		json="$(net_http_get "http://$final/freifunk/vpn")"
 		json_load "$json" 2>/dev/null
 		json_dump
-		json_cleanup
 	fi
 }
 

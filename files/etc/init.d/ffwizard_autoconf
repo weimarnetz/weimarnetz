@@ -49,8 +49,6 @@ setup_vpn() {
 start_autoconf() {
 	firstboot=$(uci_get ffwizard settings firstboot "0")
 	[ "$firstboot" = "0" ] && return
-	nodenumber=$(uci_get ffwizward settings nodenumber)
-	[ -n "$nodenumber" ] || uci_set ffwizard settings nodenumber "-1"
 	config_load wireless
 	config_foreach setup_wifi wifi-device
 	config_load network
