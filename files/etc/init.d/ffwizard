@@ -20,6 +20,15 @@ validate_ether_section()
 		'olsr_mesh:bool' 
 }
 
+
+validate_vpn_section()
+{
+	uci_validate_section ffwizard vpn "${1}" \
+		'enabled:bool' \
+		'device:string' \
+		'olsr_mesh:bool' 
+}
+
 validate_wifi_section()
 {
 	uci_validate_section ffwizard wifi "${1}" \

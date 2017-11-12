@@ -40,7 +40,7 @@ setup_wifi() {
 setup_vpn() {
 	local cfg="$1"
         if ! uci_get ffwizard $cfg >/dev/null ; then        
-                uci_add ffwizard ether "$cfg"                
+                uci_add ffwizard vpn "$cfg"                
         fi                                                  
         uci_set ffwizard $cfg enabled "1"                   
         uci_set ffwizard $cfg olsr_mesh "1"                 
@@ -53,6 +53,7 @@ start_autoconf() {
 	config_foreach setup_wifi wifi-device
 	config_load network
 	config_foreach setup_ether interface
+	[ -x /usr/sbin/vtund ] && setup_vpn vpn
 	# Reset firstboot flag
 	uci_set ffwizard settings firstboot 0
 	uci_commit ffwizard
