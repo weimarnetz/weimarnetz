@@ -105,7 +105,7 @@ cat <<- EOF > /var/run/vtun-${config}.conf
 		type ether;	
 		persist no;
 		timeout 5;
-		keepalive yes;
+		keepalive 15:2;
 		up { program "/lib/netifd/vtun-up config=${config} dev=%% address=${ipaddr} netmask=${netmask} gw=${gateway} mtu=${mtu} server=${server} port=${port}" wait; };
 		down { program "/lib/netifd/vtun-down config=${config} dev=%% " wait; };
 	}
