@@ -1,5 +1,5 @@
 #!/bin/sh
-
+# shellcheck disable=SC2154 disable=SC2039 disable=SC2034
 [ -x /usr/sbin/vtund ] || exit 1
 
 [ -n "$INCLUDE_ONLY" ] || {
@@ -21,27 +21,26 @@ proto_vtun_setup() {
 
 	# load configuration
 	config_load network
-        config_get ipaddr     "${config}" "ipaddr"
-	config_get netmask    "${config}" "netmask"
-        config_get gateway    "${config}" "gateway"
-
+	config_get ipaddr	  "$config" "ipaddr"
+	config_get netmask	  "$config" "netmask"
+	config_get gateway	  "$config" "gateway"
 	
-	nodenumber=$(uci -q get ffwizard.settings.nodenumber)                         
-        [ -n "$nodenumber" ] || {                                                     
-                proto_notify_error "$config" "nodenumber is missing!"                 
-                proto_block_restart "$config"
-		return 1                                         
-        }             
+	nodenumber=$(uci -q get ffwizard.settings.nodenumber)						  
+	[ -n "$nodenumber" ] || {													  
+		proto_notify_error "$config" "nodenumber is missing!"				  
+		proto_block_restart "$config"
+		return 1										 
+	}			  
 	
 	json=$(config_foreach probe_vtun_endpoints "vtun_${config}")
 	[ -n "$json" ] || {
 		proto_notify_error "$config" "could not get server json data"
 	}
- 	                                                                                            
-        json_load "${json}" 2>/dev/null                                                     
-        json_get_var server server                                                          
-        json_get_var port port_vtun_nossl_nolzo                                                              
-        json_get_var mtu maxmtu                                                             
+																								
+	json_load "$json" 2>/dev/null													  
+	json_get_var server server															
+	json_get_var port port_vtun_nossl_nolzo																 
+	json_get_var mtu maxmtu																
 	for ip in $(resolveip -4 -t 10 "$server"); do
 		proto_add_host_dependency "$config" "$ip"
 	done
@@ -50,7 +49,7 @@ proto_vtun_setup() {
 	generate_vtun_conf "$config" "$nodeconfig"
 
 	proto_run_command "$config" /usr/sbin/vtund -n \
-		-f /var/run/vtun-${config}.conf \
+		-f "/var/run/vtun-${config}.conf" \
 		-P "$port" "$nodeconfig" "$ip"
 }
 
@@ -64,9 +63,9 @@ probe_vtun_endpoints() {
 	section="$1"
 	config_get endpoints "$section" endpoint
 	[ -n "$endpoints" ] || { 
-	    proto_notify_error "$config" "no valid endpoint found!"
-            proto_block_restart "$config" 
-	    return 1
+		proto_notify_error "$config" "no valid endpoint found!"
+		proto_block_restart "$config" 
+		return 1
 	}
 
 	. /usr/lib/weimarnetz/network.sh
@@ -75,15 +74,14 @@ probe_vtun_endpoints() {
 	for e in $endpoints
 	do
 		json="$(net_http_get "http://$e/freifunk/vpn")"
-	        json_load "$json" 2>/dev/null
-	        json_get_var server server
+		json_load "$json" 2>/dev/null
+		json_get_var server server
 		json_get_var port port_vtun_nossl_nolzo
 		json_cleanup
-		net_tcp_port_reachable "$server" "$port" 
-		[ "$?" -eq 0 ] && {
+		if net_tcp_port_reachable "$server" "$port"; then
 			c="$c $e"
 			count=$((count+1))
-		}
+		fi
 	done 
 
 	if [ "$count" -gt 0 ]; then
@@ -99,7 +97,7 @@ generate_vtun_conf() {
 	local config="$1"
 	local nodenumber="$2"
 
-cat <<- EOF > /var/run/vtun-${config}.conf
+cat <<- EOF > "/var/run/vtun-${config}.conf"
 	$nodeconfig {
 		passwd ff;
 		type ether;	
@@ -116,3 +114,4 @@ cat <<- EOF > /var/run/vtun-${config}.conf
 	add_protocol vtun 
 }
 
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
