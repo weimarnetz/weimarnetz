@@ -190,7 +190,7 @@ setup_wifi() {
 		if [ "$roaming" -eq 1 ]; then
 			json_get_var ipaddr roaming_block
 			ssid=$(uci_get profile_${community} profile ssid)
-		    	uci_set wireless "$sec" ssid "$ssid"
+				uci_set wireless "$sec" ssid "$ssid"
 		else 
 			json_get_var ipaddr wifi
 			ap_ssid=$(uci_get profile_${community} profile ap_ssid)

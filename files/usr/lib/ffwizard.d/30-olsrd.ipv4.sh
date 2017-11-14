@@ -45,7 +45,6 @@ setup_Plugin_txtinfo() {
 	uci_set olsrd "$cfg" ignore "0"
 }
 
-
 setup_Plugin_dyn_gw() {
 	local cfg="$1"
 	uci_set olsrd "$cfg" CheckInterval '5000'
@@ -54,7 +53,6 @@ setup_Plugin_dyn_gw() {
 	uci_set olsrd "$cfg" 'Ping' '8.8.8.8'
 	uci_set olsrd "$cfg" 'Ping' '194.25.2.129'
 }
-
 
 setup_Plugin_nameservice() {
 	local cfg="$1"
@@ -135,8 +133,6 @@ setup_wifi() {
 	uci_set olsrd "$iface_sec" ignore "0"
 	uci_set olsrd "$iface_sec" Mode "mesh"
 	olsr_enabled=1
-	
-	
 }
 
 setup_vpn() {

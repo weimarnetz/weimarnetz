@@ -27,7 +27,7 @@ setup_dhcp() {
 	uci_set dhcp $cfg_dhcp interface "$cfg_dhcp"
 	uci_set dhcp $cfg_dhcp ignore "0"
 	if [ -n "$ipaddr" ] ; then
-		eval "$(ipcalc.sh $ipaddr)"
+		eval "$(ipcalc.sh "$ipaddr")"
 		OCTET_4="${NETWORK##*.}"
 		OCTET_1_3="${NETWORK%.*}"
 		OCTET_4="$((OCTET_4 + 2))"

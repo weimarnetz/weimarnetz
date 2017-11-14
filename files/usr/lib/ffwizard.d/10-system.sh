@@ -27,13 +27,13 @@ setup_sysctl()
 			'kernel.panic_on_oops=1' \
 			'kernel.panic=10' \
 			"vm.min_free_kbytes=$min_free"; do {
-		/sbin/sysctl -w "$entry" >/dev/null
+		sysctl -w "$entry" >/dev/null
 		grep -q ^"$entry"$ '/etc/sysctl.conf' || {
 			echo "$entry" >>'/etc/sysctl.conf'
 		}
 	} done
-	/sbin/sysctl -qp 2> /dev/null
-    
+	sysctl -qp 2> /dev/null
+	
 }
 
 setup_system() {
