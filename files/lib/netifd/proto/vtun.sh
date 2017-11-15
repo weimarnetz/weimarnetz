@@ -12,6 +12,7 @@
 proto_vtun_init_config() {
 	no_device=1
 	available=1
+	autostart=0
 	proto_config_add_defaults
 }
 
