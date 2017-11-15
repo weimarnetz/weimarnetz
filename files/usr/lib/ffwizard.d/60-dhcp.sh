@@ -151,10 +151,10 @@ setup_hosts() {
 		do
 			echo "${lan%/*} $h" >> /etc/hosts.ff
 		done
-		echo "${radio0_mesh%/*} mesh0.$hostname.olsr >> /etc/hosts.ff
-		echo "${radio1_mesh%/*} mesh1.$hostname.olsr >> /etc/hosts.ff
-		echo "${vpn_gw%/*} vpngateway.$hostname.olsr >> /etc/hosts.ff
-		echo "${wifi%/*} vap.$hostname.olsr >> /etc/hosts.ff
+		echo "${radio0_mesh%/*} mesh0.$hostname.olsr" >> /etc/hosts.ff
+		echo "${radio1_mesh%/*} mesh1.$hostname.olsr" >> /etc/hosts.ff
+		echo "${vpn_gw%/*} vpngw.$hostname.olsr" >> /etc/hosts.ff
+		echo "${wifi%/*} vap.$hostname.olsr" >> /etc/hosts.ff
 }
 
 br_name="vap"
