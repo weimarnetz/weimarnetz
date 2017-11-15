@@ -14,15 +14,15 @@ join the [club](http://www.weimarnetz.de) or ask for [consulting](http://bittorf
 versions
 --------
 
-The `GebrannteMandeln` branch is the current stable version that is running on most routers (1/2017). The `master` branch is bleeding edge at the moment and should work with LEDE.
+The `GebrannteMandeln` branch is the current stable version that is running on most routers (9/2017). The `master` branch is bleeding edge.
 
 
 how to get a release for a specific hardware
 --------------------------------------------
 
-https://gitlab.bau-ha.us/weimarnetz/firmware
+Use the firmware builder: 
 
-Bleeding Edge Images with LEDE and the current master branch can be found here: http://weimarnetz.segfault.gq/firmwares/ 
+https://github.com/weimarnetz/firmware
 
 
 Cherry Picking Git commits from forked repositories
