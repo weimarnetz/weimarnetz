@@ -4,16 +4,10 @@
 . /lib/functions.sh
 . /lib/functions/network.sh
 
-log() {
-	logger -s -t hotplug_05_netfilter-wan "$@"
-}
-
 up_rules() {
 	local iface="$1"
 	local dev="$2"
 
-	log "$ACTION: $1 $2"  
- 
 	case "$iface" in
 		wan)
 			# mss clamping 
@@ -68,8 +62,6 @@ down_rules() {
 	local iface="$1"
 	local dev="$2"
 
-	log "$ACTION: $1 $2"
-  
 	case "$iface" in
 		wan)
 			# mss clamping
