@@ -4,7 +4,7 @@
 [ -e '/etc/variables_fff+' ] && . '/etc/variables_fff+'
 [ -n "$FFF_VERSION" ] && { 
 	echo ".oo/ weimarnetz $FFF_SOURCE_BRANCH-$FFF_VERSION (${FFF_SOURCE_URL#*://})"
-	echo '/[]. Welcome!'
+	echo '/(). Welcome!'
 	echo ''
 }
 
@@ -21,9 +21,7 @@ nmeter_cmd() {
 
 check_weak_passwd() 
 {
-
 	command -V mkpasswd > /dev/null || return 
-
 	salt=$(awk -F"$" '/^root/ { print $3}' < /etc/shadow)
 	pass=admin
 	weakhash=$(mkpasswd -S "$salt" "$pass") 
