@@ -131,6 +131,7 @@ setup_dhcpbase() {
 	if [ "$olsr_mesh" -eq "1" ]; then
 		uci_remove dhcp $cfg addnhosts
 		uci_add_list dhcp $cfg addnhosts "/tmp/hosts/olsr.ipv4"
+		uci_add_list dhcp $cfg addnhosts "/etc/hosts.ff"
 	fi
 }
 
@@ -138,6 +139,22 @@ setup_odhcpbase() {
 	local cfg="$1"
 	#uci_set dhcp $cfg maindhcp "1"
 	uci_set dhcp $cfg maindhcp "0"
+}
+
+setup_hosts() {
+		rm -f /etc/hosts.ff
+		read -r hostname < /proc/sys/kernel/hostname 
+		json_init
+		json_load "$nodedata"
+		json_get_vars wifi radio0_mesh radio1_mesh vpn_gw lan
+		for h in internet kiste router mutti frei.funk
+		do
+			echo "${lan%/*} $h" >> /etc/hosts.ff
+		done
+		echo "${radio0_mesh%/*} mesh0.$hostname.olsr >> /etc/hosts.ff
+		echo "${radio1_mesh%/*} mesh1.$hostname.olsr >> /etc/hosts.ff
+		echo "${vpn_gw%/*} vpngateway.$hostname.olsr >> /etc/hosts.ff
+		echo "${wifi%/*} vap.$hostname.olsr >> /etc/hosts.ff
 }
 
 br_name="vap"
@@ -195,6 +212,8 @@ if [ -n "$wan_iface" ] ; then
 	uci_set dhcp $wan_iface dhcpv6 "disabled"
 	uci_set dhcp $wan_iface ra "disabled"
 fi
+
+setup_hosts
 
 uci_commit dhcp
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
