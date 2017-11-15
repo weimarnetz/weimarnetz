@@ -63,6 +63,7 @@ setup_vpn() {
 	config_get type "$cfg" type "vtun"
 	if [ "$type" = "vtun" ]; then
 		uci_set network "$cfg" proto "vtun"
+		uci_set network "$cfg" auto "0"
 		json_init
 		json_load "$nodedata"
 		json_get_var ipaddr vpn
