@@ -10,7 +10,7 @@ config_cb() {
 		option_cb() {						 
 			local option="$1" 
 			local value="$2" 
-			uci_set meshnode settings "$option" "$value"
+			uci_set ffwizard settings "$option" "$value"
 		}
 		uci_remove system profile
 	;;
@@ -19,10 +19,10 @@ config_cb() {
 			local option="$1"
 			local value="$2"
 			[ "$option" = "hostname" ] && {
-				uci_set meshnode settings hostname "$value"
+				uci_set ffwizard settings hostname "$value"
 			}
 			[ "$option" = "latitude" -o "$option" = "longitude" -o "$option" = "location" ] && {
-				uci_set meshnode settings "$option" "$value"
+				uci_set ffwizard settings "$option" "$value"
 			}
 		}
 		uci_remove system noswinstall 

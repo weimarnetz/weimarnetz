@@ -1,0 +1,136 @@
+#!/bin/sh
+
+. /lib/functions.sh
+. /usr/share/libubox/jshn.sh
+. /usr/lib/weimarnetz/network.sh 
+
+
+log() {
+        logger -s -t registrator "$@"
+}
+
+
+change=0
+nodenumber=$(uci_get ffwizard settings nodenumber -1)
+network=$(uci_get ffwizard settings ipschema ffweimar)
+host=$(uci_get ffwizard settings registrator "reg.weimarnetz.de")
+
+for type in rsa dss; do
+	path="/etc/dropbear/dropbear_${type}_host_key"
+	[ -e "$path" ] || continue
+	fingerprint=$(dropbearkey -f "$path" -y | awk '/Fingerprint:/ { print $3 }')
+done 
+
+__getmac() {
+	. /lib/functions/network.sh
+	network_get_physdev physdev lan
+	data=$(devstatus "$physdev")
+	json_load "$data"
+	json_get_var mac macaddr
+	json_cleanup
+	echo "$mac"
+}
+
+mac=$(__getmac)
+
+__request() {
+	local type="$1"
+	local userknoten="${2-nodenumber}"
+
+	case "$type" in
+		create)
+			local method='POST' 
+			url="http://${host}/${method}/${network}/knoten?mac=${mac}&pass=${fingerprint}"
+			answer="$(net_http_get "$url")"
+
+			json_init 
+			json_load "$answer"
+			json_get_var status 'status'
+
+			case "$status" in
+				'20*')
+                                        newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')  
+                                        [ -n "$newnumber" ] && {                                       
+                                                log "node got a new knotennummer: $newnumber"            
+                                        	uci_set ffwizard settings nodenumber "$newnumber"
+						change=1
+					}	
+				;;
+				'*')
+					log "error: $answer"
+				;;
+				'303')
+					newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')
+					[ -n "$newnumber" ] && { 
+						log "node already has a number: $newnumber" 
+						uci_set ffwizard settings nodenumber "$newnumber"
+						change=1
+					}
+				;;
+			esac
+		;;
+		heartbeat)
+			local method='GET'                                                            
+                        url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"                                                
+                                                                                                       
+                        json_init                                                                      
+                        json_load "$answer"                                                            
+                        json_get_var status 'status'                                                   
+                                                                                                       
+                        case "$status" in                                                              
+                                '200')
+					method='PUT'
+					url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
+					answer="$(net_http_get "$url")"
+					log "heartbeat: $(echo "$answer" | jsonfilter -e '$.message')"                                                                 
+                                ;;                                                                     
+                                '*')                                                                   
+                                        log "heartbeat: error: $answer"                                           
+                                ;;                                                                     
+                        esac                      
+		;;
+		register)
+			local method='GET'                                                             
+                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
+                        answer="$(net_http_get "$url")"                                                              
+                        json_init                                                                                    
+                        json_load "$answer"                                                                          
+                        json_get_var status 'status'                                                                 
+                                                                                                                     
+                        case "$status" in                                                                            
+                                '404')                                                                               
+                                        method='PUT'  
+                                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
+					answer="$(net_http_get "$url")"                                              
+                                        log "register: $(echo "$answer" | jsonfilter -e '$.result')"
+					change=1
+					uci set ffwizard settings nodenumber "$userknoten"
+					               
+                                ;;
+				'200')
+					log "register: already exists: $(echo "$answer" | jsonfilter -e '$.result')"                                                                                    
+                                ;;
+				'*')                                                                                 
+                                        log "register: error: $answer"                                                                      
+                                ;;                                                                                   
+                        esac      			
+		;;
+	esac
+}
+
+
+if [ "$#" -lt 1 ]; then
+	cat <<- EOF
+	usage: $0 create - create and apply a new knotennummer 
+	       $0 register <nodenumber> - register and apply a nodenumber
+	       $0 heartbeat - update last-seen  
+	EOF
+else
+	__request "$1" "$2"
+fi
+ 
+[ "$change" -eq 1 ] && {
+	log "configuration change detected: running ffwizard" 
+	ffwizard 
+} || :

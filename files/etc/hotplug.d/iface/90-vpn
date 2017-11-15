@@ -2,16 +2,31 @@
 
 [ "$INTERFACE" = "wan" ] && {
 
-	. /tmp/loader 
- 
 	case "$ACTION" in 
 		ifup) 
-			_vpn start
+			ifup vpn
 		;;
 		ifdown)
-			_vpn stop
-		;;
+			ifdown vpn
 	esac
 }
+
+[ "$INTERFACE" = "vpn" ] && {
+	
+	gw=$(uci -q get network.vpn.gateway)
+        case "$ACTION" in
+                ifup)
+            ip route add default via $gw table 50
+			ip rule add to 10.0.0.0/8 prio 30001 table main		
+			ip rule add from 10.0.0.0/8 prio 30010 table 50  
+                ;;
+                ifdown)
+			ip route del default via $gw table 50
+			ip rule del to 10.0.0.0/8 prio 30001 table main		
+			ip rule del from 10.0.0.0/8 prio 30010 table 50
+		;;
+        esac                      
+}           
+
 
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

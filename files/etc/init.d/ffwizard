@@ -1,0 +1,74 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+USE_PROCD=1
+
+validate_ffwizard_section()
+{
+	uci_validate_section ffwizard settings "${1}" \
+		'enabled:bool' \
+		'hostname:string' \
+		'ip6prefix:cidr6' \
+		'nodenumber:uinteger'
+}
+
+validate_ether_section()
+{
+	uci_validate_section ffwizard ether "${1}" \
+		'enabled:bool' \
+		'device:string' \
+		'olsr_mesh:bool' 
+}
+
+
+validate_vpn_section()
+{
+	uci_validate_section ffwizard vpn "${1}" \
+		'enabled:bool' \
+		'device:string' \
+		'olsr_mesh:bool' 
+}
+
+validate_wifi_section()
+{
+	uci_validate_section ffwizard wifi "${1}" \
+		'enabled:bool' \
+		'idx:uinteger' \
+		'device:string' \
+		'olsr_mesh:bool' \
+		'vap:bool' 
+}
+
+start_ffwizard() {
+	enabled=$(uci_get ffwizard settings enabled "0")
+	[ "$enabled" == "0" ] && return
+	config_load ffwizard
+	config_foreach system_config system
+	/usr/sbin/ffwizard
+	uci_set ffwizard settings enabled 0
+	uci_commit ffwizard
+}
+
+reload_service() {
+	logger -s -t ffwizard_init "Reload Service"
+	start_ffwizard
+}
+
+service_triggers()
+{
+	procd_open_trigger
+	procd_add_config_trigger "config.change" ffwizard /etc/init.d/ffwizard reload
+	procd_close_trigger
+
+	procd_open_validate
+	validate_ffwizard_section
+	validate_ether_section
+	validate_wifi_section
+	procd_close_validate
+}
+
+start_service() {
+	logger -s -t ffwizard_init "Start Service"
+	procd_set_param watch ffwizard
+	start_apply_profile
+}
