@@ -4,9 +4,9 @@
 . /lib/functions.sh 
 
 config_cb() {
-    local type="$1"
-    local name="$2"
-    case "$type" in
+	local type="$1"
+	local name="$2"
+	case "$type" in
 	system)
 		option_cb() {
 			local option="$1"
@@ -30,6 +30,8 @@ config_cb() {
 					local option="$1"
 					local value="$2"
 					uci_set freifunk contact "$option" "$value"
+				}
+			;;
 			*)
 				option_cb() { return; }
 			;;
