@@ -41,7 +41,7 @@ validate_wifi_section()
 
 start_ffwizard() {
 	enabled=$(uci_get ffwizard settings enabled "0")
-	[ "$enabled" == "0" ] && return
+	[ "$enabled" = "0" ] && return
 	config_load ffwizard
 	config_foreach system_config system
 	/usr/sbin/ffwizard
@@ -64,6 +64,7 @@ service_triggers()
 	validate_ffwizard_section
 	validate_ether_section
 	validate_wifi_section
+	validate_vpn_section
 	procd_close_validate
 }
 
