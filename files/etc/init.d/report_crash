@@ -1,11 +1,12 @@
 #!/bin/sh /etc/rc.common
+# shellcheck disable=SC2039
 
 START=99
 
 uniq_machine_id()
 {
 	dropbearkey -y -f "/etc/dropbear/dropbear_rsa_host_key" | \
-	fgrep "Fingerprint:" | cut -d' ' -f3
+	grep "Fingerprint:" | cut -d' ' -f3
 }
 
 kernel_version()
@@ -33,11 +34,11 @@ openwrt_revision()
 
 build_data()
 {
-	local file="$1"
-	local id="$( uniq_machine_id )"
-	local version="$( openwrt_revision )"
-	local kernel="$( kernel_version )"
-	local hardware="$( box_hardware )"
+	file="$1"
+	id="$(uniq_machine_id)"
+	version="$(openwrt_revision)"
+	kernel="$(kernel_version)"
+	hardware="$(box_hardware)"
 
 	echo "crashlog $(cat /proc/sys/kernel/hostname)-$hardware"
 	echo "$version"
@@ -60,7 +61,7 @@ start()
 
 	if [ -e "$file" ]; then
 		while [ $maxtry -gt 0 ]; do {
-			logger "$funcname: found log in $file, reporting to server $server_ip"
+			logger "$funcname: found log in $file, reporting to server ${server_addr}:${server_port}"
 			answer="$( build_data "$file" | nc "$server_addr" "$server_port" )"
 
 			case "$answer" in
@@ -68,7 +69,7 @@ start()
 					break
 				;;
 				*)
-					maxtry=$(( $maxtry - 1 ))
+					maxtry=$(( maxtry - 1 ))
 					logger "$funcname: error during send (answer: '$answer'), trying again in $pause sec"
 					sleep $pause
 				;;
