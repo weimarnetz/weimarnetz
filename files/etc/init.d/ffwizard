@@ -71,5 +71,5 @@ service_triggers()
 start_service() {
 	logger -s -t ffwizard_init "Start Service"
 	procd_set_param watch ffwizard
-	start_apply_profile
+	start_ffwizard
 }
