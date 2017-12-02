@@ -41,4 +41,3 @@ config_load system
 uci_commit
 
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
-
