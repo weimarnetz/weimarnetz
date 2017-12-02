@@ -53,7 +53,7 @@ start_autoconf() {
 	config_foreach setup_wifi wifi-device
 	config_load network
 	config_foreach setup_ether interface
-	[ -x /usr/sbin/vtund ] && setup_vpn vpn
+	setup_vpn vpn
 	# Reset firstboot flag
 	uci_set ffwizard settings firstboot 0
 	uci_commit ffwizard
