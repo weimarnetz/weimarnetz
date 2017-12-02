@@ -52,7 +52,7 @@ start()
 {
 	local funcname="crashlog_apport"		# enforce a crash with 'echo c >/proc/sysrq-trigger'
 	local file="/sys/kernel/debug/crashlog"		# crashlog.o works since r32788
-	local server_addr="weimarnetz.segfault.gq"
+	local server_addr="buildbot.weimarnetz.de"
 	local server_port="2323"
 	local answer="false"
 	local maxtry=10
