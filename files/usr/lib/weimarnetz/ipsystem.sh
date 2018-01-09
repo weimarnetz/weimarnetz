@@ -12,9 +12,9 @@ node2nets_json()
 	local range_start="${4:-2}"
 	local range_end="${5:-1020}"
 
-	local oct1 oct2 oct3 oct4 
+	local oct1 oct2 oct3 oct4
 
-	json_init 
+	json_init
 	# a typical node 16:
 	# all:	10.63.16.0	/26  (=  0...64)
 
@@ -37,9 +37,9 @@ node2nets_json()
 		json_add_string "radio0_mesh" "$network.$city.$n.$((s+48))/32"
 		json_add_string "radio1_mesh" "$network.$city.$n.$((s+49))/32"
 		json_add_string "vpn" "$network.$city.$n.$((s+58))/30"
-		json_add_string "vpn_gw" "$network.$city.$n.$((s+57))"		  
+		json_add_string "vpn_gw" "$network.$city.$n.$((s+57))"
 		local roamingnet="$(__calc_roaming_net $nodenumber)"
-		json_add_string "roaming_block" "100.64.0.1/10" 
+		json_add_string "roaming_block" "100.64.0.1/10"
 		json_add_string "roaming_net" "$roamingnet"
 		json_add_string "roaming_gw" "100.64.0.1"
 		json_add_string "roaming_dhcp_offset" "$(__dhcp_offset $roamingnet)"
@@ -52,13 +52,13 @@ node2nets_json()
 __calc_roaming_net() {
 	local nodenumber="$1"
 	local i=2
-	local o2=64 
+	local o2=64
 	local o3=""
 
 	while [ $i -lt 1024 ]; do		# each node has it's own uniq /24 DHCP-range
 		o2=$(( o2 + 1 ))		# which must be valid across the whole network
 		for o3 in $(seq 0 255);do
-			test "$nodenumber" = "$i" && break 2 
+			test "$nodenumber" = "$i" && break 2
 			i=$(( i + 1 ))
 		done
 	done

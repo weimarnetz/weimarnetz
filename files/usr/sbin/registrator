@@ -15,6 +15,7 @@ nodenumber=$(uci_get ffwizard settings nodenumber -1)
 network=$(uci_get ffwizard settings ipschema ffweimar)
 host=$(uci_get ffwizard settings registrator "reg.weimarnetz.de")
 
+# fixme migration
 for type in rsa dss; do
 	path="/etc/dropbear/dropbear_${type}_host_key"
 	[ -e "$path" ] || continue
