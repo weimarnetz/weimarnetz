@@ -153,6 +153,8 @@ setup_wifi() {
 		uci_set wireless "$sec" mode "adhoc"
 		mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
 		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
+    # use previous ssid if set see preserve_ssid() 
+    [ -n "$ssid" ] && mesh_ssid="$ssid"
 		uci_set wireless "$sec" ssid "$mesh_ssid" 
 		bssid="02:CA:FF:EE:BA:BE"
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
@@ -209,10 +211,19 @@ remove_wifi() {
 	uci_remove wireless "$cfg" 2>/dev/null
 }
 
+preserve_ssid() {
+    local cfg="$1"
+    uci_get network network -1
+    [ "$network" -eq "$br_name" ] && {
+        uci_get ssid ssid
+    }
+}
+
 br_name="vap"
 
 #Remove wireless config
 config_load wireless
+config_foreach preserve_ssid wifi-iface
 config_foreach remove_wifi wifi-device
 uci_commit wireless 
 wifi config
