@@ -39,11 +39,11 @@ setup_sysctl()
 setup_system() {
 	local cfg="$1"
 	
-	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" ] ; then
+	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" -o "$hostname" = "OpenWrt" ] ; then
 		config_get hostname "$cfg" hostname "$hostname"
 		log_system "No custom hostname! Using $hostname"
 	fi
-	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" ] ; then
+	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" -o "$hostname" = "OpenWrt" ] ; then
 		hostname=$(echo ff${community} | tr '[A-Z]' '[a-z]')-$nodenumber 
 		uci_set system "$cfg" hostname "$hostname"
 	else
@@ -69,7 +69,7 @@ setup_system() {
 }
 
 config_load ffwizard 
-config_get hostname settings hostname "LEDE"
+config_get hostname settings hostname "OpenWrt"
 config_get nodenumber settings nodenumber
 
 # Set lat lon
