@@ -44,7 +44,7 @@ setup_bridge() {
 	local roaming="$3"
 	setup_ip "$cfg" "$ipaddr"
 	if [ "$roaming" -eq "1" ]; then 
-		#uci_set network "$cfg" macaddr '02:ff:ff:ff:00:00'
+		uci_set network "$cfg" macaddr '02:ff:ff:ff:23:42'
 		true
 	fi
 	uci_set network "$cfg" type 'bridge'
@@ -99,8 +99,9 @@ setup_ether() {
 setup_wifi() {
 	local cfg="$1"
 	local nodenumber="$2"
-	local br_name="$3"
-	local roam="$4"
+	local vap_name="$3"
+	local roam_name="$4"
+	local roam="$5"
 
 	config_get enabled "$cfg" enabled "0"
 	[ -z "$enabled" ] && return
@@ -154,8 +155,6 @@ setup_wifi() {
 		uci_set wireless "$sec" mode "adhoc"
 		mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
 		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
-    # use previous ssid if set see preserve_ssid() 
-    [ -n "$ssid" ] && mesh_ssid="$ssid"
 		uci_set wireless "$sec" ssid "$mesh_ssid" 
 		bssid="02:CA:FF:EE:BA:BE"
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
@@ -180,28 +179,34 @@ setup_wifi() {
 		log_wifi "{cfg}: virtual ap not supported"
 		#uci_set ffwizard $cfg vap "0"
 	fi
-	if [ "$vap" -eq 1 ] ; then
+	if [ -n "$vap" ] ; then
 		log_wifi "${cfg}: virtual ap supported"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" mode "ap"
 		#uci_set wireless "$sec" mcast_rate "6000"
 		#uci_set wireless "$sec" isolate 1
-		uci_set wireless "$sec" network "$br_name"
-
-		if [ "$roam" -eq 1 ]; then
-			json_get_var ipaddr roaming_block
-			ssid=$(uci_get profile_${community} profile ssid)
-				uci_set wireless "$sec" ssid "$ssid"
-		else 
-			json_get_var ipaddr wifi
-			ap_ssid=$(uci_get profile_${community} profile ap_ssid)
-			# fixme - hostname support
-			ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32)
-			uci_set wireless "$sec" ssid "$ap_ssid"
-		fi
-		setup_bridge "$br_name" "$ipaddr" "$roam"
+		uci_set wireless "$sec" network "$vap_name"
+		json_get_var ipaddr wifi
+		ap_ssid=$(uci_get profile_${community} profile ap_ssid)
+		# fixme - hostname support
+		ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32)
+		uci_set wireless "$sec" ssid "$ap_ssid"
+		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
+        if [ -n "$roam" ]; then
+                log_wifi "${cfg}: roaming ap enabled"                                                                  
+                uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"                                                      
+                uci_set wireless "$sec" device "$device"                                                                 
+                uci_set wireless "$sec" mode "ap"                                                                        
+                #uci_set wireless "$sec" mcast_rate "6000"                                                               
+                #uci_set wireless "$sec" isolate 1                                                                       
+                uci_set wireless "$sec" network "$roam_name"                                                              
+                json_get_var ipaddr roaming_block                                                                
+                ssid=$(uci_get profile_${community} profile ssid)                                                
+                uci_set wireless "$sec" ssid "$ssid"
+		setup_bridge "$roam_name" "$ipaddr" "1"                                                     
+	fi  
 	json_cleanup
 }
 
@@ -210,18 +215,19 @@ remove_wifi() {
 	uci_remove wireless "$cfg" 2>/dev/null
 }
 
-preserve_ssid() {
-    local cfg="$1"
-    uci_get network network 0 
-    [ -z "$network" ] && return 
-    [ "$network" -eq "vap" ] && {
-        uci_get ssid ssid
-    }
-}
+# FIXME!
+#preserve_ssid() {
+#    local cfg="$1"
+#    uci_get network network 0 
+#    [ -z "$network" ] && return 
+#    [ "$network" -eq "vap" ] && {
+#        uci_get ssid ssid
+#    }
+#}
 
 #Remove wireless config
 config_load wireless
-config_foreach preserve_ssid wifi-iface
+#config_foreach preserve_ssid wifi-iface
 config_foreach remove_wifi wifi-device
 uci_commit wireless 
 wifi config
@@ -236,10 +242,7 @@ uci_commit wireless
 config_load ffwizard
 config_get roaming settings roaming 0
 config_foreach setup_ether ether "$nodenumber"
-config_foreach setup_wifi wifi "$nodenumber" "vap" 0
-[ -n "$roaming" ] && {
-	config_foreach setup_wifi wifi "$nodenumber" "roam" 1
-}
+config_foreach setup_wifi wifi "$nodenumber" "vap" "roam" "$roaming" 
 config_foreach setup_vpn vpn 
 
 config_get ip6prefix ffwizard ip6prefix

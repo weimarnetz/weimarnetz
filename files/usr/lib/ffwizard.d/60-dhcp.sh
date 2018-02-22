@@ -66,7 +66,7 @@ setup_roaming_dhcp() {
 	uci_set dhcp $cfg_dhcp ignore "0"						  
 	uci_set dhcp $cfg_dhcp start "$offset"		
 	uci_set dhcp $cfg_dhcp limit "254"			   
-	uci_set dhcp $cfg_dhcp leasetime "1m"					  
+	uci_set dhcp $cfg_dhcp leasetime "6h"					  
 	uci_add_list dhcp $cfg_dhcp dhcp_option "119,olsr,lan,p2p"
 	uci_add_list dhcp $cfg_dhcp domain "olsr"				  
 	uci_add_list dhcp $cfg_dhcp domain "lan"				  
