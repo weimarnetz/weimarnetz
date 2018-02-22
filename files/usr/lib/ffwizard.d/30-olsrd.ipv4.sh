@@ -191,11 +191,6 @@ json_get_var node_net node_net
 
 setup_hna4 "$node_net"
 
-json_get_var roaming_net roaming_net
-config_get roaming settings roaming
-if [ "$roaming" -eq "1" ]; then 
-	setup_hna4 "$roaming_net"
-fi
 json_cleanup
 
 if [ -n "$olsr_enabled" ] ; then
