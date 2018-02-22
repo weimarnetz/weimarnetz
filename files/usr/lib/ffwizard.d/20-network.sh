@@ -212,8 +212,9 @@ remove_wifi() {
 
 preserve_ssid() {
     local cfg="$1"
-    uci_get network network -1
-    [ "$network" -eq "$br_name" ] && {
+    uci_get network network 0 
+    [ -z "$network" ] && return 
+    [ "$network" -eq "vap" ] && {
         uci_get ssid ssid
     }
 }
