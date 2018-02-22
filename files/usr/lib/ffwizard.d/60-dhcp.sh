@@ -103,21 +103,23 @@ setup_wifi() {
 	[ "$enabled" -eq "0" ] && return
 	config_get roaming settings roaming "0"
 	config_get ipv6 settings ipv6 "0"
-	if [ "$roaming" -eq "1" ]; then 
-		setup_roaming_dhcp "$br_name" "$nodenumber"
-	else 
-		local nodedata=$(node2nets_json $nodenumber)
-		json_init
-		json_load "$nodedata"
-		json_get_var dhcp_ip wifi
-		cfg_dhcp="$br_name"
-		uci_remove dhcp $cfg_dhcp 2>/dev/null
-		if [ "$dhcp_ip" != "0" ] ; then
-			log_dhcp "Setup $cfg with $dhcp_ip"
-			setup_dhcp $cfg_dhcp "$dhcp_ip" "$ipv6"
-		fi
-		json_cleanup
+
+	local nodedata=$(node2nets_json $nodenumber)
+	json_init
+	json_load "$nodedata"
+	json_get_var dhcp_ip wifi
+	cfg_dhcp="$br_name"
+	uci_remove dhcp $cfg_dhcp 2>/dev/null
+	if [ "$dhcp_ip" != "0" ] ; then
+		log_dhcp "Setup $cfg with $dhcp_ip"
+		setup_dhcp $cfg_dhcp "$dhcp_ip" "$ipv6"
 	fi
+	if [ "$roaming" -eq "1" ]; then
+		uci_remove dhcp roam 2>/dev/null
+                setup_roaming_dhcp "roam" "$nodenumber"           
+        fi  
+	json_cleanup
+
 }
 
 setup_dhcpbase() {
