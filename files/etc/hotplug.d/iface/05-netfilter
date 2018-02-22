@@ -43,17 +43,16 @@ up_rules() {
 				iptables -A FORWARD -j paranoia-vpn
 			#}
 		;;
-		vpn)
+		vpn|radio0_mesh|radio1_mesh)
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
-			iptables -t nat -N natvpn
-			iptables -t nat -A natvpn -s 10.63.0.0/16 -j RETURN
-			#iptables -t nat -A natvpn -s 100.64.0.0/10 -j RETURN
-			iptables -t nat -A natvpn -j MASQUERADE
-			iptables -t nat -A POSTROUTING -o "$dev" -j natvpn
+			iptables -t nat -N nat
+			iptables -t nat -A nat -s 10.63.0.0/16 -j RETURN
+			iptables -t nat -A nat -j MASQUERADE
+			iptables -t nat -A POSTROUTING -o "$dev" -j nat
 		;; 
 	esac
 }
@@ -92,15 +91,15 @@ down_rules() {
 				iptables -X paranoia-vpn
 			}
 		;;
-		vpn)
+		vpn|radio0_mesh|radio1_mesh)
 			# mss clamping
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
-			iptables -t nat -D POSTROUTING -o "$dev" -j natvpn
-			iptables -t nat -F natvpn
-			iptables -t nat -X natpvn
+			iptables -t nat -D POSTROUTING -o "$dev" -j nat
+			iptables -t nat -F nat
+			iptables -t nat -X nat
 		;;
 		
 	esac
