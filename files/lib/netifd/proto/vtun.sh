@@ -73,7 +73,7 @@ probe_vtun_endpoints() {
 	count=0
 	for e in $endpoints
 	do
-		json="$(net_http_get "http://$e/freifunk/vpn")"
+		json="$(uclient-fetch -q -T 1 -O- "http://$e/freifunk/vpn")"
 		json_load "$json" 2>/dev/null
 		json_get_var server server
 		json_get_var port port_vtun_nossl_nolzo
@@ -87,7 +87,7 @@ probe_vtun_endpoints() {
 	if [ "$count" -gt 0 ]; then
 		rand=$(tr -dc 1-"$count" </dev/urandom 2>/dev/null| head -c1)
 		final=$(echo "$c" | awk '{$1=$1};1' | cut -d" " -f"$rand")
-		json="$(net_http_get "http://$final/freifunk/vpn")"
+		json="$(uclient-fetch -q -T 1 -O- "http://$final/freifunk/vpn")"
 		json_load "$json" 2>/dev/null
 		json_dump
 	fi
@@ -104,6 +104,7 @@ cat <<- EOF > "/var/run/vtun-${config}.conf"
 		persist no;
 		timeout 5;
 		keepalive 15:2;
+		nat_hack client;
 		up { program "/lib/netifd/vtun-up config=${config} dev=%% address=${ipaddr} netmask=${netmask} gw=${gateway} mtu=${mtu} server=${server} port=${port}" wait; };
 		down { program "/lib/netifd/vtun-down config=${config} dev=%% " wait; };
 	}
