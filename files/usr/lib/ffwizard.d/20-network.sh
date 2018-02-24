@@ -215,6 +215,16 @@ remove_wifi() {
 	uci_remove wireless "$cfg" 2>/dev/null
 }
 
+remove_network() {
+# delete stuff we don't need
+	local cfg="$1"
+	case "$cfg" in
+		wlan|wlanadhoc|wlanRADIO*)
+			uci_remove network "$cfg" 2>/dev/null
+		;;
+	esac
+}
+
 # FIXME!
 #preserve_ssid() {
 #    local cfg="$1"
@@ -232,12 +242,10 @@ config_foreach remove_wifi wifi-device
 uci_commit wireless 
 wifi config
 uci_commit wireless
-#Remove wifi ifaces
-# FIXME leave disabled iface alone
-config_load wireless
-config_foreach remove_wifi wifi-iface
-uci_commit wireless
 
+config_load network
+config_foreach remove_network interface
+uci_commit network
 #Setup ether and wifi
 config_load ffwizard
 config_get roaming settings roaming 0
