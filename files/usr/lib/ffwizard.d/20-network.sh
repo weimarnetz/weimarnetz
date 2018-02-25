@@ -242,6 +242,11 @@ config_foreach remove_wifi wifi-device
 uci_commit wireless 
 wifi config
 uci_commit wireless
+#Remove wifi ifaces	
+# FIXME leave disabled iface alone	
+config_load wireless	
+config_foreach remove_wifi wifi-iface	
+uci_commit wireless
 
 config_load network
 config_foreach remove_network interface
