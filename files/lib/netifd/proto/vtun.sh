@@ -104,7 +104,7 @@ cat <<- EOF > "/var/run/vtun-${config}.conf"
 		persist no;
 		timeout 5;
 		keepalive 15:2;
-		nat_hack client;
+		#nat_hack client;
 		up { program "/lib/netifd/vtun-up config=${config} dev=%% address=${ipaddr} netmask=${netmask} gw=${gateway} mtu=${mtu} server=${server} port=${port}" wait; };
 		down { program "/lib/netifd/vtun-down config=${config} dev=%% " wait; };
 	}
