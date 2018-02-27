@@ -96,10 +96,10 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"
-	[ "$enabled" -eq "0" ] && return
+	[ -z "$enabled" ] && return
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	log_olsr4 "$cfg $enabled"
-	[ "$olsr_mesh" -eq "0" ] && return
+	[ -z "$olsr_mesh" ] && return
 	
 	log_olsr4 "setup_ether: $cfg $device"
 	[ -z "$device" ] && return
@@ -119,10 +119,10 @@ setup_wifi() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"
-	[ "$enabled" -eq "0" ] && return
+	[ -z "$enabled" ] && return
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	log_olsr4 "$cfg $enabled"
-	[ "$olsr_mesh" -eq "0" ] && return
+	[ -z "$olsr_mesh" ] && return
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -eq "-1" ] && return
 	local device="radio${idx}_mesh"

@@ -43,7 +43,7 @@ setup_bridge() {
 	local ipaddr="$2"
 	local roaming="$3"
 	setup_ip "$cfg" "$ipaddr"
-	if [ "$roaming" -eq "1" ]; then 
+	if [ -n "$roaming" ]; then 
 		uci_set network "$cfg" macaddr '02:ff:ff:ff:23:42'
 		true
 	fi
@@ -82,7 +82,7 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"					  
-	[ "$enabled" -eq "1" ] || return 
+	[ -n "$enabled" ] || return 
 	config_get device "$cfg" device "none"
 	[ "$device" = "none" ] && return
 	json_init
@@ -145,7 +145,7 @@ setup_wifi() {
 	json_load "$nodedata"
 	json_get_var ipaddr "${device}_mesh"
 
-	if [ "$olsr_mesh" -eq "1" ] || [ "$bat_mesh" -eq "1" ]; then
+	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
 		local bssid mesh_ssid
 		log_wifi "${cfg}: mesh"
 		local network="${cfg}_mesh"
@@ -173,7 +173,7 @@ setup_wifi() {
 	#TODO check valid interface combinations
 	#iw phy$idx info | grep -A6 "valid interface combinations"
 	#iw phy$idx info | grep "interface combinations are not supported"
-	if [ "$vap" -eq "1" ] && \
+	if [ -n "$vap" ] && \
 		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "{cfg}: virtual ap not supported"
@@ -225,15 +225,6 @@ remove_network() {
 	esac
 }
 
-# FIXME!
-#preserve_ssid() {
-#    local cfg="$1"
-#    uci_get network network 0 
-#    [ -z "$network" ] && return 
-#    [ "$network" -eq "vap" ] && {
-#        uci_get ssid ssid
-#    }
-#}
 
 #Remove wireless config
 config_load wireless
