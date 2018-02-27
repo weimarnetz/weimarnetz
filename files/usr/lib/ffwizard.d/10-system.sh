@@ -25,6 +25,8 @@ setup_sysctl()
 	
 	for entry in 'vm.panic_on_oom=1' \
 			'kernel.panic_on_oops=1' \
+			'kernel.panic_on_warn=1' \
+			'kernel.panic_on_rcu_stall=1' \
 			'kernel.panic=10' \
 			"vm.min_free_kbytes=$min_free"; do {
 		sysctl -w "$entry" >/dev/null
