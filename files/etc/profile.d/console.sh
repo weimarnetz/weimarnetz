@@ -11,7 +11,7 @@
 nmeter_cmd() {
 	. /lib/functions/network.sh 
 	local cmd='%t %20c '
-	for dev in vap radio0_mesh radio1_mesh lan wan; do
+	for dev in roam vap radio0_mesh radio1_mesh lan wan; do
 		network_get_physdev physdev "$dev"
 		[ -n "$physdev" ] && cmd="$cmd ${physdev}: %[n$physdev]"
 	done
