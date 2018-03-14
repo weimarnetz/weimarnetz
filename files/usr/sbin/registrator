@@ -43,7 +43,7 @@ __request() {
 			local method='POST' 
 			url="http://${host}/${method}/${network}/knoten?mac=${mac}&pass=${fingerprint}"
 			answer="$(net_http_get "$url")"
-
+			log "$answer"
 			json_init 
 			json_load "$answer"
 			json_get_var status 'status'
@@ -74,7 +74,7 @@ __request() {
 			local method='GET'                                                            
                         url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
                         answer="$(net_http_get "$url")"                                                
-                                                                                                       
+                        log "$answer"                                                                               
                         json_init                                                                      
                         json_load "$answer"                                                            
                         json_get_var status 'status'                                                   
@@ -94,7 +94,7 @@ __request() {
 		register)
 			local method='GET'                                                             
                         url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
-                        answer="$(net_http_get "$url")"                                                              
+                        answer="$(net_http_get "$url")"
                         json_init                                                                                    
                         json_load "$answer"                                                                          
                         json_get_var status 'status'                                                                 

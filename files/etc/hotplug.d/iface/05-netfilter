@@ -10,6 +10,9 @@ up_rules() {
 
 	case "$iface" in
 		wan)
+			# only allow ssh on wan
+			iptables -A INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT
+			iptables -A INPUT -i "$dev" -j REJECT
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -17,7 +20,7 @@ up_rules() {
 			# nat
 			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			#[ "$(uci_get ffwizard settings restrict)" -eq 1 ] && {
+			[ -n "$(uci_get ffwizard settings restrict)" ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ]  && {
@@ -36,7 +39,7 @@ up_rules() {
 				} 
 			#}
 			# no internet without vpn
-			#[ "$(uci_get ffwizard settings )" -eq 0 ] && {
+			[ -n "$(uci_get ffwizard settings paranoia)" ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
@@ -63,6 +66,9 @@ down_rules() {
 
 	case "$iface" in
 		wan)
+			# 
+	    	iptables -D INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
+            iptables -D INPUT -i "$dev" -j REJECT 
 			# mss clamping
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -70,7 +76,7 @@ down_rules() {
 			# nat
 			iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
-			[ "$(uci_get ffwizard wan restrict)" -eq 1 ] && {
+			[ "$(uci_get ffwizard settings restrict)" -eq 1 ] && {
 				network_get_subnets wan_subnet	"$iface"
 				network_get_subnets6 wan_subnet6 "$iface" 
 				[ -n "$wan_subnet" ] && {
@@ -85,7 +91,7 @@ down_rules() {
 				}
 			}
 			# no internet without vpn
-			[ "$(uci_get ffwizard vpn disabled)" -eq 0 ] && {
+			[ -n "$(uci_get ffwizard settings paranoia)" ] && {
 				iptables -D FORWARD -j paranoia-vpn
 				iptables -F paranoia-vpn
 				iptables -X paranoia-vpn

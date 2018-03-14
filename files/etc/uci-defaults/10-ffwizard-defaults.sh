@@ -4,6 +4,8 @@ uci -m import ffwizard <<EOF
 config node 'settings'
 	option ipschema 'ffweimar'
 	option roaming '1'
+	option restrict '1'
+	option paranoia '1'
 	option ipv6 '0'
 	option ip6prefix 'fd42:7ceb:f2ff::/48'
 
