@@ -10,8 +10,6 @@ up_rules() {
 
 	case "$iface" in
 		wan)
-	    # only allow ssh on wan                                                    
-            iptables -A INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
             iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT                                                                                  
             iptables -A INPUT -i "$dev" -j REJECT    
 			# mss clamping 
@@ -21,29 +19,34 @@ up_rules() {
 			# nat
 			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
+			# fix static ip
 			[ "$(uci_get ffwizard settings restrict 0)" -eq 1 ] && {
-				network_get_subnets wan_subnet	"$iface"
-				network_get_subnets6 wan_subnet6 "$iface" 
-				[ -n "$wan_subnet" ]  && {
-					iptables -N paranoia-local
-					iptables -A paranoia-local \
-						-s "$wan_subnet" -i "$dev" -j REJECT
-					iptables -A FORWARD \
-						-j paranoia-local
+				# disable restrict access to local net when ip is static
+				[ $(uci_get network wan proto dhcp) = "static" ] || { 
+					network_get_subnets wan_subnet	"$iface"
+					network_get_subnets6 wan_subnet6 "$iface" 
+					[ -n "$wan_subnet" ]  && {
+						iptables -N restrict-localnet 
+						iptables -A restrict-localnet \
+							-s "$wan_subnet" -i "$dev" -j REJECT
+						iptables -A FORWARD \
+							-j restrict-localnet
+					}
+					[ -n "$wan_subnet6" ] && { 
+						ip6tables -N restrict-localnet6
+						ip6tables -A restrict-localnet6 \
+							-s "$wan_subnet6" -i "$dev" -j REJECT
+						ip6tables -A FORWARD \
+							-j restrict-localnet6
+					} 
 				}
-				[ -n "$wan_subnet6" ] && { 
-					ip6tables -N paranoia-local6
-					ip6tables -A paranoia-local6 \
-						-s "$wan_subnet6" -i "$dev" -j REJECT
-					ip6tables -A FORWARD \
-						-j paranoia-local6
-				} 
 			}
 			# no internet without vpn
 			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
+				iptables -A paranoia-vpn -i br-roam -o "$dev" -j REJECT
 				iptables -A FORWARD -j paranoia-vpn
 			}
 		;;
@@ -67,9 +70,8 @@ down_rules() {
 
 	case "$iface" in
 		wan)
-	    	iptables -D INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
-                iptables -D INPUT -i "$dev" -j REJECT
-		iptables -D INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 
+            iptables -D INPUT -i "$dev" -j REJECT
+			iptables -D INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 
 			# mss clamping
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -78,35 +80,39 @@ down_rules() {
 			iptables -t nat -D POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
 			[ "$(uci_get ffwizard settings restrict 0)" -eq 1 ] && {
-				network_get_subnets wan_subnet	"$iface"
-				network_get_subnets6 wan_subnet6 "$iface" 
-				[ -n "$wan_subnet" ] && {
-					iptables -D FORWARD -j paranoia-local
-					iptables -F paranoia-local
-					iptables -X paranoia-local 
-				}
-				[ -n "$wan_subnet6" ] && {
-					ip6tables -D FORWARD -j paranoia-local6
-					ip6tables -F paranoia-local6
-					ip6tables -X paranoia-local6
+				# disable restrict access to local net when ip is static
+				[ $(uci_get network wan proto dhcp) = "static" ] || { 
+					network_get_subnets wan_subnet	"$iface"
+					network_get_subnets6 wan_subnet6 "$iface" 
+					[ -n "$wan_subnet" ] && {
+						iptables -D FORWARD -j restrict-local
+						iptables -F restrict-localnet
+						iptables -X restrict-localnet 
+					}
+					[ -n "$wan_subnet6" ] && {
+						ip6tables -D FORWARD -j restrict-localnet6
+						ip6tables -F restrict-localnet6
+						ip6tables -X restrict-localnet6
+					}
 				}
 			}
-			# no internet without vpn
-			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
-				iptables -D FORWARD -j paranoia-vpn
-				iptables -F paranoia-vpn
-				iptables -X paranoia-vpn
+				# no internet without vpn
+				[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
+					iptables -D FORWARD -j paranoia-vpn
+					iptables -F paranoia-vpn
+					iptables -X paranoia-vpn
+				}
 			}
-		;;
+			;;
 		vpn|radio0_mesh|radio1_mesh)
-			# mss clamping
+			# mss clamping 
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
-			iptables -t nat -D POSTROUTING -o "$dev" -j nat-"$iface"
 			iptables -t nat -F nat-"$iface"
 			iptables -t nat -X nat-"$iface"
+			iptables -t nat -D POSTROUTING -o "$dev" -j nat-"$iface"
 		;;
 		
 	esac
