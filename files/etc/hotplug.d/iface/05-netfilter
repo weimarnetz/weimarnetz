@@ -22,7 +22,7 @@ up_rules() {
 			# fix static ip
 			[ "$(uci_get ffwizard settings restrict 0)" -eq 1 ] && {
 				# disable restrict access to local net when ip is static
-				[ $(uci_get network wan proto dhcp) = "static" ] || { 
+				[ "$(uci_get network wan proto dhcp)" = "static" ] || { 
 					network_get_subnets wan_subnet	"$iface"
 					network_get_subnets6 wan_subnet6 "$iface" 
 					[ -n "$wan_subnet" ]  && {
@@ -81,7 +81,7 @@ down_rules() {
 			# forbid access to wan subnet (e.g. fritzbox of user)
 			[ "$(uci_get ffwizard settings restrict 0)" -eq 1 ] && {
 				# disable restrict access to local net when ip is static
-				[ $(uci_get network wan proto dhcp) = "static" ] || { 
+				[ "$(uci_get network wan proto dhcp)" = "static" ] || { 
 					network_get_subnets wan_subnet	"$iface"
 					network_get_subnets6 wan_subnet6 "$iface" 
 					[ -n "$wan_subnet" ] && {
@@ -96,12 +96,11 @@ down_rules() {
 					}
 				}
 			}
-				# no internet without vpn
-				[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
-					iptables -D FORWARD -j paranoia-vpn
-					iptables -F paranoia-vpn
-					iptables -X paranoia-vpn
-				}
+			# no internet without vpn
+			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
+				iptables -D FORWARD -j paranoia-vpn
+				iptables -F paranoia-vpn
+				iptables -X paranoia-vpn
 			}
 			;;
 		vpn|radio0_mesh|radio1_mesh)
