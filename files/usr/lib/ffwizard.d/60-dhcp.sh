@@ -42,7 +42,7 @@ setup_dhcp() {
 	uci_add_list dhcp $cfg_dhcp domain "olsr"
 	uci_add_list dhcp $cfg_dhcp domain "lan"
 	uci_add_list dhcp $cfg_dhcp domain "p2p"
-	[ -n "$ipv6" ] && {
+	[ "$ipv6" -eq 1 ] && {
 		uci_set dhcp $cfg_dhcp dhcpv6 "server"
 		uci_set dhcp $cfg_dhcp ra "server"
 		uci_set dhcp $cfg_dhcp ra_preference "low"
@@ -71,7 +71,7 @@ setup_roaming_dhcp() {
 	uci_add_list dhcp $cfg_dhcp domain "olsr"				  
 	uci_add_list dhcp $cfg_dhcp domain "lan"				  
 	uci_add_list dhcp $cfg_dhcp domain "p2p"				  
-	if [ -n "$ipv6" ]; then
+	if [ "$ipv6" -eq 1 ]; then
 		uci_set dhcp $cfg_dhcp dhcpv6 "server"					  
 		uci_set dhcp $cfg_dhcp ra "server"				
 		uci_set dhcp $cfg_dhcp ra_preference "low"		
@@ -84,7 +84,7 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled $cfg enabled "0"
-	[ "$enabled" == "0" ] && return
+	[ "$enabled" -eq 0 ] && return
 	json_init
 	json_load "$nodedata"
 	json_get_var ipaddr "$cfg"
@@ -100,7 +100,7 @@ setup_wifi() {
 	local nodenumber="$2"
 
 	config_get enabled $cfg enabled "0"
-	[ -z "$enabled" ] && return
+	[ "$enabled" -eq 0 ] && return
 	config_get roaming settings roaming "0"
 	config_get ipv6 settings ipv6 "0"
 
@@ -110,11 +110,11 @@ setup_wifi() {
 	json_get_var dhcp_ip wifi
 	cfg_dhcp="$br_name"
 	uci_remove dhcp $cfg_dhcp 2>/dev/null
-	if [ "$dhcp_ip" != "0" ] ; then
+	if [ -n "$dhcp_ip" ] ; then
 		log_dhcp "Setup $cfg with $dhcp_ip"
 		setup_dhcp $cfg_dhcp "$dhcp_ip" "$ipv6"
 	fi
-	if [ -n "$roaming" ]; then
+	if [ "$roaming" -eq 1 ]; then
 		uci_remove dhcp roam 2>/dev/null
                 setup_roaming_dhcp "roam" "$nodenumber"           
         fi  
@@ -130,7 +130,7 @@ setup_dhcpbase() {
 	uci_add_list dhcp $cfg server "8.8.8.8"
 	uci_add_list dhcp $cfg server "8.8.4.4"
 	config_get ffwizard $cfg olsr_mesh "0"
-	if [ -n "$olsr_mesh" ]; then
+	if [ "$olsr_mesh" -eq 1 ]; then
 		uci_remove dhcp $cfg addnhosts
 		uci_add_list dhcp $cfg addnhosts "/tmp/hosts/olsr.ipv4"
 		uci_add_list dhcp $cfg addnhosts "/etc/hosts.ff"

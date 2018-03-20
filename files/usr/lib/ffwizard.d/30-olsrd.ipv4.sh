@@ -96,10 +96,10 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"
-	[ -z "$enabled" ] && return
+	[ "$enabled" -eq 0 ] && return
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	log_olsr4 "$cfg $enabled"
-	[ -z "$olsr_mesh" ] && return
+	[ "$olsr_mesh" -eq 0 ] && return
 	
 	log_olsr4 "setup_ether: $cfg $device"
 	[ -z "$device" ] && return
@@ -119,10 +119,10 @@ setup_wifi() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"
-	[ -z "$enabled" ] && return
+	[ "$enabled" -eq 0 ] && return
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	log_olsr4 "$cfg $enabled"
-	[ -z "$olsr_mesh" ] && return
+	[ "$olsr_mesh" -eq 0 ] && return
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -eq "-1" ] && return
 	local device="radio${idx}_mesh"
@@ -193,7 +193,7 @@ setup_hna4 "$node_net"
 
 json_cleanup
 
-if [ -n "$olsr_enabled" ] ; then
+if [ "$olsr_enabled" -eq 1 ] ; then
 	#If olsrd is disabled then start olsrd before write config
 	#read new olsrd config via ubus call uci "reload_config" in ffwizard
 	if ! [ "$(find /etc/rc.d/S*olsrd)" ]; then
