@@ -43,7 +43,7 @@ setup_bridge() {
 	local ipaddr="$2"
 	local roaming="$3"
 	setup_ip "$cfg" "$ipaddr"
-	if [ -n "$roaming" ]; then 
+	if [ "$roaming" -eq 1 ]; then 
 		uci_set network "$cfg" macaddr '02:ff:ff:ff:23:42'
 		true
 	fi
@@ -82,7 +82,7 @@ setup_ether() {
 	local nodenumber="$2"
 
 	config_get enabled "$cfg" enabled "0"					  
-	[ -n "$enabled" ] || return 
+	[ "$enabled" -eq 1 ] || return 
 	config_get device "$cfg" device "none"
 	[ "$device" = "none" ] && return
 	json_init
@@ -104,7 +104,7 @@ setup_wifi() {
 	local roam="$5"
 
 	config_get enabled "$cfg" enabled "0"
-	[ -z "$enabled" ] && return
+	[ "$enabled" -eq 0 ] && return
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -ge 0 ] || return
 	
@@ -145,7 +145,7 @@ setup_wifi() {
 	json_load "$nodedata"
 	json_get_var ipaddr "${device}_mesh"
 
-	if [ -n "$olsr_mesh" ] || [ -n "$bat_mesh" ]; then
+	if [ "$olsr_mesh" -eq 1 ] || [ "$bat_mesh" -eq 1 ]; then
 		local bssid mesh_ssid
 		log_wifi "${cfg}: mesh"
 		local network="${cfg}_mesh"
@@ -173,13 +173,13 @@ setup_wifi() {
 	#TODO check valid interface combinations
 	#iw phy$idx info | grep -A6 "valid interface combinations"
 	#iw phy$idx info | grep "interface combinations are not supported"
-	if [ -n "$vap" ] && \
+	if [ "$vap" -eq 1 ] && \
 		[ -n "$(iw phy$idx info | grep 'interface combinations are not supported')" ]  ; then
 		vap="0"
 		log_wifi "{cfg}: virtual ap not supported"
 		#uci_set ffwizard $cfg vap "0"
 	fi
-	if [ -n "$vap" ] ; then
+	if [ "$vap" -eq 1 ] ; then
 		log_wifi "${cfg}: virtual ap supported"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
@@ -194,7 +194,7 @@ setup_wifi() {
 		uci_set wireless "$sec" ssid "$ap_ssid"
 		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
-        if [ -n "$roam" ]; then
+        if [ "$roam" -eq 1 ]; then
                 log_wifi "${cfg}: roaming ap enabled"                                                                  
                 uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"                                                      
                 uci_set wireless "$sec" device "$device"                                                                 
