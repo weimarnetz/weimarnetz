@@ -10,10 +10,10 @@ up_rules() {
 
 	case "$iface" in
 		wan)
-			# only allow ssh on wan
-			iptables -A INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT
-			iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-			iptables -A INPUT -i "$dev" -j REJECT
+	    # only allow ssh on wan                                                    
+            iptables -A INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
+            iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT                                                                                  
+            iptables -A INPUT -i "$dev" -j REJECT    
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -38,14 +38,14 @@ up_rules() {
 					ip6tables -A FORWARD \
 						-j paranoia-local6
 				} 
-			#}
+			}
 			# no internet without vpn
 			[ -n "$(uci_get ffwizard settings paranoia)" ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
 				iptables -A FORWARD -j paranoia-vpn
-			#}
+			}
 		;;
 		vpn|radio0_mesh|radio1_mesh)
 			# mss clamping 
@@ -53,10 +53,10 @@ up_rules() {
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
-			iptables -t nat -N nat
-			iptables -t nat -A nat -s 10.63.0.0/16 -j RETURN
-			iptables -t nat -A nat -j MASQUERADE
-			iptables -t nat -A POSTROUTING -o "$dev" -j nat
+			iptables -t nat -N nat-"$iface"
+			iptables -t nat -A nat-"$iface" -s 10.63.0.0/16 -j RETURN
+			iptables -t nat -A nat-"$iface" -j MASQUERADE
+			iptables -t nat -A POSTROUTING -o "$dev" -j nat-"$iface"
 		;; 
 	esac
 }
@@ -67,9 +67,9 @@ down_rules() {
 
 	case "$iface" in
 		wan)
-			# 
 	    	iptables -D INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
-            iptables -D INPUT -i "$dev" -j REJECT 
+                iptables -D INPUT -i "$dev" -j REJECT
+		iptables -D INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 
 			# mss clamping
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -104,9 +104,9 @@ down_rules() {
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
-			iptables -t nat -D POSTROUTING -o "$dev" -j nat
-			iptables -t nat -F nat
-			iptables -t nat -X nat
+			iptables -t nat -D POSTROUTING -o "$dev" -j nat-"$iface"
+			iptables -t nat -F nat-"$iface"
+			iptables -t nat -X nat-"$iface"
 		;;
 		
 	esac
