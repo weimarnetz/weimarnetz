@@ -10,10 +10,10 @@ up_rules() {
 
 	case "$iface" in
 		wan)
-	    # only allow ssh on wan                                                    
-            iptables -A INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
-            iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT                                                                                  
-            iptables -A INPUT -i "$dev" -j REJECT    
+		# only allow ssh on wan													   
+			iptables -A INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT			   
+			iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT																				  
+			iptables -A INPUT -i "$dev" -j REJECT	 
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -67,9 +67,9 @@ down_rules() {
 
 	case "$iface" in
 		wan)
-	    	iptables -D INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT             
-                iptables -D INPUT -i "$dev" -j REJECT
-		iptables -D INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 
+			iptables -D INPUT -i "$dev" -p tcp -m tcp --dport 22 -j ACCEPT			   
+			iptables -D INPUT -i "$dev" -j REJECT
+			iptables -D INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 
 			# mss clamping
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
