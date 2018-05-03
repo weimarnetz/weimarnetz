@@ -155,8 +155,15 @@ setup_wifi() {
 		uci_set wireless "$sec" mode "adhoc"
 		mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
 		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
-		uci_set wireless "$sec" ssid "$mesh_ssid" 
-		bssid="02:CA:FF:EE:BA:BE"
+		uci_set wireless "$sec" ssid "$mesh_ssid"
+		case $channel in
+			40)
+				bssid="02:CA:FF:EE:00:40"
+				;;
+			*)
+				bssid="02:CA:FF:EE:BA:BE"
+				;;
+		esac
 		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
 		#	bssid="12:"$(printf "%02d" "$(expr $valid_channel - 100)")":CA:FF:EE:EE"
 		#fi
