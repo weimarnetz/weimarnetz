@@ -12,8 +12,7 @@ eval "$@"
 	logger -t "vtun-up" -p "user.error" "error: no device"
 	exit 1
 }
-ip link set dev "$dev" up
-ip link set dev "$dev" mtu "$mtu"
+/sbin/ip link set dev "$dev" up mtu "$mtu"
 
 proto_init_update "$dev" 1
 
