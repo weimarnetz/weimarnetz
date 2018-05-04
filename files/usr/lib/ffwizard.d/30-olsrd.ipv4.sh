@@ -16,6 +16,7 @@ setup_olsrbase() {
 	uci_set olsrd "$cfg" FIBMetric "flat"
 	uci_set olsrd "$cfg" TcRedundancy "2"
 	uci_set olsrd "$cfg" Pollrate "0.025"
+	uci_remove olsrd "$cfg" MainIp
 }
 
 setup_InterfaceDefaults() {
