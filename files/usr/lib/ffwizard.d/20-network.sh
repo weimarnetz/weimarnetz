@@ -226,7 +226,7 @@ remove_network() {
 # delete stuff we don't need
 	local cfg="$1"
 	case "$cfg" in
-		wlan|wlanadhoc|wlanRADIO*)
+		intercity*|wlan|wlanadhoc|wlanRADIO*)
 			uci_remove network "$cfg" 2>/dev/null
 		;;
 	esac

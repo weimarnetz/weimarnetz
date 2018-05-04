@@ -47,11 +47,12 @@ setup_Plugin_txtinfo() {
 
 setup_Plugin_dyn_gw() {
 	local cfg="$1"
-	uci_set olsrd "$cfg" CheckInterval '5000'
-	uci_set olsrd "$cfg" PingInterval '40'
-	uci_set olsrd "$cfg" 'Ping' '141.1.1.1'
-	uci_set olsrd "$cfg" 'Ping' '8.8.8.8'
-	uci_set olsrd "$cfg" 'Ping' '194.25.2.129'
+	uci_set olsrd "$cfg" CheckInterval '1000'
+	uci_set olsrd "$cfg" PingInterval '5'
+	uci_remove olsrd "$cfg" 'Ping'
+	uci_add_list olsrd "$cfg" 'Ping' '1.1.1.1'
+	uci_add_list olsrd "$cfg" 'Ping' '8.8.8.8'
+	uci_add_list olsrd "$cfg" 'Ping' '8.8.4.4'
 }
 
 setup_Plugin_nameservice() {
