@@ -1,0 +1,122 @@
+<h1>Weimarnetz News</h1>
+<div class="span4">
+    <img id="logo" src="/images/logo.png" title="Weimarnetz" alt="Weimarnetz"></img>
+</div>
+
+<h2>Aktuelle Meldungen</h2>
+
+<div class="row">
+    <div class="span6" id="news">
+        <ul id="newslist">
+            <li>
+                Meldungen werden geladen. Falls nicht, hast Du entweder Javascript im Browser deaktiviert oder
+                Dir steht kein Internet zur Verfuegung.
+            </li>
+        </ul>
+    </div>
+</div>
+
+<h2>Aktuelle Diskussionen </h2>
+
+<div class="row">
+    <div class="span6" id="discussions">
+        <ul id="mailinglist">
+            <li>
+                Diskussionen werden geladen. Falls nicht, hast Du entweder Javascript deaktiviert oder Dir steht
+                kein Internet zur Verfuegung.
+            </li>
+        </ul>
+    </div>
+</div>
+
+<h2>Spendenaufruf</h2>
+
+<div class="row">
+    <div class="span6" id="funds">
+        <ul>
+            <li>
+                Informationen zu Spenden werden geladen. Falls nicht, hast Du entweder Javascript deaktiviert
+                oder Dir steht kein Internet zur Verfuegung.
+            </li>
+        </ul>
+    </div>
+</div>
+
+<script type="text/javascript">//<![CDATA[
+function removeLinks(text) {
+    text = text.replace(/(<a([^>]+)>)/gi, "");
+    return text.replace(/<\/a>/gi, "");
+}
+
+function removeSpan(text) {
+    text = text.replace(/(<span.*\/span>)/gi, "");
+    return text.replace(/<\/h.>/gi, "");
+}
+
+function removeHeadlines(text) {
+    text = text.replace(/(<h([^>]+)>)/gi, "");
+    return text.replace(/<\/h.>/gi, "");
+}
+function removeComments(text) {
+    return text.replace(/(<\!--([^>]+)-->)/gi, "");
+}
+
+function loadMlNews(data) {
+    loadNews(data, "mailinglist");
+}
+
+function loadFbNews(data) {
+    loadNews(data, "newslist");
+}
+
+function loadNews(data, element) {
+    var ul = document.getElementById(element);
+    while (ul.hasChildNodes()) {
+        ul.removeChild(ul.lastChild);
+    }
+    var nl = data.channel.item
+    for (var item in nl) {
+        var entry = nl[item];
+        var a = document.createElement("a");
+        a.appendChild(document.createTextNode(entry.title));
+        a.title = entry.title;
+        a.href = entry.link;
+        a.target = "_blank";
+        var li = document.createElement("li");
+        var pubDate = new Date(entry.pubDate);
+        li.appendChild(document.createTextNode(pubDate.toLocaleDateString() + " - "));
+        li.appendChild(a);
+        ul.appendChild(li);
+    }
+    console.log(ul);
+}
+function loadFunds(data) {
+    var funds = data.parse.text['*'];
+    funds = removeHeadlines(funds);
+    funds = removeSpan(funds);
+    funds = removeLinks(funds);
+    funds = removeComments(funds);
+    document.getElementById("funds").innerHTML = funds;
+    console.log(funds);
+}
+function loadLogo(data) {
+    var logo = data.query.pages;
+    var length = Object.keys(logo).length;
+    if (length = 1) {
+        for (id in logo) {
+            myLogo = logo[id]['imageinfo'][0]['url'];
+            console.log(myLogo);
+            document.getElementById("logo").src = myLogo;
+        }
+    }
+}
+console.log(document.URL);
+//]]></script>
+<script type="application/javascript"
+        src="http://weimarnetz.de/inc/feed/feed.php?items=6&source=fbweimarnetz&format=json&callback=loadFbNews"></script>
+<script type="application/javascript"
+        src="http://weimarnetz.de/inc/feed/feed.php?items=6&source=mlweimarnetz&format=json&callback=loadMlNews"></script>
+<script type="application/javascript"
+        src="http://wireless.subsignal.org/api.php?format=json&amp;action=parse&amp;page=Vorlage:Spendenaufruf&amp;prop=text&amp;callback=loadFunds"></script>
+<script type="application/javascript"
+        src="http://wireless.subsignal.org/api.php?format=json&amp;action=query&amp;titles=Datei:Node<%=nodeNumber.jpg&amp;prop=imageinfo&amp;iiprop=url&amp;disablepp&amp;redirects&amp;callback=loadLogo"></script>
