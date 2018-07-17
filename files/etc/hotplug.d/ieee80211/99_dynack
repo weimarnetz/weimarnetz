@@ -1,0 +1,7 @@
+#!/bin/ash
+
+[ "$ACTION" = "add" ] || exit 0
+
+phy=${DEVPATH##*/}
+iw phy "$phy" set distance auto 
+
