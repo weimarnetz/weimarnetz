@@ -10,35 +10,61 @@ require("nixio.fs")
 -- Init state session
 local uci = luci.model.uci.cursor_state()
 
-function heartbeat()
-    local nodenumber = uci:get("ffwizard", "settings", "nodenumber") or -1
+function sendHeartbeat()
+    local nodenumber = getNodeNumber()
     local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
     local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
 
-    local macAddress = getMac()
-    local pass = getPubkey("dss")
+    local params = {}
+    params['mac'] = getMac()
+    params['pass'] = getPubkey("rsa")
     local httpclient = luci.httpclient
     -- TODO: add https support, needs TLS context
     local options = {
         method = "PUT",
-        headers = {
-            ["Content-Type"] = "application/json",
-        },
+	params = params,
+
     }
-    local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber.."?mac=".. macAddress .."&pass="..pass
+    local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber
 
-    local response, code, msg = httpclient.request_to_buffer(uri, options)
-
-    print(code)
+    local code, response, msg = httpclient.request_raw(uri, options)
 
     if code == 200 then
              print("Registrator: "..nodenumber.." successfully updated")
+    elseif code == 201 then
+             print("Registrator: "..nodenumber.." successfully created")
     elseif code then
              print("Registrator: failed to update nodenumber "..nodenumber.." with code "..code)
     end
 end
 
-function status()
+function registerNode()
+    local nodenumber = getNodeNumber()
+    local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
+    local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
+
+    local params = {}
+    params['mac'] = getMac()
+    params['pass'] = getPubkey("rsa")
+    local httpclient = luci.httpclient
+    -- TODO: add https support, needs TLS context
+    local options = {
+        method = "POST",
+        params = params,
+
+    }
+    local uri = "http://"..registratorserver.."/"..network.."/knoten"
+
+    local code, response, msg = httpclient.request_raw(uri, options)
+
+    if code == 200 then
+        print("Registrator: "..nodenumber.." successfully created")
+    elseif code then
+        print("Registrator: failed to update nodenumber "..nodenumber.." with code "..code)
+    end
+end
+
+function getStatus()
     local nodenumber = uci:get("ffwizard", "settings", "nodenumber") or -1
     local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
     local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
@@ -47,20 +73,17 @@ function status()
     -- TODO: add https support, needs TLS context
     local options = {
         method = "GET",
-        headers = {
-            ["Content-Type"] = "application/json",
-        },
     }
     local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber
 
-    local response, code, msg = httpclient.request_to_buffer(uri, options)
-
-    print(code)
+    local code, response, msg = httpclient.request_raw(uri, options)
 
     if code == 200 then
         print("Registrator: "..nodenumber.." found")
+        return msg
     elseif code then
         print("Registrator: could not find nodenumber "..nodenumber.." with code "..code)
+        return nil
     end
 end
 
@@ -82,5 +105,13 @@ function getPubkey(type)
     return fingerprint
 end
 
+function getNodeNumber()
+    return tonumber(uci:get("ffwizard", "settings", "nodenumber")) or -1
+end
 
-status(url)
+
+if getStatus() ~= nil then
+    sendHeartbeat()
+elseif getNodeNumber() > 0 then
+    sendHeartbeat()
+end
