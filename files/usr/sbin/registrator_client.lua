@@ -3,6 +3,7 @@
 require("luci.model.uci")
 require("luci.httpclient")
 require("luci.ip")
+require("luci.json")
 require("luci.sys")
 require("luci.util")
 require("nixio.fs")
@@ -39,9 +40,6 @@ function sendHeartbeat()
 end
 
 function registerNode()
-    local nodenumber = getNodeNumber()
-    local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
-    local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
 
     local params = {}
     params['mac'] = getMac()
@@ -51,8 +49,9 @@ function registerNode()
     local options = {
         method = "POST",
         params = params,
-
     }
+    local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
+    local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
     local uri = "http://"..registratorserver.."/"..network.."/knoten"
 
     local code, response, msg = httpclient.request_raw(uri, options)
@@ -65,24 +64,30 @@ function registerNode()
 end
 
 function getStatus()
-    local nodenumber = uci:get("ffwizard", "settings", "nodenumber") or -1
     local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
     local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
+
+    local mac = getMac()
+    local params = {}
+    params['mac'] = mac
 
     local httpclient = luci.httpclient
     -- TODO: add https support, needs TLS context
     local options = {
         method = "GET",
+        params = params,
     }
-    local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber
+    local uri = "http://"..registratorserver.."/"..network.."/knotenByMac"
 
     local code, response, msg = httpclient.request_raw(uri, options)
 
+    local result = luci.json.decode(msg)
+
     if code == 200 then
-        print("Registrator: "..nodenumber.." found")
+        print("Registrator: "..mac.." found with number "..msg)
         return msg
     elseif code then
-        print("Registrator: could not find nodenumber "..nodenumber.." with code "..code)
+        print("Registrator: could not find mac address "..mac.." with code "..code)
         return nil
     end
 end
@@ -109,9 +114,28 @@ function getNodeNumber()
     return tonumber(uci:get("ffwizard", "settings", "nodenumber")) or -1
 end
 
-
-if getStatus() ~= nil then
-    sendHeartbeat()
-elseif getNodeNumber() > 0 then
-    sendHeartbeat()
+function printUsage()
+    print("Usage: "..arg[0].." <status|heartbeat|register>")
+    os.exit()
 end
+
+if #arg ~= 1 then
+    printUsage()
+end
+
+if arg[1] == "status" then
+    getStatus()
+elseif arg[1] == "heartbeat" then
+    if getStatus() ~= nil then
+        sendHeartbeat()
+    elseif getNodeNumber() > 0 then
+        sendHeartbeat()
+    end
+elseif arg[1] == "register" then
+    print("should register new node now")
+else
+    printUsage()
+end
+
+
+
