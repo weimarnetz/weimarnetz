@@ -1,0 +1,8 @@
+#!/bin/sh 
+
+[ "$INTERFACE" = "wan" ] && {
+
+nn=$(uci -q get ffwizard.nodenumber)
+[ -z "$nodenumber" ] && registrator autoconf 
+
+}
