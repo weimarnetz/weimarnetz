@@ -127,6 +127,8 @@ setup_dhcpbase() {
 	uci_set dhcp $cfg local "/olsr/"
 	uci_set dhcp $cfg domain "olsr"
 	uci_remove dhcp $cfg server
+	uci_add_list dhcp $cfg server "1.1.1.1"
+	uci_add_list dhcp $cfg server "1.0.0.1"
 	uci_add_list dhcp $cfg server "8.8.8.8"
 	uci_add_list dhcp $cfg server "8.8.4.4"
 	config_get ffwizard $cfg olsr_mesh "0"
