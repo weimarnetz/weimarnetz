@@ -36,6 +36,8 @@ node2nets_json()
 		json_add_string "lan" "$network.$city.$n.$((s+32+1))/28"
 		json_add_string "radio0_mesh" "$network.$city.$n.$((s+48))/32"
 		json_add_string "radio1_mesh" "$network.$city.$n.$((s+49))/32"
+		json_add_string "radio0_11s" "$network.$city.$n.$((s+50))/32"
+		json_add_string "radio1_11s" "$network.$city.$n.$((s+51))/32"
 		json_add_string "vpn" "$network.$city.$n.$((s+58))/30"
 		json_add_string "vpn_gw" "$network.$city.$n.$((s+57))"
 		local roamingnet="$(__calc_roaming_net $nodenumber)"
