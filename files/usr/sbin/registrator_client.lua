@@ -204,9 +204,9 @@ if arg[1] == "status" then
     print(luci.json.encode(getStatus()))
 elseif arg[1] == "heartbeat" then
     local status = getStatus()
-    if status['success'] == true and status['nodenumber'] == getNodeNumber() then
+    if status['success'] and status['nodenumber'] == getNodeNumber() then
         print(luci.json.encode(sendHeartbeat()))
-    elseif getNodeNumber() > 0 then
+    elseif !status['success'] and getNodeNumber() > 0 then
         print(luci.json.encode(sendHeartbeat()))
     end
 elseif arg[1] == "register" then
