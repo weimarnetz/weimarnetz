@@ -147,6 +147,7 @@ end
 
 function printUsage()
     print("Usage: "..arg[0].." <status|heartbeat|register>")
+    print("returns a json containing fields success, code (http status code from registrator), message (human readable error message) and optional a nodenumber")
     os.exit()
 end
 
