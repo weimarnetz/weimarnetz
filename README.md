@@ -1,15 +1,13 @@
 weimarnetz
 ==========
 
-* community: http://wireless.subsignal.org | https://weimarnetz.de
-* monitoring: http://weimarnetz.de/monitoring
+* community: https://wireless.subsignal.org | https://weimarnetz.de
+* monitoring: https://weimarnetz.de/monitoring
 * documentation: [Wiki](https://github.com/weimarnetz/weimarnetz/wiki)
 
 
 Need support?
-join the [club](http://www.weimarnetz.de) or ask for [consulting](http://bittorf-wireless.de)
-
-[![Flattr this git repo](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=weimarnetz&url=https://github.com/weimarnetz/weimarnetz&title=weimarnetz&language=&tags=github&category=software)
+join the [club](http://www.weimarnetz.de).
 
 versions
 --------
