@@ -52,52 +52,17 @@ function sendHeartbeat()
     local nodenumber = getNodeNumber()
     local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
     local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
-
-    local params = {}
-    params['mac'] = getMac()
-    params['pass'] = getPubkey("rsa")
-    local httpclient = luci.httpclient
-    -- TODO: add https support, needs TLS context
-    local options = {
-        method = "PUT",
-	params = params,
-
-    }
     local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber
 
-    local code, response, msg = httpclient.request_raw(uri, options)
-
-    if code == 200 then
-             print("Registrator: "..nodenumber.." successfully updated")
-    elseif code == 201 then
-             print("Registrator: "..nodenumber.." successfully created")
-    elseif code then
-             print("Registrator: failed to update nodenumber "..nodenumber.." with code "..code)
-    end
+    return write_to_registrator("PUT", uri)
 end
 
 function registerNode()
-
-    local params = {}
-    params['mac'] = getMac()
-    params['pass'] = getPubkey("rsa")
-    local httpclient = luci.httpclient
-    -- TODO: add https support, needs TLS context
-    local options = {
-        method = "POST",
-        params = params,
-    }
     local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
     local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
     local uri = "http://"..registratorserver.."/"..network.."/knoten"
 
-    local code, response, msg = httpclient.request_raw(uri, options)
-
-    if code == 200 then
-        print("Registrator: "..nodenumber.." successfully created")
-    elseif code then
-        print("Registrator: failed to update nodenumber "..nodenumber.." with code "..code)
-    end
+    return write_to_registrator("POST", uri)
 end
 
 function getStatus()
@@ -117,16 +82,50 @@ function getStatus()
 
     local msg, code = request_to_buffer(uri, options)
 
-    local result = luci.json.decode(msg)
+    local query_result = luci.json.decode(msg)
 
     if code == 200 then
-        local nodenumber = result['result']['number']
-        print("Registrator: "..mac.." found with number ".. nodenumber)
-        return nodenumber
+        local nodenumber = query_result['result']['number']
+        return assemble_result(true, code, "Registrator: "..mac.." found with number ".. nodenumber, nodenumber)
     elseif code then
-        print("Registrator: could not find mac address "..mac.." with code "..code)
-        return -1
+        return assemble_result(false, code,  "Registrator: could not find mac address "..mac, nil)
     end
+end
+
+function write_to_registrator(method, uri)
+    local params = {}
+    params['mac'] = getMac()
+    params['pass'] = getPubkey()
+    -- TODO: add https support, needs TLS context
+    local options = {
+        method = method,
+        params = params,
+    }
+
+    local msg, code = request_to_buffer(uri, options)
+
+    local query_result = luci.json.decode(msg)
+
+    if code == 200 then
+        local nodenumber_from_result = query_result['result']['number']
+        return assemble_result(true, code, "Registrator: ".. nodenumber_from_result .." successfully updated", nodenumber_from_result)
+    elseif code == 201 then
+        local nodenumber_from_result = query_result['result']['number']
+        return assemble_result(true, code, "Registrator: ".. nodenumber_from_result .." successfully created", nodenumber_from_result)
+    elseif code then
+        return assemble_result(false, code, "Registrator: failed to update/egister node with mac "..params['mac'].." with code "..code, nil)
+    end
+end
+
+function assemble_result(success, code, message, nodenumber)
+    local result = {}
+    result['success'] = success
+    result['code'] = code
+    result['message'] = message
+    if not nodenumber ~= nil then
+        result['nodenumber'] = nodenumber
+    end
+    return result
 end
 
 function getMac()
@@ -137,14 +136,9 @@ function getMac()
     return devicestatus['macaddr']
 end
 
-function getPubkey(type)
-    local path = "/etc/dropbear/dropbear_"..type.."_host_key"
-    local file = nixio.fs.stat(path)
-    if not file then
-        return ""
-    end
-    local fingerprint = luci.sys.exec("dropbearkey -f \"" .. path .. "\" -y | awk '/Fingerprint:/ { print $3 }'")
-    return fingerprint
+function getPubkey()
+    -- we don't need a password anymore
+    return "pseudopassword"
 end
 
 function getNodeNumber()
@@ -161,18 +155,17 @@ if #arg ~= 1 then
 end
 
 if arg[1] == "status" then
-    getStatus()
+    print(luci.json.encode(getStatus()))
 elseif arg[1] == "heartbeat" then
-    if getStatus() == getNodeNumber() then
-        sendHeartbeat()
-    elseif getNodeNumber() > 0 then
-        sendHeartbeat()
+    local status = getStatus()
+    local nodenumber = getNodeNumber()
+    if status['success'] and status['nodenumber'] == nodenumber then
+        print(luci.json.encode(sendHeartbeat()))
+    elseif not status['success'] and nodenumber > 0 then
+        print(luci.json.encode(sendHeartbeat()))
     end
 elseif arg[1] == "register" then
-    print("should register new node now")
+    print(luci.json.encode(registerNode()))
 else
     printUsage()
 end
-
-
-
