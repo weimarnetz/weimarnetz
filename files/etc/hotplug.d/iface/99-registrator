@@ -5,7 +5,7 @@
         case "$ACTION" in 
                 ifup) 
 			nn=$(uci -q get ffwizard.settings.nodenumber)
-			[ -z "$nn" ] && registrator create
+			[ -z "$nn" ] && registrator register 
                 ;;
                 ifdown)
                 ;;

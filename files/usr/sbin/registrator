@@ -1,137 +1,198 @@
-#!/bin/sh
+#!/usr/bin/lua
 
-. /lib/functions.sh
-. /usr/share/libubox/jshn.sh
-. /usr/lib/weimarnetz/network.sh 
+require("luci.model.uci")
+require("luci.httpclient")
+require("luci.ip")
+require("luci.json")
+require("luci.sys")
+require("luci.util")
+require("nixio.fs")
 
+-- Init state session
+local ltn12 = require "luci.ltn12"
+local table = require "table"
+local uci = luci.model.uci.cursor_state()
 
-log() {
-        logger -s -t registrator "$@"
-}
+function request_to_buffer(uri, options)
+	local source, code, msg = request_to_source(uri, options)
+	local output = {}
 
+	if not source then
+		return nil, code, msg
+	end
+	
+	source = ltn12.pump.all(source, (ltn12.sink.table(output)))
+	
+	if not source then
+		return nil, code
+    end
 
-change=0
-nodenumber=$(uci_get ffwizard settings nodenumber -1)
-network=$(uci_get ffwizard settings ipschema ffweimar)
-host=$(uci_get ffwizard settings registrator "reg.weimarnetz.de")
+	local result = table.concat(output)
+	
+	return result, code 
+end
 
-# fixme migration
-for type in rsa dss; do
-	path="/etc/dropbear/dropbear_${type}_host_key"
-	[ -e "$path" ] || continue
-	fingerprint=$(dropbearkey -f "$path" -y | awk '/Fingerprint:/ { print $3 }')
-done 
+function request_to_source(uri, options)
+	local status, response, buffer, sock = luci.httpclient.request_raw(uri, options)
+	if not status then
+		return status, response, buffer
+	elseif status ~= 200 and status ~= 206 then
+		return nil, status, buffer
+	end
+	if response.headers["Transfer-Encoding"] == "chunked" then
+        local chunksource = luci.httpclient.chunksource(sock, buffer)
+        return chunksource, status
+	else
+        local result = ltn12.source.cat(ltn12.source.string(buffer), sock:blocksource())
+        return result, status
+	end
+end
 
-__getmac() {
-	. /lib/functions/network.sh
-	network_get_physdev physdev lan
-	data=$(devstatus "$physdev")
-	json_load "$data"
-	json_get_var mac macaddr
-	json_cleanup
-	echo "$mac"
-}
+function sendHeartbeat()
+    local nodenumber = getNodeNumber()
+    local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
+    local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
+    local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber
 
-mac=$(__getmac)
+    return write_to_registrator("PUT", uri)
+end
 
-__request() {
-	local type="$1"
-	local userknoten="${2-nodenumber}"
+function registerNode()
+    local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
+    local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
+    local uri = "http://"..registratorserver.."/"..network.."/knoten"
 
-	case "$type" in
-		create)
-			local method='POST' 
-			url="http://${host}/${method}/${network}/knoten?mac=${mac}&pass=${fingerprint}"
-			answer="$(net_http_get "$url")"
-			log "$answer"
-			json_init 
-			json_load "$answer"
-			json_get_var status 'status'
+    local result = write_to_registrator("POST", uri)
+    if result['success'] == true then
+        setNodeNumber(result['nodenumber'])
+    end
+    return result
+end
 
-			case "$status" in
-				'20*')
-                                        newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')  
-                                        [ -n "$newnumber" ] && {                                       
-                                                log "node got a new knotennummer: $newnumber"            
-                                        	uci_set ffwizard settings nodenumber "$newnumber"
-						change=1
-					}	
-				;;
-				'*')
-					log "error: $answer"
-				;;
-				'303')
-					newnumber=$(echo "$answer" | jsonfilter -e '$.result.number')
-					[ -n "$newnumber" ] && { 
-						log "node already has a number: $newnumber" 
-						uci_set ffwizard settings nodenumber "$newnumber"
-						change=1
-					}
-				;;
-			esac
-		;;
-		heartbeat)
-			local method='GET'                                                            
-                        url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
-                        answer="$(net_http_get "$url")"                                                
-                        log "$answer"                                                                               
-                        json_init                                                                      
-                        json_load "$answer"                                                            
-                        json_get_var status 'status'                                                   
-                                                                                                       
-                        case "$status" in                                                              
-                                '200')
-					method='PUT'
-					url="http://${host}/${method}/${network}/knoten/${nodenumber}?mac=${mac}&pass=${fingerprint}"
-					answer="$(net_http_get "$url")"
-					log "heartbeat: $(echo "$answer" | jsonfilter -e '$.message')"                                                                 
-                                ;;                                                                     
-                                '*')                                                                   
-                                        log "heartbeat: error: $answer"                                           
-                                ;;                                                                     
-                        esac                      
-		;;
-		register)
-			local method='GET'                                                             
-                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
-                        answer="$(net_http_get "$url")"
-                        json_init                                                                                    
-                        json_load "$answer"                                                                          
-                        json_get_var status 'status'                                                                 
-                                                                                                                     
-                        case "$status" in                                                                            
-                                '404')                                                                               
-                                        method='PUT'  
-                                        url="http://${host}/${method}/${network}/knoten/${userknoten}?mac=${mac}&pass=${fingerprint}"
-					answer="$(net_http_get "$url")"                                              
-                                        log "register: $(echo "$answer" | jsonfilter -e '$.result')"
-					change=1
-					uci set ffwizard settings nodenumber "$userknoten"
-					               
-                                ;;
-				'200')
-					log "register: already exists: $(echo "$answer" | jsonfilter -e '$.result')"                                                                                    
-                                ;;
-				'*')                                                                                 
-                                        log "register: error: $answer"                                                                      
-                                ;;                                                                                   
-                        esac      			
-		;;
-	esac
-}
+function getStatus()
+    local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
+    local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
 
+    local mac = getMac()
+    local params = {}
+    params['mac'] = mac
 
-if [ "$#" -lt 1 ]; then
-	cat <<- EOF
-	usage: $0 create - create and apply a new knotennummer 
-	       $0 register <nodenumber> - register and apply a nodenumber
-	       $0 heartbeat - update last-seen  
-	EOF
+    -- TODO: add https support, needs TLS context
+    local options = {
+        method = "GET",
+        params = params,
+    }
+    local uri = "http://"..registratorserver.."/"..network.."/knotenByMac"
+
+    local msg, code = request_to_buffer(uri, options)
+
+    local query_result = luci.json.decode(msg)
+
+    if code == 200 then
+        local nodenumber = query_result['result']['number']
+        nixio.syslog("info", mac.." found with number "..nodenumber)
+        return assemble_result(true, code, "Registrator: "..mac.." found with number ".. nodenumber, nodenumber)
+    elseif code then
+        nixio.syslog("warning", "could not find mac address "..mac)
+        return assemble_result(false, code,  "Registrator: could not find mac address "..mac, nil)
+    end
+end
+
+function write_to_registrator(method, uri)
+    local params = {}
+    params['mac'] = getMac()
+    params['pass'] = getPubkey()
+    -- TODO: add https support, needs TLS context
+    local options = {
+        method = method,
+        params = params,
+    }
+
+    local msg, code = request_to_buffer(uri, options)
+
+    local query_result = luci.json.decode(msg)
+
+    if code == 200 then
+        local nodenumber_from_result = query_result['result']['number']
+        nixio.syslog("info", nodenumber_from_result.." successfully updated")
+        return assemble_result(true, code, "Registrator: ".. nodenumber_from_result .." successfully updated", nodenumber_from_result)
+    elseif code == 201 then
+        local nodenumber_from_result = query_result['result']['number']
+        nixio.syslog("info", nodenumber_from_result.." successfully created")
+        return assemble_result(true, code, "Registrator: ".. nodenumber_from_result .." successfully created", nodenumber_from_result)
+    elseif code then
+        nixio.syslog("warning", "Failed to update/register node with mac "..params['mac'].." with code "..code)
+        return assemble_result(false, code, "Registrator: failed to update/egister node with mac "..params['mac'].." with code "..code, nil)
+    else
+        nixio.syslog("warning", "Uupppsss: Something went wrong communicating with the registrator")
+        return assemble_result(false, code, "Uupppsss: Something went wrong communicating with the registrator", nil)
+    end
+end
+
+function assemble_result(success, code, message, nodenumber)
+    local result = {}
+    result['success'] = success
+    result['code'] = code
+    result['message'] = message
+    if not nodenumber ~= nil then
+        result['nodenumber'] = nodenumber
+    end
+    return result
+end
+
+function getMac()
+    local laninterface = uci:get("network", "lan", "ifname")
+    local parameter = {}
+    parameter['name'] = laninterface
+    local devicestatus = luci.util.ubus("network.device", "status", parameter)
+    return devicestatus['macaddr']
+end
+
+function getPubkey()
+    -- we don't need a password anymore
+    return "pseudopassword"
+end
+
+function getNodeNumber()
+    return tonumber(uci:get("ffwizard", "settings", "nodenumber")) or -1
+end
+
+function setNodeNumber(nodenumber)
+    uci:set("ffwizard", "settings", nodenumber)
+    nixio.syslog("info", "set new nodenumber to "..nodenumber)
+end
+
+function printUsage()
+    print("Usage: "..arg[0].." <status|heartbeat|register>")
+    print("returns a json containing fields success, code (http status code from registrator), message (human readable error message) and optional a nodenumber")
+    os.exit()
+end
+
+nixio.openlog("registrator")
+nixio.syslog("debug", "registrator started")
+
+if #arg ~= 1 then
+    printUsage()
+end
+
+if arg[1] == "status" then
+    print(luci.json.encode(getStatus()))
+elseif arg[1] == "heartbeat" then
+    local status = getStatus()
+    local nodenumber = getNodeNumber()
+    if status['success'] and status['nodenumber'] == nodenumber then
+        print(luci.json.encode(sendHeartbeat()))
+    elseif not status['success'] and nodenumber > 0 then
+        print(luci.json.encode(sendHeartbeat()))
+    else
+        print(luci.json.encode(assemble_result(false, -3, "Could not send heartbeat! Node should be registered first, let's do it now!", nodenumber)))
+        print(luci.json.encode(registerNode()))
+    end
+elseif arg[1] == "register" then
+    print(luci.json.encode(registerNode()))
 else
-	__request "$1" "$2"
-fi
- 
-[ "$change" -eq 1 ] && {
-	log "configuration change detected: running ffwizard" 
-	ffwizard 
-} || :
+    printUsage()
+end
+
+nixio.syslog("debug", "registrator finished")
+nixio.closelog()
