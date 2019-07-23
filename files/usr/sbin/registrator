@@ -36,7 +36,7 @@ function request_to_source(uri, options)
 	local status, response, buffer, sock = luci.httpclient.request_raw(uri, options)
 	if not status then
 		return status, response, buffer
-	elseif status ~= 200 and status ~= 206 then
+	elseif status ~= 200 and status ~= 201 and status ~= 303 and status ~= 206 then
 		return nil, status, buffer
 	end
 	if response.headers["Transfer-Encoding"] == "chunked" then
@@ -112,9 +112,9 @@ function write_to_registrator(method, uri)
 
     local query_result = luci.json.decode(msg)
 
-    if code == 200 then
+    if code == 200 or code == 303 then
         local nodenumber_from_result = query_result['result']['number']
-        nixio.syslog("info", nodenumber_from_result.." successfully updated")
+        nixio.syslog("info", "nodenumber "..nodenumber_from_result.." successfully updated")
         return assemble_result(true, code, "Registrator: ".. nodenumber_from_result .." successfully updated", nodenumber_from_result)
     elseif code == 201 then
         local nodenumber_from_result = query_result['result']['number']
@@ -158,7 +158,8 @@ function getNodeNumber()
 end
 
 function setNodeNumber(nodenumber)
-    uci:set("ffwizard", "settings", nodenumber)
+    uci:set("ffwizard", "settings", "nodenumber", nodenumber)
+    uci:commit("ffwizard")
     nixio.syslog("info", "set new nodenumber to "..nodenumber)
 end
 
