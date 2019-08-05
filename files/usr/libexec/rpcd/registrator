@@ -1,0 +1,18 @@
+#!/bin/sh
+
+case "$1" in
+	list)
+		# List method must return the list of methods and parameters that the daemon will accept. Only methods listed here will available to call.
+		echo '{ "status": { }, "heartbeat": { } }'
+	;;
+	call)
+		case "$2" in
+			status)
+				/usr/sbin/registrator status
+			;;
+			heartbeat)
+				/usr/sbin/registrator heartbeat 
+			;;
+		esac
+	;;
+esac

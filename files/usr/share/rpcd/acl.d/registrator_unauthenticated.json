@@ -1,0 +1,12 @@
+{
+	"unauthenticated": {
+		"description": "Access controls for unauthenticated requests for registrator",
+		"read": {
+			"ubus": {
+				"registrator": [
+					"status"
+				]
+			}
+		}
+	}
+}
