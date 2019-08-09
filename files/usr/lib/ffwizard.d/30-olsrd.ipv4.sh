@@ -60,7 +60,6 @@ setup_Plugin_nameservice() {
 	local cfg="$1"
 	uci_set olsrd "$cfg" services_file "/var/etc/services.olsr.ipv4"
 	uci_set olsrd "$cfg" latlon_file "/var/run/latlon.ipv4"
-	uci_set olsrd "$cfg" latlon_infile "/var/run/latlon.ipv4.txt"
 	uci_set olsrd "$cfg" hosts_file "/tmp/hosts/olsr.ipv4"
 	uci_set olsrd "$cfg" suffix ".olsr"
 	uci_set olsrd "$cfg" ignore "0"
@@ -228,4 +227,6 @@ else
 		/etc/init.d/olsrd disable
 	fi
 fi
+
+reload_config
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

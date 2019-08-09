@@ -40,12 +40,9 @@ validate_wifi_section()
 }
 
 start_ffwizard() {
-	enabled=$(uci_get ffwizard settings enabled "0")
-	[ "$enabled" = "0" ] && return
 	config_load ffwizard
 	config_foreach system_config system
 	/usr/sbin/ffwizard
-	uci_set ffwizard settings enabled 0
 	uci_commit ffwizard
 }
 
@@ -56,16 +53,13 @@ reload_service() {
 
 service_triggers()
 {
-	procd_open_trigger
-	procd_add_config_trigger "config.change" ffwizard /etc/init.d/ffwizard reload
-	procd_close_trigger
+	procd_add_reload_trigger "ffwizard"
+	procd_set_param file /etc/config/ffwizard
 
-	procd_open_validate
-	validate_ffwizard_section
-	validate_ether_section
-	validate_wifi_section
-	validate_vpn_section
-	procd_close_validate
+	procd_add_validation validate_ffwizard_section
+	procd_add_validation validate_ether_section
+	procd_add_validation validate_wifi_section
+	procd_add_validation validate_vpn_section
 }
 
 start_service() {
