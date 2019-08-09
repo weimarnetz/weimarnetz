@@ -213,7 +213,7 @@ if [ "$olsr_enabled" -eq 1 ] ; then
 
 	for p in $plugins; do
 		uci_add olsrd LoadPlugin ; sec="$CONFIG_SECTION"
-		uci_set olsrd "$sec" library "$p"
+		uci_set olsrd "$sec" library "${p%%.*}"
 	done
 	# fixme - looks wrong
 	uci_commit olsrd
