@@ -3,7 +3,7 @@
 case "$1" in
 	list)
 		# List method must return the list of methods and parameters that the daemon will accept. Only methods listed here will available to call.
-		echo '{ "status": { }, "heartbeat": { } }'
+		echo '{ "status": { }, "heartbeat": { }, "register": { } }'
 	;;
 	call)
 		case "$2" in
