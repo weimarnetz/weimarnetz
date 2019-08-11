@@ -13,6 +13,9 @@ case "$1" in
 			heartbeat)
 				/usr/sbin/registrator heartbeat 
 			;;
+			register)
+				/usr/sbin/registrator register
+			;;
 		esac
 	;;
 esac
