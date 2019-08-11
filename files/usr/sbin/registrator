@@ -154,7 +154,14 @@ function getPubkey()
 end
 
 function getNodeNumber()
-    return tonumber(uci:get("ffwizard", "settings", "nodenumber")) or -1
+    local nodenumber = tonumber(uci:get("ffwizard", "settings", "nodenumber")) or -1
+    if nodenumber == -1 then
+        nodenumber = tonumber(uci:get("meshwizard", "community", "nodenumber")) or -1
+        if nodenumber > 0 then
+            setNodeNumber(nodenumber)
+        end
+    end
+    return nodenumber
 end
 
 function setNodeNumber(nodenumber)
