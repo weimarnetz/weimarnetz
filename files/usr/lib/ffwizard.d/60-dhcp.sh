@@ -127,10 +127,8 @@ setup_dhcpbase() {
 	uci_set dhcp $cfg local "/olsr/"
 	uci_set dhcp $cfg domain "olsr"
 	uci_remove dhcp $cfg server
-	uci_add_list dhcp $cfg server "1.1.1.1"
-	uci_add_list dhcp $cfg server "1.0.0.1"
-	uci_add_list dhcp $cfg server "8.8.8.8"
-	uci_add_list dhcp $cfg server "8.8.4.4"
+	uci_add_list dhcp $cfg server "80.241.218.68" # https://dismail.de/info.html#dns
+	uci_add_list dhcp $cfg server "46.182.19.48" # https://digitalcourage.de/support/zensurfreier-dns-server
 	config_get ffwizard $cfg olsr_mesh "0"
 	if [ "$olsr_mesh" -eq 1 ]; then
 		uci_remove dhcp $cfg addnhosts
