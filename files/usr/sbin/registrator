@@ -48,8 +48,7 @@ function request_to_source(uri, options)
 	end
 end
 
-function sendHeartbeat()
-    local nodenumber = getNodeNumber()
+function sendHeartbeat(nodenumber)
     local registratorserver = uci:get("ffwizard", "settings", "registrator") or "reg.weimarnetz.de"
     local network = uci:get("ffwizard", "settings", "ipschema") or "ffweimar"
     local uri = "http://"..registratorserver.."/"..network.."/knoten/"..nodenumber
@@ -179,22 +178,26 @@ end
 nixio.openlog("registrator")
 nixio.syslog("debug", "registrator started")
 
-if #arg ~= 1 then
+if #arg ~= 1 and #arg ~= 2 then
     printUsage()
 end
 
 if arg[1] == "status" then
     print(luci.json.encode(getStatus()))
 elseif arg[1] == "heartbeat" then
-    local status = getStatus()
-    local nodenumber = getNodeNumber()
-    if status['success'] and status['nodenumber'] == nodenumber then
-        print(luci.json.encode(sendHeartbeat()))
-    elseif not status['success'] and nodenumber > 0 then
-        print(luci.json.encode(sendHeartbeat()))
+    if arg[2] ~= nil and type(tonumber(arg[2])) == "number" then
+        print(luci.json.encode(sendHeartbeat(tonumber(arg[2]))))
     else
-        print(luci.json.encode(assemble_result(false, -3, "Could not send heartbeat! Node should be registered first, let's do it now!", nodenumber)))
-        print(luci.json.encode(registerNode()))
+        local status = getStatus()
+        local nodenumber = getNodeNumber()
+        if status['success'] and status['nodenumber'] == nodenumber then
+            print(luci.json.encode(sendHeartbeat(nodenumber)))
+        elseif not status['success'] and nodenumber > 0 then
+            print(luci.json.encode(sendHeartbeat(nodenumber)))
+        else
+            print(luci.json.encode(assemble_result(false, -3, "Could not send heartbeat! Node should be registered first, let's do it now!", nodenumber)))
+            print(luci.json.encode(registerNode()))
+        end
     end
 elseif arg[1] == "register" then
     print(luci.json.encode(registerNode()))
