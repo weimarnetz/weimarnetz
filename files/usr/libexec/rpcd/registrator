@@ -1,9 +1,11 @@
 #!/bin/sh
 
+. /usr/share/libubox/jshn.sh
+
 case "$1" in
 	list)
 		# List method must return the list of methods and parameters that the daemon will accept. Only methods listed here will available to call.
-		echo '{ "status": { }, "heartbeat": { }, "register": { } }'
+		echo '{ "status": { }, "heartbeat": { }, "register": { }, "given_number": { "nodenumber": 0 } }'
 	;;
 	call)
 		case "$2" in
@@ -12,6 +14,12 @@ case "$1" in
 			;;
 			heartbeat)
 				/usr/sbin/registrator heartbeat 
+			;;
+			given_number)
+				read input;
+				json_load "$input"
+				json_get_var nodenumber "nodenumber"
+				/usr/sbin/registrator heartbeat "$nodenumber"
 			;;
 			register)
 				/usr/sbin/registrator register
