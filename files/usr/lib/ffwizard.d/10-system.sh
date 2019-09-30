@@ -90,4 +90,6 @@ uci_commit system
 # sysctl settings
 setup_sysctl
 setup_boot
+
+reload_config
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

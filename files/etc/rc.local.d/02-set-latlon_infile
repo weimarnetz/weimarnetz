@@ -1,0 +1,33 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+lat=""
+lon=""
+filename=""
+
+getLatLonValues() {
+	local config="$1"
+	config_get lat "$config" latitude
+	config_get lon "$config" longitude
+}
+
+getFilename() {
+	local config="$1"
+	config_get library "$config" library
+	if [ "$library" == "olsrd_nameservice" ]; then
+		config_get filename "$config" latlon_infile
+	fi
+}
+
+config_load system
+config_foreach getLatLonValues system
+
+if [ -n "$lat" ] && [ -n "$lon" ]; then
+	config_load olsrd
+	config_foreach getFilename LoadPlugin
+	if [ -n "$filename" ]; then
+		echo "$lat,$lon" > $filename
+	fi
+fi
+

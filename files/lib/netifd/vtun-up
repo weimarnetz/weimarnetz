@@ -12,12 +12,11 @@ eval "$@"
 	logger -t "vtun-up" -p "user.error" "error: no device"
 	exit 1
 }
-/sbin/ip link set dev "$dev" up mtu "$mtu"
+ip link set dev "$dev" up mtu "$mtu"
 
 proto_init_update "$dev" 1
 
-eval "$(ipcalc.sh "$address" "$netmask")"
-proto_add_ipv4_address "$IP" "$PREFIX" "$BROADCAST"
+eval "$(ipcalc.sh "$address" "$netmask")" && proto_add_ipv4_address "$IP" "$PREFIX" "$BROADCAST"
 
 # fixme
 #[ -n "$gw" ] && {

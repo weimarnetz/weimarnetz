@@ -161,6 +161,20 @@ setup_hna4() {
 	uci_set olsrd "$hna_sec" netaddr "$NETWORK"
 }
 
+setup_custom_hna4() {
+	local config="$1"
+	config_get custom_netaddr "$config" netaddr "empty"
+	config_get custom_netmask "$config" netmask "empty"
+	if [ "$custom_netaddr" -eq "empty" ] || [ "$custom_netmask" -eq "empty" ]; then
+		return
+	fi
+	log_olsr4 "custom hna config for $custom_netaddr/$custom_netmask"
+	uci_add olsrd Hna4
+	section="$CONFIG_SECTION"
+	uci_set olsrd "$section" netaddr "$custom_netaddr"
+	uci_set olsrd "$section" netmask "$custom_netmask"
+}
+
 remove_section() {
 	local cfg="$1"
 	uci_remove olsrd "$cfg"
@@ -195,6 +209,8 @@ setup_hna4 "$node_net"
 
 json_cleanup
 
+config_foreach setup_custom_hna4 hna4
+
 if [ "$olsr_enabled" -eq 1 ] ; then
 	#If olsrd is disabled then start olsrd before write config
 	#read new olsrd config via ubus call uci "reload_config" in ffwizard
@@ -213,7 +229,7 @@ if [ "$olsr_enabled" -eq 1 ] ; then
 
 	for p in $plugins; do
 		uci_add olsrd LoadPlugin ; sec="$CONFIG_SECTION"
-		uci_set olsrd "$sec" library "$p"
+		uci_set olsrd "$sec" library "${p%%.*}"
 	done
 	# fixme - looks wrong
 	uci_commit olsrd
@@ -227,4 +243,6 @@ else
 		/etc/init.d/olsrd disable
 	fi
 fi
+
+reload_config
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :

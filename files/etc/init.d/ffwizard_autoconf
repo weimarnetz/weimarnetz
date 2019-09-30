@@ -64,17 +64,6 @@ reload_service() {
 	start_autoconf
 }
 
-service_triggers()
-{
-	procd_open_trigger
-	procd_add_config_trigger "config.change" ffwizard /etc/init.d/ffwizard_autoconf reload
-	procd_close_trigger
-
-	procd_open_validate
-	validate_autoconf_section
-	procd_close_validate
-}
-
 start_service() {
 	logger -s -t ffwizard_autoconf_init "Start Service"
 	procd_set_param watch ffwizard

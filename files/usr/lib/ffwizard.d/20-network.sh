@@ -96,6 +96,27 @@ setup_ether() {
 	json_cleanup
 }
 
+preserve_ssid() {
+	local cfg="$1"
+	config_get device "$cfg" device
+	local storedSsid
+	storedSsid=$(uci_get ffwizard "$device" ap_ssid)
+	[ -n "$storedSsid" ] && return
+	config_get mode "$cfg" mode
+	config_get network "$cfg" network
+	if [ "$mode" = "ap" ] && [ "$network" != "roam" ]; then
+		local ffwizardDevice
+		ffWizardDevice=$(uci_get ffwizard "$device")
+		if [ -z "$ffwizardDevice" ]; then
+			uci_add ffwizard wifi "$device"
+		fi
+		config_get ssid "$cfg" ssid
+		if [ -n "$ssid" ] && [ "$ssid" != "OpenWrt" ]; then
+			uci_set ffwizard "$device" ap_ssid "$ssid"
+		fi
+	fi
+}
+
 setup_wifi() {
 	local cfg="$1"
 	local nodenumber="$2"
@@ -195,9 +216,12 @@ setup_wifi() {
 		#uci_set wireless "$sec" isolate 1
 		uci_set wireless "$sec" network "$vap_name"
 		json_get_var ipaddr wifi
-		ap_ssid=$(uci_get profile_${community} profile ap_ssid)
-		# fixme - hostname support
-		ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32)
+		ap_ssid=$(uci_get ffwizard "$device" ap_ssid "")
+		if [ -z "$ap_ssid" ]; then
+			ap_ssid=$(uci_get profile_${community} profile ap_ssid)
+			# fixme - hostname support
+			ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32)
+		fi
 		uci_set wireless "$sec" ssid "$ap_ssid"
 		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
@@ -235,7 +259,8 @@ remove_network() {
 
 #Remove wireless config
 config_load wireless
-#config_foreach preserve_ssid wifi-iface
+config_foreach preserve_ssid wifi-iface
+uci_commit ffwizard
 config_foreach remove_wifi wifi-device
 uci_commit wireless 
 wifi config
@@ -263,4 +288,6 @@ fi
 
 uci_commit network
 uci_commit wireless
+
+reload_config
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
