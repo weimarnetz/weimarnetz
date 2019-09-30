@@ -12,7 +12,22 @@ join the [club](http://www.weimarnetz.de).
 versions
 --------
 
-The `GebrannteMandeln` branch is the current stable version that is running on most routers (9/2017). The `master` branch is bleeding edge.
+The `GebrannteMandeln` branch is the current stable version that is running on most routers (9/2017). The `master` branch is bleeding edge. `brauhaus` branch is the next release. 
+
+buildbot
+--------
+
+we have a buildbot at https://buildbot.weimarnetz.de/ 
+
+current builds can be found here: 
+
+http://buildbot.weimarnetz.de/builds/
+
+the config is here (not always up to date): 
+
+https://github.com/weimarnetz/buildbot.weimarnetz.de 
+
+
 
 
 how to get a release for a specific hardware
