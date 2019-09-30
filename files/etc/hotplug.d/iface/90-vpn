@@ -2,6 +2,8 @@
 
 [ "$INTERFACE" = "wan" ] && {
 
+	[ $(uci -q get ffwizard.vpn.enabled) -eq 1 ] || return
+
 	case "$ACTION" in 
 		ifup) 
 			ifup vpn
@@ -13,7 +15,11 @@
 }
 
 [ "$INTERFACE" = "vpn" ] && {
-	
+    logger -t vpn_hotplug -p daemon.info "[OK] restart olsrd because of changes in vpn"
+	. /etc/rc.common /etc/init.d/olsrd restart
+    # no need to set default-gw when in innercity mode
+	[ $(uci -q get ffwizard.vpn.mode) = "innercity" ] && return
+
 	gw=$(uci -q get network.vpn.gateway)
 	case "$ACTION" in
 		ifup)
@@ -22,8 +28,6 @@
 			ip rule add from 10.0.0.0/8 prio 30010 table 50 
 			ip rule add to 100.64.0.1/10 prio 30002 table main
 			ip rule add from 100.64.0.1/10 prio 30003 table 50
-			logger -t vpn_hotplug -p daemon.info "[OK] restart olsrd because of changes in vpn"
-			. /etc/rc.common /etc/init.d/olsrd restart
 		;;
 		ifdown)
 			ip route del default via $gw table 50

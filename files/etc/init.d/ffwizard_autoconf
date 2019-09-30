@@ -43,7 +43,9 @@ setup_vpn() {
                 uci_add ffwizard vpn "$cfg"                
         fi                                                  
         uci_set ffwizard $cfg enabled "1"                   
-        uci_set ffwizard $cfg olsr_mesh "1"                 
+        uci_set ffwizard $cfg olsr_mesh "1"    
+		uci_set ffwizard $cfg mode "always"             
+		uci_set ffwizard $cfg paranoia "1"             
 }
 
 start_autoconf() {

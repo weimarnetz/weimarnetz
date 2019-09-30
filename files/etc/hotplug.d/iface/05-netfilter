@@ -20,7 +20,7 @@ up_rules() {
 			iptables -t nat -A POSTROUTING -o "$dev" -j MASQUERADE
 			# forbid access to wan subnet (e.g. fritzbox of user)
 			# fix static ip
-			[ "$(uci_get ffwizard settings restrict 0)" -eq 1 ] && {
+			[ "$(uci_get ffwizard vpn restrict 0)" -eq 1 ] && {
 				# disable restrict access to local net when ip is static
 				[ "$(uci_get network wan proto dhcp)" = "static" ] || { 
 					network_get_subnets wan_subnet	"$iface"
@@ -42,7 +42,7 @@ up_rules() {
 				}
 			}
 			# no internet without vpn
-			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
+			[ "$(uci_get ffwizard vpn paranoia 0)" -eq 1 ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
@@ -97,7 +97,7 @@ down_rules() {
 				}
 			}
 			# no internet without vpn
-			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
+			[ "$(uci_get ffwizard vpn paranoia 0)" -eq 1 ] && {
 				iptables -D FORWARD -j paranoia-vpn
 				iptables -F paranoia-vpn
 				iptables -X paranoia-vpn
