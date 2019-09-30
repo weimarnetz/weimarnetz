@@ -18,9 +18,9 @@
     logger -t vpn_hotplug -p daemon.info "[OK] restart olsrd because of changes in vpn"
 	. /etc/rc.common /etc/init.d/olsrd restart
     # no need to set default-gw when in innercity mode
-	[ $(uci -q get ffwizard.vpn.mode) = "innercity" ] && return
+	[ "$(uci -q get ffwizard.vpn.mode)" = "innercity" ] && return
 
-	gw=$(uci -q get network.vpn.gateway)
+	gw="$(uci -q get network.vpn.gateway)"
 	case "$ACTION" in
 		ifup)
 			ip route add default via $gw table 50
