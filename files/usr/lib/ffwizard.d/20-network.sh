@@ -138,7 +138,7 @@ setup_wifi() {
 	
 	case $hwmode in 
 		11a*)
-			channel=40
+			channel=104
 			;;
 		11g)
 			channel=5
@@ -164,37 +164,50 @@ setup_wifi() {
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
 	json_init	
 	json_load "$nodedata"
-	json_get_var ipaddr "${device}_mesh"
+	
 
 	if [ "$olsr_mesh" -eq 1 ] || [ "$bat_mesh" -eq 1 ]; then
-		local bssid mesh_ssid
-		log_wifi "${cfg}: mesh"
-		local network="${cfg}_mesh"
+		case $hwmode in 
+	    	# ibss only for 2.4ghz 
+			11g)
+				local bssid mesh_ssid
+				log_wifi "${cfg}: mesh"
+				local network="${cfg}_mesh"
+				uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
+				uci_set wireless "$sec" device "$device"
+				uci_set wireless "$sec" encryption "none"
+				uci_set wireless "$sec" mode "adhoc"
+				mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
+				mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
+				uci_set wireless "$sec" ssid "$mesh_ssid"
+				uci_set wireless "$sec" bssid "02:CA:FF:EE:BA:BE"
+				uci_set wireless "$sec" network "$network"
+				uci_set wireless "$sec" mcast_rate "6000"
+				json_get_var ipaddr "${device}_mesh"
+				setup_ip "$network" "$ipaddr"
+			;;
+			*)
+			;;
+		esac
+
+		# 11s
+		local mesh_ssid
+		log_wifi "${cfg}: 11s"
+		local network="${cfg}_11s"
 		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" encryption "none"
-		uci_set wireless "$sec" mode "adhoc"
+		uci_set wireless "$sec" mode "mesh"
 		mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
-		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
+		mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | sed 's!mesh!11s!g' | cut -c0-32)
 		uci_set wireless "$sec" ssid "$mesh_ssid"
-		case $channel in
-			40)
-				bssid="02:CA:FF:EE:00:40"
-				;;
-			*)
-				bssid="02:CA:FF:EE:BA:BE"
-				;;
-		esac
-		#elif [ $valid_channel -gt 99 -a $valid_channel -lt 199 ] ; then
-		#	bssid="12:"$(printf "%02d" "$(expr $valid_channel - 100)")":CA:FF:EE:EE"
-		#fi
-		uci_set wireless "$sec" bssid "$bssid"
-		#uci_set wireless "$sec" mode "mesh"
-		#uci_set wireless "$sec" mesh_id 'freifunk'
-		#uci_set wireless "$sec mesh_fwding '0'
-		#uci_set wireless "$sec "doth"
+		uci_set wireless "$sec" mesh_id 'freifunk'
+		uci_set wireless "$sec" mesh_fwding '0'
+		uci_set wireless "$sec" doth '1'
 		uci_set wireless "$sec" network "$network"
 		uci_set wireless "$sec" mcast_rate "6000"
+
+		json_get_var ipaddr "${device}_11s"
 		setup_ip "$network" "$ipaddr"
 	fi
 	config_get vap "$cfg" vap "0"
@@ -225,17 +238,18 @@ setup_wifi() {
 		uci_set wireless "$sec" ssid "$ap_ssid"
 		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
-        if [ "$roam" -eq 1 ]; then
-                log_wifi "${cfg}: roaming ap enabled"                                                                  
-                uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"                                                      
-                uci_set wireless "$sec" device "$device"                                                                 
-                uci_set wireless "$sec" mode "ap"                                                                        
-                #uci_set wireless "$sec" mcast_rate "6000"                                                               
-                #uci_set wireless "$sec" isolate 1                                                                       
-                uci_set wireless "$sec" network "$roam_name"                                                              
-                json_get_var ipaddr roaming_block                                                                
-                ssid=$(uci_get profile_${community} profile ssid)                                                
-                uci_set wireless "$sec" ssid "$ssid"
+
+    if [ "$roam" -eq 1 ]; then
+        log_wifi "${cfg}: roaming ap enabled"                                                                  
+        uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"                                                      
+        uci_set wireless "$sec" device "$device"                                                                 
+        uci_set wireless "$sec" mode "ap"                                                                        
+        #uci_set wireless "$sec" mcast_rate "6000"                                                               
+        #uci_set wireless "$sec" isolate 1                                                                       
+        uci_set wireless "$sec" network "$roam_name"                                                              
+        json_get_var ipaddr roaming_block                                                                
+        ssid=$(uci_get profile_${community} profile ssid)                                                
+        uci_set wireless "$sec" ssid "$ssid"
 		setup_bridge "$roam_name" "$ipaddr" "1"                                                     
 	fi  
 	json_cleanup
