@@ -139,15 +139,18 @@ setup_wifi() {
 	case $hwmode in 
 		11a*)
 			channel=104
+			txpower=23
 			;;
 		11g)
 			channel=5
+			txpower=20
 			;;
 		*)	log_wifi "ERR unknown hwmode: $hwmode"
 			;;
 	esac
 			
-
+    uci_set wireless "$device" htmode 'HT20'
+	uci_set wireless "$device" txpower "$txpower"
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	uci_set wireless "$device" country "DE"

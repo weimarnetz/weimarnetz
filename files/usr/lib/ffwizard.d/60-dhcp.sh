@@ -2,7 +2,6 @@
 
 . /usr/lib/weimarnetz/ipsystem.sh
 
-# fixme - this function is only in master and *not* in openwrt-18.06
 uci_add_list() {
 	local PACKAGE="$1"
 	local CONFIG="$2"
@@ -11,7 +10,6 @@ uci_add_list() {
 
 	/sbin/uci ${UCI_CONFIG_DIR:+-c $UCI_CONFIG_DIR} add_list "$PACKAGE.$CONFIG.$OPTION=$VALUE"
 }
-
 
 log_dhcp() {
 	logger -s -t ffwizard_dhcp "$@"
