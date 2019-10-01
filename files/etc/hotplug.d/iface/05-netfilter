@@ -42,7 +42,9 @@ up_rules() {
 				}
 			}
 			# no internet without vpn
-			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
+			[ "$(uci_get ffwizard vpn paranoia 0)" -eq 1 ] &&
+			[ "$(uci_get ffwizard vpn mode)" = "all" ] &&
+			[ "$(uci_get ffwizard vpn enabled)" -eq 1 ] && {
 				iptables -N paranoia-vpn
 				iptables -A paranoia-vpn -i wlan+ -o "$dev" -j REJECT
 				iptables -A paranoia-vpn -i br-vap -o "$dev" -j REJECT
@@ -97,7 +99,9 @@ down_rules() {
 				}
 			}
 			# no internet without vpn
-			[ "$(uci_get ffwizard settings paranoia 0)" -eq 1 ] && {
+			[ "$(uci_get ffwizard vpn paranoia 0)" -eq 1 ] &&
+			[ "$(uci_get ffwizard vpn mode)" = "all" ] &&
+			[ "$(uci_get ffwizard vpn enabled)" -eq 1 ] && {
 				iptables -D FORWARD -j paranoia-vpn
 				iptables -F paranoia-vpn
 				iptables -X paranoia-vpn

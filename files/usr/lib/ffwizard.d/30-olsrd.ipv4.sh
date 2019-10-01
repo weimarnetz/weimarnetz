@@ -3,6 +3,17 @@
 
 . /lib/functions/network.sh
 
+# fixme - this function is only in master and *not* in openwrt-18.06
+uci_add_list() {
+	local PACKAGE="$1"
+	local CONFIG="$2"
+	local OPTION="$3"
+	local VALUE="$4"
+
+	/sbin/uci ${UCI_CONFIG_DIR:+-c $UCI_CONFIG_DIR} add_list "$PACKAGE.$CONFIG.$OPTION=$VALUE"
+}
+
+
 log_olsr4() {
 	logger -s -t ffwizard_olsrd "$@"
 }
@@ -50,6 +61,7 @@ setup_Plugin_dyn_gw() {
 	local cfg="$1"
 	uci_set olsrd "$cfg" CheckInterval '1000'
 	uci_set olsrd "$cfg" PingInterval '5'
+	#uci_set olsrd "$cfg" PingCmd "ping -c 1 -q -I wlan0 %s"
 	uci_remove olsrd "$cfg" 'Ping'
 	uci_add_list olsrd "$cfg" 'Ping' '1.1.1.1'
 	uci_add_list olsrd "$cfg" 'Ping' '8.8.8.8'

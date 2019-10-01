@@ -25,12 +25,22 @@ proto_vtun_setup() {
 	config_get netmask	  "$config" "netmask"
 	config_get gateway	  "$config" "gateway"
 	
+	enabled=$(uci -q get ffwizard.vpn.enabled)
+	[ "$enabled" -eq 1 ] || {													  
+		proto_notify_error "$config" "vpn disabled in config!"				  
+		proto_block_restart "$config"
+		return 1										 
+	}
+
+
 	nodenumber=$(uci -q get ffwizard.settings.nodenumber)						  
 	[ -n "$nodenumber" ] || {													  
 		proto_notify_error "$config" "nodenumber is missing!"				  
 		proto_block_restart "$config"
 		return 1										 
 	}			  
+
+
 	
 	json=$(config_foreach probe_vtun_endpoints "vtun_${config}")
 	[ -n "$json" ] || {
