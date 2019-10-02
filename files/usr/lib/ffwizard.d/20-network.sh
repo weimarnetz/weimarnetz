@@ -139,11 +139,9 @@ setup_wifi() {
 	case $hwmode in 
 		11a*)
 			channel=104
-			txpower=23
 			;;
 		11g)
 			channel=5
-			txpower=20
 			;;
 		*)	log_wifi "ERR unknown hwmode: $hwmode"
 			;;
