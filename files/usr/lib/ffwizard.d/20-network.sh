@@ -133,22 +133,24 @@ setup_wifi() {
 
 	local channel 
 	local hwmode 
-	
+    local htmode
+
 	hwmode=$(uci_get wireless "$device" hwmode)
 	
 	case $hwmode in 
 		11a*)
 			channel=104
+		    htmode="40-"	
 			;;
 		11g)
 			channel=5
+			htmode="20"
 			;;
 		*)	log_wifi "ERR unknown hwmode: $hwmode"
 			;;
 	esac
 			
-    uci_set wireless "$device" htmode 'HT20'
-	uci_set wireless "$device" txpower "$txpower"
+    uci_set wireless "$device" htmode "$htmode" 
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	uci_set wireless "$device" country "DE"
@@ -204,7 +206,6 @@ setup_wifi() {
 		uci_set wireless "$sec" ssid "$mesh_ssid"
 		uci_set wireless "$sec" mesh_id 'freifunk'
 		uci_set wireless "$sec" mesh_fwding '0'
-		uci_set wireless "$sec" doth '1'
 		uci_set wireless "$sec" network "$network"
 		uci_set wireless "$sec" mcast_rate "6000"
 
