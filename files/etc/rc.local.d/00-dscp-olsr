@@ -1,0 +1,8 @@
+#!/bin/sh 
+
+# voice prio for olsr
+iptables -t mangle -A OUTPUT -p udp --dport 698 -j DSCP --set-dscp-class cs7 
+# dns prio
+iptables -t mangle -A OUTPUT -p udp --dport 53 -j DSCP --set-dscp-class cs6
+ 
+

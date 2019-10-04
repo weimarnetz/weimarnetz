@@ -1,0 +1,22 @@
+#!/bin/sh
+
+grep -q '^sch_cake' '/proc/modules' || return
+command -V tc >/dev/null || return 
+[ $(awk '/^MemTotal/ {print $2}' < /proc/meminfo) -gt 40000 ] || return
+
+case "$ACTION" in
+	ifup)
+        case "$iface" in
+    		wan)
+  	        	tc qdisc replace dev "$DEVICE" root cake nat conservative
+			;;
+			vpn)
+	    		tc qdisc replace dev "$DEVICE" root cake nonat conservative
+			;;
+			radio*)
+			    tc qdisc replace dev "$DEVICE" root cake nonat 
+			;;
+		esac
+	    ;;
+esac
+# vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
