@@ -247,12 +247,15 @@ setup_wifi() {
         uci_set wireless "$sec" device "$device"                                                                 
         uci_set wireless "$sec" mode "ap"                                                                        
         #uci_set wireless "$sec" mcast_rate "6000"                                                               
-        #uci_set wireless "$sec" isolate 1                                                                       
+        uci_set wireless "$sec" isolate 1                                                                       
         uci_set wireless "$sec" network "$roam_name"                                                              
         json_get_var ipaddr roaming_block                                                                
         ssid=$(uci_get profile_${community} profile ssid)                                                
         uci_set wireless "$sec" ssid "$ssid"
-		setup_bridge "$roam_name" "$ipaddr" "1"                                                     
+		uci_set wireless "$sec" max_inactivity '2'
+        uci_set wireless "$sec" max_listen_interval '128'                                                  
+		setup_bridge "$roam_name" "$ipaddr" "1"   
+		
 	fi  
 	json_cleanup
 }
