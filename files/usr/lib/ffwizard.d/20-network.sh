@@ -43,7 +43,7 @@ setup_bridge() {
 	local ipaddr="$2"
 	local roaming="$3"
 	setup_ip "$cfg" "$ipaddr"
-	if [ "$roaming" -eq 1 ]; then 
+	if [ "$cfg" = "roam" ]; then 
 		uci_set network "$cfg" macaddr '02:ff:ff:ff:23:42'
 		true
 	fi
