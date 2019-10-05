@@ -48,10 +48,10 @@ start_ffwizard() {
 
 reload_service() {
 	logger -s -t ffwizard_init "Reload Service"
-	# we kill vtun here because the config could also change 
-	pid=$(pgrep vtund) 
-	[ -n "$pid" ] && kill "$pid"
 	start_ffwizard
+	# restart vpn
+	ifdown vpn && ifup vpn
+	
 }
 
 service_triggers()
