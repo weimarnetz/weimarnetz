@@ -140,11 +140,12 @@ setup_wifi() {
 	case $hwmode in 
 		11a*)
 			channel=104
-		    htmode="40-"	
+			# fixme - use vht20 for ac wifi
+		    htmode="HT20"	
 			;;
 		11g)
 			channel=5
-			htmode="20"
+			htmode="HT20"
 			;;
 		*)	log_wifi "ERR unknown hwmode: $hwmode"
 			;;

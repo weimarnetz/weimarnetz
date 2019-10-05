@@ -6,7 +6,7 @@ command -V tc >/dev/null || return
 
 case "$ACTION" in
 	ifup)
-        case "$iface" in
+        case "$INTERFACE" in
     		wan)
   	        	tc qdisc replace dev "$DEVICE" root cake nat conservative
 			;;
