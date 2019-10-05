@@ -174,21 +174,23 @@ setup_wifi() {
 		case $hwmode in 
 	    	# ibss only for 2.4ghz 
 			11g)
-				local bssid mesh_ssid
-				log_wifi "${cfg}: mesh"
-				local network="${cfg}_mesh"
-				uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
-				uci_set wireless "$sec" device "$device"
-				uci_set wireless "$sec" encryption "none"
-				uci_set wireless "$sec" mode "adhoc"
-				mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
-				mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
-				uci_set wireless "$sec" ssid "$mesh_ssid"
-				uci_set wireless "$sec" bssid "02:CA:FF:EE:BA:BE"
-				uci_set wireless "$sec" network "$network"
-				uci_set wireless "$sec" mcast_rate "6000"
-				json_get_var ipaddr "${device}_mesh"
-				setup_ip "$network" "$ipaddr"
+				[ $(uci_get ffwizard settings legacy) -eq 1 ] && {
+					local bssid mesh_ssid
+					log_wifi "${cfg}: mesh"
+					local network="${cfg}_mesh"
+					uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
+					uci_set wireless "$sec" device "$device"
+					uci_set wireless "$sec" encryption "none"
+					uci_set wireless "$sec" mode "adhoc"
+					mesh_ssid=$(uci_get profile_${community} profile mesh_ssid)
+					mesh_ssid=$(printf "$mesh_ssid" "$nodenumber" "$channel" | cut -c0-32)
+					uci_set wireless "$sec" ssid "$mesh_ssid"
+					uci_set wireless "$sec" bssid "02:CA:FF:EE:BA:BE"
+					uci_set wireless "$sec" network "$network"
+					uci_set wireless "$sec" mcast_rate "6000"
+					json_get_var ipaddr "${device}_mesh"
+					setup_ip "$network" "$ipaddr"
+				}
 			;;
 			*)
 			;;
