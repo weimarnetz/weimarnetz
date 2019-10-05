@@ -24,6 +24,8 @@ setup_olsrbase() {
 	uci_set olsrd "$cfg" AllowNoInt "yes"
 	uci_set olsrd "$cfg" NatThreshold "0.75"
 	uci_set olsrd "$cfg" LinkQualityAlgorithm "etx_ffeth"
+	uci_set olsrd "$cfg" LinkQualityLevel "2"
+	uci_set olsrd "$cfg" LinkQualityFishEye "1"
 	uci_set olsrd "$cfg" FIBMetric "flat"
 	uci_set olsrd "$cfg" TcRedundancy "2"
 	uci_set olsrd "$cfg" Pollrate "0.025"
@@ -32,15 +34,15 @@ setup_olsrbase() {
 
 setup_InterfaceDefaults() {
 	uci_add olsrd InterfaceDefaults ; cfg="$CONFIG_SECTION"
-	uci_set olsrd "$cfg" MidValidityTime "500.0"
+	uci_set olsrd "$cfg" MidValidityTime "300.0"
 	uci_set olsrd "$cfg" TcInterval "2.0"
 	uci_set olsrd "$cfg" HnaValidityTime "125.0"
 	uci_set olsrd "$cfg" HelloValidityTime "125.0"
-	uci_set olsrd "$cfg" TcValidityTime "500.0"
+	uci_set olsrd "$cfg" TcValidityTime "300.0"
 	uci_set olsrd "$cfg" Ip4Broadcast "255.255.255.255"
 	uci_set olsrd "$cfg" MidInterval "25.0"
-	uci_set olsrd "$cfg" HelloInterval "3.0"
-	uci_set olsrd "$cfg" HnaInterval "10.0"
+	uci_set olsrd "$cfg" HelloInterval "2.0"
+	uci_set olsrd "$cfg" HnaInterval "5.0"
 }
 
 setup_Plugin_json() {
@@ -139,14 +141,41 @@ setup_wifi() {
 	[ "$olsr_mesh" -eq 0 ] && return
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -eq "-1" ] && return
-	local device="radio${idx}_mesh"
-	
-	log_olsr4 "Setup wifi $cfg $ipaddr"
-	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-	uci_set olsrd "$iface_sec" interface "${device}"
-	uci_set olsrd "$iface_sec" ignore "0"
-	uci_set olsrd "$iface_sec" Mode "mesh"
-	olsr_enabled=1
+
+	hwmode=$(uci_get wireless "radio$idx" hwmode)
+
+	case $hwmode in 
+		11a*)
+			log_olsr4 "Setup wifi $cfg"
+			uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
+			uci_set olsrd "$iface_sec" interface "radio${idx}_11s"
+			uci_set olsrd "$iface_sec" ignore "0"
+			uci_set olsrd "$iface_sec" Mode "mesh"
+			olsr_enabled=1
+			;;
+		11g)
+		    # ibss
+			[ $(uci_get ffwizard settings legacy) -eq 1 ] && {
+				log_olsr4 "Setup wifi $cfg"
+				uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
+				uci_set olsrd "$iface_sec" interface "radio${idx}_mesh"
+				uci_set olsrd "$iface_sec" ignore "0"
+				uci_set olsrd "$iface_sec" Mode "mesh"
+				uci_set olsrd "$iface_sec" LinkQualityMult "default 0.75"
+				olsr_enabled=1
+			}
+			
+			# 11s
+			log_olsr4 "Setup wifi $cfg"
+			uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
+			uci_set olsrd "$iface_sec" interface "radio${idx}_11s"
+			uci_set olsrd "$iface_sec" ignore "0"
+			uci_set olsrd "$iface_sec" Mode "mesh"
+			uci_set olsrd "$iface_sec" LinkQualityMult "default 0.90"
+			olsr_enabled=1
+
+			;;
+	esac
 }
 
 setup_vpn() {

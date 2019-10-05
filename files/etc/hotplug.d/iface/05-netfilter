@@ -52,14 +52,15 @@ up_rules() {
 				iptables -A FORWARD -j paranoia-vpn
 			}
 		;;
-		vpn|radio0_mesh|radio1_mesh)
+		vpn|vap|roam|radio0_*|radio1_*)
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
 			iptables -t nat -N nat-"$iface"
-			iptables -t nat -A nat-"$iface" -s 10.63.0.0/16 -j RETURN
+			# for roaming we need to nat everything
+			[ "$iface" = "roam" ] || iptables -t nat -A nat-"$iface" -s 10.63.0.0/16 -j RETURN
 			iptables -t nat -A nat-"$iface" -j MASQUERADE
 			iptables -t nat -A POSTROUTING -o "$dev" -j nat-"$iface"
 		;; 
@@ -107,15 +108,15 @@ down_rules() {
 				iptables -X paranoia-vpn
 			}
 			;;
-		vpn|radio0_mesh|radio1_mesh)
+		    vpn|vap|roam|radio0_*|radio1_*)
 			# mss clamping 
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
 				-j TCPMSS --clamp-mss-to-pmtu
 			# nat
+			iptables -t nat -D POSTROUTING -o "$dev" -j nat-"$iface"
 			iptables -t nat -F nat-"$iface"
 			iptables -t nat -X nat-"$iface"
-			iptables -t nat -D POSTROUTING -o "$dev" -j nat-"$iface"
 		;;
 		
 	esac

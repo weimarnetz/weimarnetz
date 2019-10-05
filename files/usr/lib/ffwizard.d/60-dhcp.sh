@@ -2,7 +2,6 @@
 
 . /usr/lib/weimarnetz/ipsystem.sh
 
-# fixme - this function is only in master and *not* in openwrt-18.06
 uci_add_list() {
 	local PACKAGE="$1"
 	local CONFIG="$2"
@@ -11,7 +10,6 @@ uci_add_list() {
 
 	/sbin/uci ${UCI_CONFIG_DIR:+-c $UCI_CONFIG_DIR} add_list "$PACKAGE.$CONFIG.$OPTION=$VALUE"
 }
-
 
 log_dhcp() {
 	logger -s -t ffwizard_dhcp "$@"
@@ -150,15 +148,18 @@ setup_hosts() {
 		read -r hostname < /proc/sys/kernel/hostname 
 		json_init
 		json_load "$nodedata"
-		json_get_vars wifi radio0_mesh radio1_mesh vpn_gw lan
+		json_get_vars wifi radio0_mesh radio1_mesh radio0_11s radio1_11s roaming_gw vpn_gw lan
 		for h in internet kiste router mutti frei.funk
 		do
 			echo "${lan%/*} $h" >> /etc/hosts.ff
 		done
 		echo "${radio0_mesh%/*} mesh0.$hostname.olsr" >> /etc/hosts.ff
 		echo "${radio1_mesh%/*} mesh1.$hostname.olsr" >> /etc/hosts.ff
+		echo "${radio0_11s%/*} 11s.$hostname.olsr" >> /etc/hosts.ff
+		echo "${radio1_11s%/*} 11s.$hostname.olsr" >> /etc/hosts.ff
 		echo "${vpn_gw%/*} vpngw.$hostname.olsr" >> /etc/hosts.ff
 		echo "${wifi%/*} vap.$hostname.olsr" >> /etc/hosts.ff
+		echo "${roaming_gw%/*} roam.$hostname.olsr" >> /etc/hosts.ff
 }
 
 br_name="vap"

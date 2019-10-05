@@ -40,7 +40,15 @@ proto_vtun_setup() {
 		return 1										 
 	}			  
 
-
+	wan=$(ifstatus wan)
+	json_load "$wan"
+	json_get_var wan_is_up up
+	json_cleanup
+	[ -n "$wan_is_up" ] || {
+		proto_notify_error "$config" "wan needs to be up for vpn"
+		proto_block_restart "$config"
+		return 1
+	}
 	
 	json=$(config_foreach probe_vtun_endpoints "vtun_${config}")
 	[ -n "$json" ] || {
