@@ -9,6 +9,26 @@ log_wifi() {
 	logger -s -t ffwizard_wifi "$@"
 }
 
+is_ac_radio() {
+        local radio="$1"
+        local info
+
+        info=$(ubus call iwinfo info "{ \"device\":\"$radio\"}")
+        json_load "$info"
+        json_select "hwmodes"
+        local idx=1
+        while json_get_type status "$idx" && [ "$status" = "string" ]; do
+                json_get_var ac "$((idx++))"
+                [ "$ac" = "ac" ] && { 
+					json_cleanup 
+					return 0
+				}
+        done
+        json_cleanup
+        return 1 
+}
+
+
 setup_ip() {
 	local cfg="$1"
 	local ipaddr="$2"
@@ -140,8 +160,7 @@ setup_wifi() {
 	case $hwmode in 
 		11a*)
 			channel=104
-			# fixme - use vht20 for ac wifi
-		    htmode="HT20"	
+		    is_ac_radio "$device" && htmode="VHT20" || htmode="HT20"
 			;;
 		11g)
 			channel=5
@@ -155,6 +174,8 @@ setup_wifi() {
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	uci_set wireless "$device" country "DE"
+	uci_add_list wireless "$device" supported_rates '12000 18000 24000 36000 48000 54000'
+    uci_add_list wireless "$device" basic_rate '12000 18000 24000 36000 48000 54000'
 	#uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
 	#Not working on wdr4300 with AP and ad-hoc
@@ -187,7 +208,7 @@ setup_wifi() {
 					uci_set wireless "$sec" ssid "$mesh_ssid"
 					uci_set wireless "$sec" bssid "02:CA:FF:EE:BA:BE"
 					uci_set wireless "$sec" network "$network"
-					uci_set wireless "$sec" mcast_rate "6000"
+					uci_set wireless "$sec" mcast_rate "12000"
 					json_get_var ipaddr "${device}_mesh"
 					setup_ip "$network" "$ipaddr"
 				}
@@ -210,7 +231,7 @@ setup_wifi() {
 		uci_set wireless "$sec" mesh_id 'freifunk'
 		uci_set wireless "$sec" mesh_fwding '0'
 		uci_set wireless "$sec" network "$network"
-		uci_set wireless "$sec" mcast_rate "6000"
+		uci_set wireless "$sec" mcast_rate "12000"
 
 		json_get_var ipaddr "${device}_11s"
 		setup_ip "$network" "$ipaddr"
@@ -255,7 +276,7 @@ setup_wifi() {
         json_get_var ipaddr roaming_block                                                                
         ssid=$(uci_get profile_${community} profile ssid)                                                
         uci_set wireless "$sec" ssid "$ssid"
-		uci_set wireless "$sec" max_inactivity '2'
+		uci_set wireless "$sec" max_inactivity '5'
         uci_set wireless "$sec" max_listen_interval '128'                                                  
 		setup_bridge "$roam_name" "$ipaddr" "1"   
 		
