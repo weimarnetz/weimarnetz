@@ -59,6 +59,7 @@ start_autoconf() {
 	# Reset firstboot flag
 	uci_set ffwizard settings firstboot 0
 	uci_commit ffwizard
+  /etc/init.d/ffwizard reload
 }
 
 reload_service() {

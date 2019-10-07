@@ -42,13 +42,12 @@ validate_wifi_section()
 start_ffwizard() {
 	config_load ffwizard
 	config_foreach system_config system
-	/usr/sbin/ffwizard
-	uci_commit ffwizard
 }
 
 reload_service() {
 	logger -s -t ffwizard_init "Reload Service"
 	start_ffwizard
+	/usr/sbin/ffwizard
 	# restart vpn
 	ifdown vpn && ifup vpn
 	
@@ -57,7 +56,6 @@ reload_service() {
 service_triggers()
 {
 	procd_add_reload_trigger "ffwizard"
-	procd_set_param file /etc/config/ffwizard
 
 	procd_add_validation validate_ffwizard_section
 	procd_add_validation validate_ether_section

@@ -215,5 +215,4 @@ setup_hosts
 
 uci_commit dhcp
 
-reload_config
 # vim: set filetype=sh ai noet ts=4 sw=4 sts=4 :
