@@ -5,7 +5,6 @@
 
 for num in 0 1; do
     if [ -d /sys/kernel/debug/ieee80211/phy$num/netdev\:wlan$num ]; then
-        [ -d ]
         logger "deaf_phys: checking wlan$num status..."
         neighs=$(ls -ld /sys/kernel/debug/ieee80211/phy$num/netdev\:wlan$num/stations/* 2>/dev/null | wc -l)
         if [ $neighs == 0 ]; then
