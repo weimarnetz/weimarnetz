@@ -18,6 +18,9 @@ uci_add_list() {
 	/sbin/uci ${UCI_CONFIG_DIR:+-c $UCI_CONFIG_DIR} add_list "$PACKAGE.$CONFIG.$OPTION=$VALUE"
 }
 
+# dirty workaround to use reload_config. LuCI seems to save and apply another way, so this script would be called twice when we call config_reload at the end to apply other changes 
+md5=$(uci show ffwizard |md5sum|cut -d ' ' -f1)
+sed -i "/ffwizard/c$md5  /var/run/config.check/ffwizard" /var/run/config.md5
 
 community=$(uci_get freifunk community name "Weimar")
 
