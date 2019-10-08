@@ -2,6 +2,7 @@
 
 . /lib/functions.sh 
 
+uci -m import ffwizard < /dev/null
 uci_add ffwizard node "settings"
 
 uci_set ffwizard settings ipschema "$(uci_get ffwizard settings ipschema 'ffweimar')"
