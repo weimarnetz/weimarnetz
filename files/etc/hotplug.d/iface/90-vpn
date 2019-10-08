@@ -25,14 +25,14 @@
 		ifup)
 			ip route add default via $gw table 50
 			ip rule add to 10.0.0.0/8 prio 30001 table main		
-			ip rule add from 10.0.0.0/8 prio 30010 table 50 
+			ip rule add from 10.63.0.0/16 prio 30010 table 50 
 			ip rule add to 100.64.0.1/10 prio 30002 table main
 			ip rule add from 100.64.0.1/10 prio 30003 table 50
 		;;
 		ifdown)
 			ip route del default via $gw table 50
 			ip rule del to 10.0.0.0/8 prio 30001 table main		
-			ip rule del from 10.0.0.0/8 prio 30010 table 50
+			ip rule del from 10.63.0.0/16 prio 30010 table 50
 			ip rule del to 100.64.0.1/10 prio 30002 table main
 			ip rule del from 100.64.0.1/10 prio 30003 table 50
 
