@@ -68,6 +68,14 @@ setup_Plugin_nameservice() {
 	uci_set olsrd "$cfg" ignore "0"
 }
 
+setup_Plugin_watchdog() {
+	local cfg="$1"
+	uci_set olsrd $cfg file "/var/run/olsrd.watchdog.ipv4"
+	uci_set olsrd $cfg interval "5"
+	uci_set olsrd $cfg ignore "0"
+}
+
+
 setup_Plugins() {
 	local cfg="$1"
 	config_get library "$cfg" library
@@ -85,7 +93,7 @@ setup_Plugins() {
 			setup_Plugin_txtinfo "$cfg"
 		;;
 		*watchdog*)
-		:
+			setup_Plugin_watchdog "$cfg"	
 		;;
 		*nameservice*)
 			setup_Plugin_nameservice "$cfg"
