@@ -9,7 +9,7 @@ uci_set ffwizard settings ipschema "$(uci_get ffwizard settings ipschema 'ffweim
 uci_set ffwizard settings roaming "$(uci_get ffwizard settings roaming '1')"
 uci_set ffwizard settings restrict "$(uci_get ffwizard settings restrict '1')"
 uci_set ffwizard settings legacy "$(uci_get ffwizard settings legacy '1')"
-uci_set ffwizard settings blockWanPort "$(uci_get ffwizard settings blockWanPort '0')"
+uci_set ffwizard settings blockWanPort "$(uci_get ffwizard settings block_wan_port '0')"
 uci_set ffwizard settings ipv6 "$(uci_get ffwizard settings ipv6 '0')"
 uci_set ffwizard settings ipv6prefix "$(uci_get ffwizard settings ipv6prefix 'fd42:7ceb:f2ff::/48')"
 uci_commit ffwizard
