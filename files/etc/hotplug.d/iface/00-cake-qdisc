@@ -1,20 +1,22 @@
 #!/bin/sh
 
 grep -q '^sch_cake' '/proc/modules' || return
-command -V tc >/dev/null || return 
-[ $(awk '/^MemTotal/ {print $2}' < /proc/meminfo) -gt 40000 ] || return
+command -V tc >/dev/null || return
+
+local memlimit=
+[ $(awk '/^MemTotal/ {print $2}' < /proc/meminfo) -gt 40000 ] || memlimit="memlimit 1048576"
 
 case "$ACTION" in
 	ifup)
         case "$INTERFACE" in
     		wan)
-  	        	tc qdisc replace dev "$DEVICE" root cake nat conservative
+  	        	tc qdisc replace dev "$DEVICE" root cake nat conservative "$memlimit"
 			;;
 			vpn)
-	    		tc qdisc replace dev "$DEVICE" root cake nonat conservative
+	    		tc qdisc replace dev "$DEVICE" root cake nonat conservative "$memlimit"
 			;;
 			radio*)
-			    tc qdisc replace dev "$DEVICE" root cake nonat 
+			    tc qdisc replace dev "$DEVICE" root cake nonat "$memlimit" 
 			;;
 		esac
 	    ;;
