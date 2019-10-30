@@ -66,6 +66,16 @@ setup_Plugin_nameservice() {
 	uci_set olsrd "$cfg" hosts_file "/tmp/hosts/olsr.ipv4"
 	uci_set olsrd "$cfg" suffix ".olsr"
 	uci_set olsrd "$cfg" ignore "0"
+	config_load ffwizard
+	config_list_foreach "olsr" service setup_olsr_services $cfg
+}
+
+setup_olsr_services() {
+	local value="$1"
+	local cfg="$2"
+
+	log_olsr4 "add olsrd service $1"
+	uci_add_list olsrd "$cfg" 'service' "$value"
 }
 
 setup_Plugin_watchdog() {
@@ -93,7 +103,7 @@ setup_Plugins() {
 			setup_Plugin_txtinfo "$cfg"
 		;;
 		*watchdog*)
-			setup_Plugin_watchdog "$cfg"	
+			setup_Plugin_watchdog "$cfg"
 		;;
 		*nameservice*)
 			setup_Plugin_nameservice "$cfg"
