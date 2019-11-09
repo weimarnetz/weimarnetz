@@ -10,8 +10,10 @@ up_rules() {
 
 	case "$iface" in
 		wan)
-            iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT                                                                                  
-            iptables -A INPUT -i "$dev" -j REJECT    
+	        iptables -A INPUT -i "$dev" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+			[ "$(uci_get ffwizard settings block_wan_port 0)" -eq 1 ] && {
+		        iptables -A INPUT -i "$dev" -j REJECT
+			}
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \

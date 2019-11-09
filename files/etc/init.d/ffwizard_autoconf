@@ -38,14 +38,14 @@ setup_wifi() {
 }
 
 setup_vpn() {
-	local cfg="$1"
-        if ! uci_get ffwizard $cfg >/dev/null ; then        
-                uci_add ffwizard vpn "$cfg"                
-        fi                                                  
-        uci_set ffwizard $cfg enabled "1"                   
-        uci_set ffwizard $cfg olsr_mesh "1"    
-		uci_set ffwizard $cfg mode "all"             
-		uci_set ffwizard $cfg paranoia "1"             
+  local cfg="$1"
+  if ! uci_get ffwizard $cfg >/dev/null ; then
+    uci_add ffwizard vpn "$cfg"
+  fi
+  uci_set ffwizard $cfg enabled "$(uci_get ffwizard $cfg enabled '1')"
+  uci_set ffwizard $cfg olsr_mesh "$(uci_get ffwizard $cfg olsr_mesh '1')"
+  uci_set ffwizard $cfg mode "$(uci_get ffwizard $cfg mode 'all')"
+  uci_set ffwizard $cfg paranoia "$(uci_get ffwizard $cfg paranoia '1')"
 }
 
 start_autoconf() {
@@ -59,6 +59,7 @@ start_autoconf() {
 	# Reset firstboot flag
 	uci_set ffwizard settings firstboot 0
 	uci_commit ffwizard
+  /etc/init.d/ffwizard reload
 }
 
 reload_service() {
