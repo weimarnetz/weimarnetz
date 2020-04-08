@@ -178,7 +178,6 @@ setup_wifi() {
 			uci_set olsrd "$iface_sec" interface "radio${idx}_11s"
 			uci_set olsrd "$iface_sec" ignore "0"
 			uci_set olsrd "$iface_sec" Mode "mesh"
-			uci_set olsrd "$iface_sec" LinkQualityMult "default 0.90"
 			olsr_enabled=1
 
 			;;
