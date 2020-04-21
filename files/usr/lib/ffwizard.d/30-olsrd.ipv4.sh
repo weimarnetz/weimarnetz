@@ -160,18 +160,7 @@ setup_wifi() {
 			uci_set olsrd "$iface_sec" Mode "mesh"
 			olsr_enabled=1
 			;;
-		11g)
-		    # ibss
-			[ $(uci_get ffwizard settings legacy) -eq 1 ] && {
-				log_olsr4 "Setup wifi $cfg"
-				uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-				uci_set olsrd "$iface_sec" interface "radio${idx}_mesh"
-				uci_set olsrd "$iface_sec" ignore "0"
-				uci_set olsrd "$iface_sec" Mode "mesh"
-				uci_set olsrd "$iface_sec" LinkQualityMult "default 0.75"
-				olsr_enabled=1
-			}
-			
+		11g)	
 			# 11s
 			log_olsr4 "Setup wifi $cfg"
 			uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
