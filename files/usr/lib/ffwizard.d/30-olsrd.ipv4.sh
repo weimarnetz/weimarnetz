@@ -15,23 +15,24 @@ setup_olsrbase() {
 	uci_set olsrd "$cfg" LinkQualityAlgorithm "etx_ffeth"
 	uci_set olsrd "$cfg" LinkQualityLevel "2"
 	uci_set olsrd "$cfg" LinkQualityFishEye "1"
+	uci_set olsrd "$cfg" Willingness "7"
+	uci_set olsrd "$cfg" MprCoverage "7"
 	uci_set olsrd "$cfg" FIBMetric "flat"
 	uci_set olsrd "$cfg" TcRedundancy "2"
-	uci_set olsrd "$cfg" Pollrate "0.025"
 	uci_remove olsrd "$cfg" MainIp
 }
 
 setup_InterfaceDefaults() {
 	uci_add olsrd InterfaceDefaults ; cfg="$CONFIG_SECTION"
-	uci_set olsrd "$cfg" MidValidityTime "300.0"
+	uci_set olsrd "$cfg" MidValidityTime "500.0"
 	uci_set olsrd "$cfg" TcInterval "2.0"
 	uci_set olsrd "$cfg" HnaValidityTime "125.0"
 	uci_set olsrd "$cfg" HelloValidityTime "125.0"
-	uci_set olsrd "$cfg" TcValidityTime "300.0"
+	uci_set olsrd "$cfg" TcValidityTime "500.0"
 	uci_set olsrd "$cfg" Ip4Broadcast "255.255.255.255"
 	uci_set olsrd "$cfg" MidInterval "25.0"
-	uci_set olsrd "$cfg" HelloInterval "2.0"
-	uci_set olsrd "$cfg" HnaInterval "5.0"
+	uci_set olsrd "$cfg" HelloInterval "3.0"
+	uci_set olsrd "$cfg" HnaInterval "10.0"
 }
 
 setup_Plugin_json() {
