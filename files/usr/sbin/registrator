@@ -192,7 +192,7 @@ elseif arg[1] == "heartbeat" then
         local nodenumber = getNodeNumber()
         if status['success'] and status['nodenumber'] == nodenumber then
             print(luci.json.encode(sendHeartbeat(nodenumber)))
-        elseif not status['success'] and nodenumber > 0 then
+        elseif not status['success'] and nodenumber > 0 and nodenumber < 1001 then
             print(luci.json.encode(sendHeartbeat(nodenumber)))
         else
             print(luci.json.encode(assemble_result(false, -3, "Could not send heartbeat! Node should be registered first, let's do it now!", nodenumber)))

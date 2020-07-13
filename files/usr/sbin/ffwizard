@@ -27,8 +27,11 @@ community=$(uci_get freifunk community name "Weimar")
 
 nodenumber=$(uci_get ffwizard settings nodenumber "-1")
 [ "$nodenumber" -gt 0 ] || {
-        log "error: wrong or missing node number"
-        exit 1
+        log "error: wrong or missing node number, generating a temporary random one"
+        node_number_seed="$( dd if=/dev/urandom bs=2 count=1 2>&- | hexdump | if read line; t
+        random_node_number="$(( $node_number_seed % 19 + 1001))"
+        uci_set ffwizard settings nodenumber "$random_mode_number"
+        uci_commit ffwizard
 }
 
 nodedata="$(node2nets_json "$nodenumber")" 
