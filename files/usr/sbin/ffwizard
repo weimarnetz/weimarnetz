@@ -33,6 +33,7 @@ nodenumber=$(uci_get ffwizard settings nodenumber "-1")
         log "info: We've got a new temporary node number: $random_node_number"
         uci_set ffwizard settings nodenumber "$random_node_number"
         uci_commit ffwizard
+        nodenumber=$random_node_number
 }
 
 nodedata="$(node2nets_json "$nodenumber")" 
