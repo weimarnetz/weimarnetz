@@ -153,7 +153,7 @@ setup_wifi() {
 
 	local channel 
 	local hwmode 
-    local htmode
+	local htmode
 
 	hwmode=$(uci_get wireless "$device" hwmode)
 	
@@ -170,12 +170,12 @@ setup_wifi() {
 			;;
 	esac
 			
-    uci_set wireless "$device" htmode "$htmode" 
+	uci_set wireless "$device" htmode "$htmode" 
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	uci_set wireless "$device" country "DE"
 	uci_add_list wireless "$device" supported_rates '12000 18000 24000 36000 48000 54000'
-    uci_add_list wireless "$device" basic_rate '12000 18000 24000 36000 48000 54000'
+	uci_add_list wireless "$device" basic_rate '12000 18000 24000 36000 48000 54000'
 	#uci_set wireless $device distance "1000"
 	#Reduce the Broadcast distance and save Airtime
 	#Not working on wdr4300 with AP and ad-hoc
@@ -193,10 +193,11 @@ setup_wifi() {
 
 	if [ "$olsr_mesh" -eq 1 ] || [ "$bat_mesh" -eq 1 ]; then
 		# 11s
+		local wifinet="wifinet${idx}_11s"
 		local mesh_ssid
 		log_wifi "${cfg}: 11s"
 		local network="${cfg}_11s"
-		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
+		uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" encryption "none"
 		uci_set wireless "$sec" mode "mesh"
@@ -222,8 +223,9 @@ setup_wifi() {
 		#uci_set ffwizard $cfg vap "0"
 	fi
 	if [ "$vap" -eq 1 ] ; then
+		local wifinet="wifinet${idx}_vap"
 		log_wifi "${cfg}: virtual ap supported"
-		uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"
+		uci_add wireless wifi-iface "$wifinet" ; sec="$CONFIG_SECTION"
 		uci_set wireless "$sec" device "$device"
 		uci_set wireless "$sec" mode "ap"
 		#uci_set wireless "$sec" mcast_rate "6000"
@@ -241,8 +243,9 @@ setup_wifi() {
 	fi
 
     if [ "$roam" -eq 1 ]; then
+	local wifinet="wifinet${idx}_roaming"
         log_wifi "${cfg}: roaming ap enabled"                                                                  
-        uci_add wireless wifi-iface ; sec="$CONFIG_SECTION"                                                      
+        uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"                                                      
         uci_set wireless "$sec" device "$device"                                                                 
         uci_set wireless "$sec" mode "ap"                                                                        
         #uci_set wireless "$sec" mcast_rate "6000"                                                               
@@ -251,9 +254,9 @@ setup_wifi() {
         json_get_var ipaddr roaming_block                                                                
         ssid=$(uci_get profile_${community} profile ssid)                                                
         uci_set wireless "$sec" ssid "$ssid"
-		uci_set wireless "$sec" max_inactivity '5'
+	uci_set wireless "$sec" max_inactivity '5'
         uci_set wireless "$sec" max_listen_interval '128'                                                  
-		setup_bridge "$roam_name" "$ipaddr" "1"   
+	setup_bridge "$roam_name" "$ipaddr" "1"   
 		
 	fi  
 	json_cleanup
