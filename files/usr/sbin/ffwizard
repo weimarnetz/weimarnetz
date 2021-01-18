@@ -25,6 +25,7 @@ sed -i "/ffwizard/c$md5  /var/run/config.check/ffwizard" /var/run/config.md5
 
 community=$(uci_get freifunk community name "Weimar")
 
+randomnode=false
 nodenumber=$(uci_get ffwizard settings nodenumber "-1")
 [ "$nodenumber" -gt 0 ] || {
         log "error: wrong or missing node number, generating a temporary random one"
@@ -33,6 +34,7 @@ nodenumber=$(uci_get ffwizard settings nodenumber "-1")
         log "info: We've got a new temporary node number: $random_node_number"
         uci_set ffwizard settings nodenumber "$random_node_number"
         uci_commit ffwizard
+        randomnode=true
         nodenumber=$random_node_number
 }
 

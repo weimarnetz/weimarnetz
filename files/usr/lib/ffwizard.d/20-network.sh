@@ -1,6 +1,8 @@
 #!/bin/sh -x 
 # shellcheck disable=SC2039
 
+RANDOM_SSID_PREFIX="random setup wn ssid"
+
 log_net() {
 	logger -s -t ffwizard_net "$@"
 }
@@ -131,7 +133,12 @@ preserve_ssid() {
 			uci_add ffwizard wifi "$device"
 		fi
 		config_get ssid "$cfg" ssid
-		if [ -n "$ssid" ] && [ "$ssid" != "OpenWrt" ]; then
+		case $ssid in
+			$RANDOM_SSID_PREFIX*|"OpenWrt")
+				return
+			;;
+		esac
+		if [ -n "$ssid" ]; then
 			uci_set ffwizard "$device" ap_ssid "$ssid"
 		fi
 	fi
@@ -238,25 +245,28 @@ setup_wifi() {
 			# fixme - hostname support
 			ap_ssid=$(printf "$ap_ssid" "$nodenumber" | cut -c0-32)
 		fi
+		if [ "$randomnode" = "true" ]; then
+			ap_ssid="${RANDOM_SSID_PREFIX} $nodenumber"
+		fi
 		uci_set wireless "$sec" ssid "$ap_ssid"
 		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
 
     if [ "$roam" -eq 1 ]; then
-	local wifinet="wifinet${idx}_roaming"
-        log_wifi "${cfg}: roaming ap enabled"                                                                  
-        uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"                                                      
-        uci_set wireless "$sec" device "$device"                                                                 
-        uci_set wireless "$sec" mode "ap"                                                                        
-        #uci_set wireless "$sec" mcast_rate "6000"                                                               
-        uci_set wireless "$sec" isolate 1                                                                       
-        uci_set wireless "$sec" network "$roam_name"                                                              
-        json_get_var ipaddr roaming_block                                                                
-        ssid=$(uci_get profile_${community} profile ssid)                                                
+        local wifinet="wifinet${idx}_roaming"
+        log_wifi "${cfg}: roaming ap enabled"
+        uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"
+        uci_set wireless "$sec" device "$device"
+        uci_set wireless "$sec" mode "ap"
+        #uci_set wireless "$sec" mcast_rate "6000"
+        uci_set wireless "$sec" isolate 1
+        uci_set wireless "$sec" network "$roam_name"
+        json_get_var ipaddr roaming_block
+        ssid=$(uci_get profile_${community} profile ssid)
         uci_set wireless "$sec" ssid "$ssid"
-	uci_set wireless "$sec" max_inactivity '5'
-        uci_set wireless "$sec" max_listen_interval '128'                                                  
-	setup_bridge "$roam_name" "$ipaddr" "1"   
+        uci_set wireless "$sec" max_inactivity '5'
+        uci_set wireless "$sec" max_listen_interval '128'
+	setup_bridge "$roam_name" "$ipaddr" "1"
 		
 	fi  
 	json_cleanup
