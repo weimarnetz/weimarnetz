@@ -119,8 +119,9 @@ setup_dhcpbase() {
 	uci_set dhcp $cfg domain "olsr"
 	uci_set dhcp $cfg allservers "1"
 	uci_remove dhcp $cfg server
-	uci_add_list dhcp $cfg server "80.241.218.68" # https://dismail.de/info.html#dns
+	uci_add_list dhcp $cfg server "5.1.66.255" #  https://ffmuc.net/wiki/doku.php?id=knb:dohdot
 	uci_add_list dhcp $cfg server "46.182.19.48" # https://digitalcourage.de/support/zensurfreier-dns-server
+	uci_add_list dhcp $cfg server "185.150.99.255" #  https://ffmuc.net/wiki/doku.php?id=knb:dohdot
 	uci_add_list dhcp $cfg server "194.150.168.168" # as250.net - https://www.ccc.de/censorship/dns-howto/
 	config_get ffwizard $cfg olsr_mesh "0"
 	if [ "$olsr_mesh" -eq 1 ]; then
