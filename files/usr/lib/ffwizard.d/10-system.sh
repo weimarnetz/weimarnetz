@@ -45,7 +45,7 @@ setup_system() {
 		config_get hostname "$cfg" hostname "$hostname"
 		log_system "No custom hostname! Using $hostname"
 	fi
-	random_hostname=$(echo $hostname | grep -E '^ff.*-[0-9]{4}-random-[a-zA-Z]{4}') # contains the hostname if it is build with a random node number, else it is empty
+	random_hostname=$(echo $hostname | grep -E '^ff.*-[0-9]{4}-random-[a-zA-Z0-9]{4}') # contains the hostname if it is build with a random node number, else it is empty
 	if [ -z "$hostname" ] || [ "$hostname" = "LEDE" -o "$hostname" = "OpenWrt"  -o "$hostname" = "$random_hostname" ] ; then
 		if [ "$randomnode" = "true" ] ; then
 			random_string=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 4)
