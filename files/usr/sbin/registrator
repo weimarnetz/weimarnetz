@@ -140,7 +140,7 @@ function assemble_result(success, code, message, nodenumber)
 end
 
 function getMac()
-    local laninterface = uci:get("network", "lan", "ifname")
+    local laninterface = uci:get("network", "lan", "ifname") or uci:get("network", "lan", "device")
     local parameter = {}
     parameter['name'] = laninterface
     local devicestatus = luci.util.ubus("network.device", "status", parameter)
