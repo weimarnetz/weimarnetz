@@ -1,0 +1,270 @@
+#!/bin/sh
+
+. /lib/functions.sh
+. /usr/share/libubox/jshn.sh
+
+set -e
+
+printhelp() {
+        printf "registrator - maintains the knotennummer for routers\n
+see https://github.com/weimarnetz/registrator
+
+Usage: /usr/sbin/registrator <status|heartbeat|register>
+
+"
+}
+
+# save positional argument, as it would get overwritten otherwise.
+CMD_1="$1"
+CMD_2="$2"
+if [ -z "$CMD_1" ] || ([ "$CMD_1" != "status" ] && [ "$CMD_1" != "heartbeat" ] && [ "$CMD_1" != "register" ]); then
+        [ "$CMD_1" != "-h" ] && [ "$CMD_1" != "--help" ] && printf "Unrecognized argument %s.\n\n" "$CMD_1"
+        printhelp
+        exit 1
+fi
+
+#################################
+#                               #
+# log messages to syslog        #
+#                               #
+#################################
+log_system() {
+  level="$1"
+  message="$2"
+        logger -s -t registrator -p "$1" "$message"
+}
+
+#################################
+#                               #
+# Query status from registrator #
+#                               #
+#################################
+get_status() {
+  mac="$(get_mac)"
+  request_result=""
+  reg_status=""
+  request_result="$(send_http_request GET knotenByMac mac=$mac)"
+  if [ "$?" -eq 0 ]; then
+    json_load "$request_result"
+    json_get_var status status
+    json_select result
+    json_get_var nodenumber number
+    if [ "$status" -eq 200 ]; then
+      log_system "notice" "found mac $mac with number $nodenumber"
+      reg_status=$(build_result 1 "$status" "Registrator: found mac $mac with number $nodenumber" "$nodenumber")
+    elif [ -n "$status" ]; then
+      log_system "warn" "could not find mac $mac"
+      reg_status=$(build_result 0 "$status" "Registrator: could not find mac address $mac")
+    else
+      log_system "err" "could not connect to the registrator service"
+      reg_status=$(build_result 0 500 "There's a problem connecting to the registrator server, please ask weimarnetz for help")
+    fi
+  else
+    log_system "err" "There's a problem receiving results from the server"
+    reg_status=$(build_result 0 500 "There's a problem receiving results from the server")
+  fi
+  echo "$reg_status"
+}
+
+#################################
+#                               #
+# register new node             #
+#                               #
+#################################
+register_node() {
+  reg_status="$(write_to_registrator POST knoten)"
+  json_load "$reg_status"
+  json_get_var success success
+  json_get_var nodenumber nodenumber
+  if [ "$success" ]; then
+    store_nodenumber "$nodenumber"
+  fi
+  json_cleanup
+  echo "$reg_status"
+}
+
+#################################
+#                               #
+# send_heartbeat for node       #
+#                               #
+#################################
+send_heartbeat() {
+  nodenumber="$1"
+  echo "$(write_to_registrator PUT knoten/$nodenumber)"
+}
+
+#################################
+#                               #
+# stor new node number          #
+#                               #
+#################################
+store_nodenumber() {
+  nodenumber="$1"
+  uci_set ffwizard settings nodenumber $nodenumber
+  uci_commit
+  log_system "notice" "set new nodenumber to $nodenumber"
+}
+
+#################################
+#                               #
+# write to registrator          #
+#                               #
+#################################
+write_to_registrator() {
+  method="$1"
+  uri="$2"
+
+  mac="$(get_mac)"
+  request_result=""
+  reg_status=""
+  request_result="$(send_http_request $method $uri "mac=$mac&pass=pass")"
+  if [ "$?" -eq 0 ]; then
+    json_load "$request_result"
+    json_get_var status status
+    json_select result > /dev/null
+    json_get_var nodenumber number
+    if [ "$status" -eq 200 ] || [ "$status" -eq 303 ]; then
+      log_system "notice" "found mac $mac with number $nodenumber and/or successfully updated"
+      reg_status=$(build_result 1 "$status" "Registrator: $nodenumber found for mac $mac and/or successfully updated" "$nodenumber")
+    elif [ "$status" -eq 201 ]; then
+      log_system "notice" "nodenumber $nodenumber successfully created for mac $mac"
+      reg_status=$(build_result 1 "$status" "Registrator: nodenumber $nodenumber successfully created for mac address $mac")
+    elif [ -n "$status" ]; then
+      log_system "warn" "Failed to update/register node with mac $mac with code $status"
+      reg_status=$(build_result 0 "$status" "Registrator: Failed to update/register node with mac address $mac")
+    else
+      log_system "err" "could not connect to the registrator service"
+      reg_status=$(build_result 0 500 "There's a problem connecting to the registrator server, please ask weimarnetz for help")
+    fi
+  else
+    log_system "err" "There's a problem receiving results from the server"
+    reg_status=$(build_result 0 500 "There's a problem receiving results from the server")
+  fi
+  echo "$reg_status"
+}
+
+#################################
+#                               #
+# build result return object    #
+#                               #
+#################################
+build_result() {
+  success="$1"
+  code="$2"
+  message="$3"
+  nodenumber="$4"
+  json_init
+  json_add_boolean success $success
+  json_add_int code $code
+  json_add_string message "$message"
+  if [[ -n "$nodenumber" ]]; then
+    json_add_int nodenumber $nodenumber
+  fi
+  result="$(json_dump)"
+  echo "$result"
+}
+
+#################################
+#                               #
+# get mac address from lan      #
+#                               #
+#################################
+get_mac() {
+  local laninterface=$(uci_get network lan ifname)
+  if [ -z $laninterface ]; then
+    laninterface=$(uci_get network lan device)
+  fi
+  json_init
+  json_add_string name "$laninterface"
+  json_load  "$(ubus -v call network.device status "$(json_dump)")"
+  json_get_var macaddr macaddr
+  echo $macaddr
+}
+
+#################################
+#                               #
+# get nodenumber          #
+#                               #
+#################################
+get_nodenumber() {
+  nodenumber=$(uci_get ffwizard settings nodenumber -1)
+  if [ "$nodenumber" -eq -1 ]; then
+    nodenumber=$(uci_get meshwizard community nodenumber -1)
+    if [ "$nodenumber" -gt 0 ]; then
+      set_nodenumber "$nodenumber"
+    fi
+  fi
+  echo "$nodenumber"
+}
+
+#################################
+#                               #
+# set nodenumber          #
+#                               #
+#################################
+set_nodenumber() {
+  nodenumber="$1"
+  if [ -n "$nodenumber" ]; then
+    uci_set ffwizard settings nodenumber $nodenumber
+    uci_commit
+    log_system "notice" "set new nodenumber to $nodenumber"
+  fi
+}
+
+################################
+#                              #
+#   Send data to registrator   #
+#                              #
+################################
+send_http_request() {
+  TARGET="$(uci_get freifunk community registrator| sed -e 's/http\(s\)\{0,1\}:\/\///g')"
+  if [ -z $TARGET ]; then
+    TARGET="reg.weimarnetz.de"
+  fi
+  NETWORK="$(uci_get ffwizard settings ipschema)"
+  if [ -z $NETWORK ]; then
+    NETWORK="ffweimar"
+  fi
+  METHOD=$1
+  URI=$2
+  PARAMS=$3
+
+  MSG="\
+$METHOD /${NETWORK}/${URI}?${PARAMS} HTTP/1.0\r
+User-Agent: nc/0.0.1\r
+Host: $TARGET\r
+\r\n"
+  result=""  
+  result="$(printf "$MSG" | nc $TARGET 80|sed -e '1,/^\r$/d')"
+  xyz=$(jshn -r "$result")
+  exitcode=$?
+  if [ $exitcode -ne 0 ]; then
+    log_system "err" "Mist, I was not able to parse the result as valid json"
+    return 1
+  fi
+  echo "$result"
+}
+
+if [ "$CMD_1" == "status" ]; then
+  echo $(get_status)
+elif [ "$CMD_1" == "heartbeat" ]; then
+  if [ -n "$CMD_2" ] && [ "$CMD_2" -eq "$CMD_2" ]; then #checks if CMD_2 exists and is a number
+    echo $(send_heartbeat $CMD_2)
+  else
+    json_load "$(get_status)"
+    json_get_var success success
+    json_get_var nodenumber nodenumber
+    json_cleanup
+    stored_nodenumber="$(get_nodenumber)"
+    if [ "$success" ] && [ "$nodenumber" -eq "$stored_nodenumber" ]; then
+      echo $(send_heartbeat $nodenumber)
+    elif [ ! "$success" ] && [ "$stored_nodenumber" -gt 0 ] && [ "$stored_nodenumber" -lt 1001 ]; then
+      echo $(send_heartbeat $nodenumber)
+    else
+      log_system "err" "Could not send heartbeat! Node $nodenumber should be registered first, let's do it now!"
+      echo $(register_node)
+    fi
+  fi
+elif [ "$CMD_1" == "register" ]; then
+  echo $(register_node)
+fi
