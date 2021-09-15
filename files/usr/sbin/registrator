@@ -101,7 +101,8 @@ send_heartbeat() {
 store_nodenumber() {
   nodenumber="$1"
   uci_set ffwizard settings nodenumber $nodenumber
-  uci_commit
+  uci_commit ffwizard
+  reload_config
   log_system "notice" "set new nodenumber to $nodenumber"
 }
 
