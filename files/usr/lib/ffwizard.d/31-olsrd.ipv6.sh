@@ -3,5 +3,6 @@
 
 . /lib/functions/network.sh
 
+/etc/init.d/olsrd6 stop
 /etc/init.d/olsrd6 disable
 
