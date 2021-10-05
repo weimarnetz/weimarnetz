@@ -235,15 +235,34 @@ $METHOD /${NETWORK}/${URI}?${PARAMS} HTTP/1.0\r
 User-Agent: nc/0.0.1\r
 Host: $TARGET\r
 \r\n"
-  result=""  
-  result="$(printf "$MSG" | nc $TARGET 80|sed -e '1,/^\r$/d')"
-  xyz=$(jshn -r "$result")
-  exitcode=$?
-  if [ $exitcode -ne 0 ]; then
-    log_system "err" "Mist, I was not able to parse the result as valid json"
-    return 1
+  answer=$(printf "$MSG"|nc $TARGET 80)
+  body=$(echo "$answer"|sed -e '1,/^\r$/d')
+
+  if [ -z "$body" ]; then
+    statuscode=$(echo "$answer"|head -n1|cut -d ' ' -f 2)
+    json_init
+    json_add_int status $statuscode
+    json_add_string message "not_ok"
+    json_add_object "result"
+      json_add_int "nodenumber" -1
+    json_close_object
+    echo "$(json_dump)"
+  else
+    xyz=$(jshn -r "$body")
+    exitcode=$?
+    if [ $exitcode -ne 0 ]; then
+      log_system "err" "Mist, I was not able to parse the result as valid json"
+      json_init
+      json_add_int status 500
+      json_add_string message "not_ok"
+      json_add_object "result"
+        json_add_int "nodenumber" -1
+      json_close_object
+      echo "$(json_dump)"
+      return 1
+    fi
+    echo "$body"
   fi
-  echo "$result"
 }
 
 if [ "$CMD_1" == "status" ]; then
