@@ -189,27 +189,7 @@ get_mac() {
 #################################
 get_nodenumber() {
   nodenumber=$(uci_get ffwizard settings nodenumber -1)
-  if [ "$nodenumber" -eq -1 ]; then
-    nodenumber=$(uci_get meshwizard community nodenumber -1)
-    if [ "$nodenumber" -gt 0 ]; then
-      set_nodenumber "$nodenumber"
-    fi
-  fi
   echo "$nodenumber"
-}
-
-#################################
-#                               #
-# set nodenumber          #
-#                               #
-#################################
-set_nodenumber() {
-  nodenumber="$1"
-  if [ -n "$nodenumber" ]; then
-    uci_set ffwizard settings nodenumber $nodenumber
-    uci_commit
-    log_system "notice" "set new nodenumber to $nodenumber"
-  fi
 }
 
 ################################
