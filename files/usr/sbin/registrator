@@ -76,7 +76,7 @@ register_node() {
   json_load "$reg_status"
   json_get_var success success
   json_get_var nodenumber nodenumber
-  if [ "$success" ]; then
+  if [ "$success" -eq 1 ]; then
     store_nodenumber "$nodenumber"
   fi
   json_cleanup
@@ -95,7 +95,7 @@ send_heartbeat() {
 
 #################################
 #                               #
-# stor new node number          #
+# store new node number         #
 #                               #
 #################################
 store_nodenumber() {
@@ -256,9 +256,9 @@ elif [ "$CMD_1" == "heartbeat" ]; then
     json_get_var nodenumber nodenumber
     json_cleanup
     stored_nodenumber="$(get_nodenumber)"
-    if [ "$success" ] && [ "$nodenumber" -eq "$stored_nodenumber" ]; then
+    if [ "$success" -eq 1 ] && [ "$nodenumber" -eq "$stored_nodenumber" ]; then
       echo $(send_heartbeat $nodenumber)
-    elif [ ! "$success" ] && [ "$stored_nodenumber" -gt 0 ] && [ "$stored_nodenumber" -lt 1001 ]; then
+    elif [ "$success" -eq 0 ] && [ "$stored_nodenumber" -gt 0 ] && [ "$stored_nodenumber" -lt 1001 ]; then
       echo $(send_heartbeat $nodenumber)
     else
       log_system "err" "Could not send heartbeat! Node $nodenumber should be registered first, let's do it now!"
