@@ -129,7 +129,7 @@ write_to_registrator() {
       reg_status=$(build_result 1 "$status" "Registrator: $nodenumber found for mac $mac and/or successfully updated" "$nodenumber")
     elif [ "$status" -eq 201 ]; then
       log_system "notice" "nodenumber $nodenumber successfully created for mac $mac"
-      reg_status=$(build_result 1 "$status" "Registrator: nodenumber $nodenumber successfully created for mac address $mac")
+      reg_status=$(build_result 1 "$status" "Registrator: nodenumber $nodenumber successfully created for mac address $mac" "$nodenumber")
     elif [ -n "$status" ]; then
       log_system "warn" "Failed to update/register node with mac $mac with code $status"
       reg_status=$(build_result 0 "$status" "Registrator: Failed to update/register node with mac address $mac")
