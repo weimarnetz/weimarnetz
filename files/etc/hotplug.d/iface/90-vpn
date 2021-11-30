@@ -15,8 +15,7 @@
 }
 
 [ "$INTERFACE" = "vpn" ] && {
-    logger -t vpn_hotplug -p daemon.info "[OK] restart olsrd because of changes in vpn"
-	. /etc/rc.common /etc/init.d/olsrd restart
+    logger -t vpn_hotplug -p daemon.info "[OK] VPN connection changed!"
     # no need to set default-gw when in innercity mode
 	[ "$(uci -q get ffwizard.vpn.mode)" = "innercity" ] && return
 
