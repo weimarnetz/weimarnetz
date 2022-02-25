@@ -12,22 +12,29 @@ log_wifi() {
 }
 
 is_ac_radio() {
-        local radio="$1"
-        local info
+	local radio="$1"
+	local phy
+	local info
 
-        info=$(ubus call iwinfo info "{ \"device\":\"$radio\"}")
-        json_load "$info"
-        json_select "hwmodes"
-        local idx=1
-        while json_get_type status "$idx" && [ "$status" = "string" ]; do
-                json_get_var ac "$((idx++))"
-                [ "$ac" = "ac" ] && { 
-					json_cleanup 
-					return 0
-				}
-        done
-        json_cleanup
-        return 1 
+	phy=$(ubus call iwinfo phyname "{ \"section\":\"$radio\" }")
+	json_load "$phy"
+	json_get_var phyname phyname
+	info=$(ubus call iwinfo info "{ \"device\":\"$phyname\"}")
+	json_load "$info"
+	if json_is_a hwmodes array; then
+		json_select hwmodes
+		local idx=1
+		while json_is_a ${idx} "string"; do
+			json_get_var hwmode $idx
+			[ "$hwmode" = "ac" ] && {
+				json_cleanup
+				return 0
+			}
+			idx=$(( idx + 1 ))
+		done
+	fi
+	json_cleanup
+	return 1
 }
 
 
@@ -103,7 +110,7 @@ setup_ether() {
 	local cfg="$1"
 	local nodenumber="$2"
 
-	config_get enabled "$cfg" enabled "0"					  
+	config_get enabled "$cfg" enabled "0"
 	[ "$enabled" -eq 1 ] || return 
 	config_get device "$cfg" device "none"
 	[ "$device" = "none" ] && return
@@ -158,26 +165,27 @@ setup_wifi() {
 	
 	local device="radio$idx"
 
-	local channel 
-	local hwmode 
+	local channel
+	local band
 	local htmode
 
 	hwmode=$(uci_get wireless "$device" hwmode)
-	
-	case $hwmode in 
-		11a*)
-			channel=104
-		    is_ac_radio "$device" && htmode="VHT20" || htmode="HT20"
+	band=$(uci_get wireless "$device" band "$hwmode")
+
+	case $band in
+		5g|11a*)
+			channel=$(uci_get profile_${community} profile channel5ghz "104")
+			is_ac_radio "$device" && htmode="VHT20" || htmode="HT20"
 			;;
-		11g)
-			channel=5
+		2g|11g)
+			channel=$(uci_get profile_${community} profile channel2ghz "5")
 			htmode="HT20"
 			;;
-		*)	log_wifi "ERR unknown hwmode: $hwmode"
+		*)	log_wifi "ERR unknown band: $band"
 			;;
 	esac
-			
-	uci_set wireless "$device" htmode "$htmode" 
+
+	uci_set wireless "$device" htmode "$htmode"
 	uci_set wireless "$device" channel "$channel"
 	uci_set wireless "$device" disabled "0"
 	uci_set wireless "$device" country "DE"
@@ -194,7 +202,7 @@ setup_wifi() {
 	#wifi-iface
 
 	config_get olsr_mesh "$cfg" olsr_mesh "0"
-	json_init	
+	json_init
 	json_load "$nodedata"
 	
 
@@ -252,23 +260,23 @@ setup_wifi() {
 		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
 
-    if [ "$roam" -eq 1 ]; then
-        local wifinet="wifinet${idx}_roaming"
-        log_wifi "${cfg}: roaming ap enabled"
-        uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"
-        uci_set wireless "$sec" device "$device"
-        uci_set wireless "$sec" mode "ap"
-        #uci_set wireless "$sec" mcast_rate "6000"
-        uci_set wireless "$sec" isolate 1
-        uci_set wireless "$sec" network "$roam_name"
-        json_get_var ipaddr roaming_block
-        ssid=$(uci_get profile_${community} profile ssid)
-        uci_set wireless "$sec" ssid "$ssid"
-        uci_set wireless "$sec" max_inactivity '5'
-        uci_set wireless "$sec" max_listen_interval '128'
-	setup_bridge "$roam_name" "$ipaddr" "1"
+	if [ "$roam" -eq 1 ]; then
+		local wifinet="wifinet${idx}_roaming"
+		log_wifi "${cfg}: roaming ap enabled"
+		uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"
+		uci_set wireless "$sec" device "$device"
+		uci_set wireless "$sec" mode "ap"
+		#uci_set wireless "$sec" mcast_rate "6000"
+		uci_set wireless "$sec" isolate 1
+		uci_set wireless "$sec" network "$roam_name"
+		json_get_var ipaddr roaming_block
+		ssid=$(uci_get profile_${community} profile ssid)
+		uci_set wireless "$sec" ssid "$ssid"
+		uci_set wireless "$sec" max_inactivity '5'
+		uci_set wireless "$sec" max_listen_interval '128'
+		setup_bridge "$roam_name" "$ipaddr" "1"
 		
-	fi  
+	fi
 	json_cleanup
 }
 

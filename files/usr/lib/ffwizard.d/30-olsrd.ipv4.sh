@@ -150,28 +150,12 @@ setup_wifi() {
 	config_get idx "$cfg" idx "-1"
 	[ "$idx" -eq "-1" ] && return
 
-	hwmode=$(uci_get wireless "radio$idx" hwmode)
-
-	case $hwmode in 
-		11a*)
-			log_olsr4 "Setup wifi $cfg"
-			uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-			uci_set olsrd "$iface_sec" interface "radio${idx}_11s"
-			uci_set olsrd "$iface_sec" ignore "0"
-			uci_set olsrd "$iface_sec" Mode "mesh"
-			olsr_enabled=1
-			;;
-		11g)	
-			# 11s
-			log_olsr4 "Setup wifi $cfg"
-			uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-			uci_set olsrd "$iface_sec" interface "radio${idx}_11s"
-			uci_set olsrd "$iface_sec" ignore "0"
-			uci_set olsrd "$iface_sec" Mode "mesh"
-			olsr_enabled=1
-
-			;;
-	esac
+	log_olsr4 "Setup wifi $cfg"
+	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
+	uci_set olsrd "$iface_sec" interface "radio${idx}_11s"
+	uci_set olsrd "$iface_sec" ignore "0"
+	uci_set olsrd "$iface_sec" Mode "mesh"
+	olsr_enabled=1
 }
 
 setup_vpn() {
