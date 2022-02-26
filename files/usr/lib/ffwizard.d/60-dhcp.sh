@@ -49,25 +49,25 @@ setup_roaming_dhcp() {
 	json_load "$nodedata"
 	json_get_var offset roaming_dhcp_offset
 
-	if uci_get dhcp $cfg_dhcp >/dev/null ; then				  
-				uci_remove dhcp $cfg_dhcp						  
-	fi														  
-	uci_add dhcp dhcp $cfg_dhcp								  
-	uci_set dhcp $cfg_dhcp interface "$cfg_dhcp"			  
-	uci_set dhcp $cfg_dhcp ignore "0"						  
-	uci_set dhcp $cfg_dhcp start "$offset"		
-	uci_set dhcp $cfg_dhcp limit "254"			   
-	uci_set dhcp $cfg_dhcp leasetime "6h"					  
+	if uci_get dhcp $cfg_dhcp >/dev/null ; then
+				uci_remove dhcp $cfg_dhcp
+	fi
+	uci_add dhcp dhcp $cfg_dhcp
+	uci_set dhcp $cfg_dhcp interface "$cfg_dhcp"
+	uci_set dhcp $cfg_dhcp ignore "0"
+	uci_set dhcp $cfg_dhcp start "$offset"
+	uci_set dhcp $cfg_dhcp limit "254"
+	uci_set dhcp $cfg_dhcp leasetime "6h"
 	uci_add_list dhcp $cfg_dhcp dhcp_option "119,olsr,lan,p2p"
-	uci_add_list dhcp $cfg_dhcp domain "olsr"				  
-	uci_add_list dhcp $cfg_dhcp domain "lan"				  
-	uci_add_list dhcp $cfg_dhcp domain "p2p"				  
+	uci_add_list dhcp $cfg_dhcp domain "olsr"
+	uci_add_list dhcp $cfg_dhcp domain "lan"
+	uci_add_list dhcp $cfg_dhcp domain "p2p"
 	if [ "$ipv6" -eq 1 ]; then
-		uci_set dhcp $cfg_dhcp dhcpv6 "server"					  
-		uci_set dhcp $cfg_dhcp ra "server"				
-		uci_set dhcp $cfg_dhcp ra_preference "low"		
+		uci_set dhcp $cfg_dhcp dhcpv6 "server"
+		uci_set dhcp $cfg_dhcp ra "server"
+		uci_set dhcp $cfg_dhcp ra_preference "low"
 		uci_set dhcp $cfg_dhcp ra_default "1"
-	fi	
+	fi
 }
 
 setup_ether() {
@@ -92,7 +92,6 @@ setup_wifi() {
 
 	config_get enabled $cfg enabled "0"
 	[ "$enabled" -eq 0 ] && return
-	config_get roaming settings roaming "0"
 	config_get ipv6 settings ipv6 "0"
 
 	local nodedata=$(node2nets_json $nodenumber)
@@ -105,10 +104,8 @@ setup_wifi() {
 		log_dhcp "Setup $cfg with $dhcp_ip"
 		setup_dhcp $cfg_dhcp "$dhcp_ip" "$ipv6"
 	fi
-	if [ "$roaming" -eq 1 ]; then
-		uci_remove dhcp roam 2>/dev/null
-                setup_roaming_dhcp "roam" "$nodenumber"           
-        fi  
+	uci_remove dhcp roam 2>/dev/null
+	setup_roaming_dhcp "roam" "$nodenumber"
 	json_cleanup
 
 }

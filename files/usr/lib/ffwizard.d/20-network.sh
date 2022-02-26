@@ -125,6 +125,20 @@ setup_ether() {
 	json_cleanup
 }
 
+configure_roaming() {
+	local cfg="$1"
+	config_get device "$cfg" device
+	local storedRoaming
+	storedRoaming=$(uci_get ffwizard "$device" roaming)
+	[ -n "$storedRoaming" ] && return
+	local ffwizardDevice
+	ffWizardDevice=$(uci_get ffwizard "$device")
+	if [ -z "$ffwizardDevice" ]; then
+		uci_add ffwizard wifi "$device"
+	fi
+	uci_set ffwizard "$device" roaming "1"
+}
+
 preserve_ssid() {
 	local cfg="$1"
 	config_get device "$cfg" device
@@ -156,7 +170,6 @@ setup_wifi() {
 	local nodenumber="$2"
 	local vap_name="$3"
 	local roam_name="$4"
-	local roam="$5"
 
 	config_get enabled "$cfg" enabled "0"
 	[ "$enabled" -eq 0 ] && return
@@ -260,7 +273,8 @@ setup_wifi() {
 		setup_bridge "$vap_name" "$ipaddr" "0"
 	fi
 
-	if [ "$roam" -eq 1 ]; then
+	config_get roaming "$cfg" roaming "0"
+	if [ "$roaming" -eq 1 ]; then
 		local wifinet="wifinet${idx}_roaming"
 		log_wifi "${cfg}: roaming ap enabled"
 		uci_add wireless wifi-iface "$wifinet"; sec="$CONFIG_SECTION"
@@ -299,12 +313,13 @@ remove_network() {
 #Remove wireless config
 config_load wireless
 config_foreach preserve_ssid wifi-iface
+config_foreach configure_roaming wifi-iface
 uci_commit ffwizard
 config_foreach remove_wifi wifi-device
 uci_commit wireless 
 wifi config
 uci_commit wireless
-#Remove wifi ifaces	
+#Remove wifi ifaces
 # FIXME leave disabled iface alone	
 config_load wireless	
 config_foreach remove_wifi wifi-iface	
@@ -315,9 +330,8 @@ config_foreach remove_network interface
 uci_commit network
 #Setup ether and wifi
 config_load ffwizard
-config_get roaming settings roaming 0
 config_foreach setup_ether ether "$nodenumber"
-config_foreach setup_wifi wifi "$nodenumber" "vap" "roam" "$roaming" 
+config_foreach setup_wifi wifi "$nodenumber" "vap" "roam"
 config_foreach setup_vpn vpn 
 
 config_get ip6prefix ffwizard ip6prefix
