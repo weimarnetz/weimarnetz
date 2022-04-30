@@ -1,0 +1,32 @@
+#!/bin/sh
+
+. /lib/functions.sh
+. /usr/share/libubox/jshn.sh
+. /usr/lib/weimarnetz/ipsystem.sh 
+
+log() {
+        logger -s -t vpnwatchdog "$@"
+}
+
+[ $(uci -q get ffwizard.vpn.enabled) -eq 1 ] || {
+	log "vpn disabled"
+	return
+}
+
+nodenumber=$(uci_get ffwizard settings nodenumber "-1")                                                                                                                                       
+[ "$nodenumber" -gt 0 ] || {                                                                                                                                                                  
+        log "nodenumber not set yet"
+	return
+}                                                                                                                        
+                                                                                                                         
+nodedata="$(node2nets_json "$nodenumber")"
+
+json_load "$nodedata"     
+json_get_var gw vpn_gw             
+json_cleanup                   
+
+$(ping -c1 -q -W1 $gw &>/dev/null) || {
+	log "can't ping vpn endpoint"
+	ifdown vpn
+	ifup vpn
+}
