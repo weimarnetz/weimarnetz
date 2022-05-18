@@ -8,6 +8,17 @@ log() {
         logger -s -t vpnwatchdog "$@"
 }
 
+wan_status="$(ifstatus wan)"
+
+json_load "$wan_status"
+json_get_var wan_up up
+json_cleanup
+
+[ "$wan_up" -eq "1" ] || {
+	log "no wan connection"
+	return
+}
+
 [ $(uci -q get ffwizard.vpn.enabled) -eq 1 ] || {
 	log "vpn disabled"
 	return
@@ -15,7 +26,7 @@ log() {
 
 nodenumber=$(uci_get ffwizard settings nodenumber "-1")                                                                                                                                       
 [ "$nodenumber" -gt 0 ] || {                                                                                                                                                                  
-        log "nodenumber not set yet"
+  log "nodenumber not set yet"
 	return
 }                                                                                                                        
                                                                                                                          
