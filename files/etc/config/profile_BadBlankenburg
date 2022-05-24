@@ -1,5 +1,5 @@
 config community 'profile'
-        option 'name' 'BadBlankenburg'
+        option 'name' 'Saalebogen'
         option 'homepage' 'https://freifunk-slfru.de'
         option 'ssid' 'BadBlankenburg.Freifunk'
         option 'mesh_ssid' 'mesh.%d.ch%d.badblankenburg.ff'
