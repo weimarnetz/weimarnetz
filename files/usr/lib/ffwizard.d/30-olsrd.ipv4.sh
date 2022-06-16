@@ -186,7 +186,7 @@ setup_custom_hna4() {
 	local config="$1"
 	config_get custom_netaddr "$config" netaddr "empty"
 	config_get custom_netmask "$config" netmask "empty"
-	if [ "$custom_netaddr" -eq "empty" ] || [ "$custom_netmask" -eq "empty" ]; then
+	if [ "$custom_netaddr" = "empty" ] || [ "$custom_netmask" = "empty" ]; then
 		return
 	fi
 	log_olsr4 "custom hna config for $custom_netaddr/$custom_netmask"
