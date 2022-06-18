@@ -4,4 +4,4 @@
 
 - Report bugs or work on issues: https://github.com/weimarnetz/weimarnetz/issues 
 
-- Improve the documentation: https://github.com/weimarnetz/weimarnetz/wiki 
+- Improve the documentation: https://wireless.subsignal.org
