@@ -171,9 +171,9 @@ build_result() {
 #                               #
 #################################
 get_mac() {
-  local laninterface=$(uci_get network lan ifname)
-  if [ -z $laninterface ]; then
-    laninterface=$(uci_get network lan device)
+  local laninterface=$(uci_get network lan device)
+  if [ -z "$laninterface" ]; then
+    laninterface=$(uci_get network wan device)
   fi
   json_init
   json_add_string name "$laninterface"
