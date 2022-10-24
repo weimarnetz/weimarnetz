@@ -91,20 +91,20 @@ probe_vtun_endpoints() {
 	count=0
 	for e in $endpoints
 	do
-		json="$(uclient-fetch -q -T 1 -O- "http://$e/freifunk/vpn")"
+		json="$(uclient-fetch -q -T 4 -O- "http://$e/freifunk/vpn")"
 		json_load "$json" 2>/dev/null
 		json_get_var server server
 		json_get_var port port_vtun_nossl_nolzo
 		json_cleanup
-		if net_tcp_port_reachable "$server" "$port"; then
+		if [ -n "$server" ] && [ -n "$port" ]; then
 			c="$c $e"
 			count=$((count+1))
 		fi
 	done 
-
 	if [ "$count" -gt 0 ]; then
 		rand=$(tr -dc 1-"$count" </dev/urandom 2>/dev/null| head -c1)
 		final=$(echo "$c" | awk '{$1=$1};1' | cut -d" " -f"$rand")
+		logger -s -t vpn "using $final server"
 		json="$(uclient-fetch -q -T 1 -O- "http://$final/freifunk/vpn")"
 		json_load "$json" 2>/dev/null
 		json_dump
