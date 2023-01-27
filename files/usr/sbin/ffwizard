@@ -8,16 +8,6 @@ log() {
         logger -s -t ffwizard "$@"
 }
 
-# fixme - this function is only in master and *not* in openwrt-18.06
-uci_add_list() {
-	local PACKAGE="$1"
-	local CONFIG="$2"
-	local OPTION="$3"
-	local VALUE="$4"
-
-	/sbin/uci ${UCI_CONFIG_DIR:+-c $UCI_CONFIG_DIR} add_list "$PACKAGE.$CONFIG.$OPTION=$VALUE"
-}
-
 # dirty workaround to use reload_config. LuCI seems to save and apply another way, so this script would be called twice when we call config_reload at the end to apply other changes 
 # uci seems to write md5sums for config files to /var/fun/config.md5, this file is not updated when luci's save and reply runs, so the wizard would be executed a second time when we call reload_config at the end
 md5=$(uci show ffwizard |md5sum|cut -d ' ' -f1)
