@@ -29,15 +29,23 @@ nodenumber=$(uci_get ffwizard settings nodenumber "-1")
   log "nodenumber not set yet"
 	return
 }                                                                                                                        
-                                                                                                                         
-nodedata="$(node2nets_json "$nodenumber")"
 
-json_load "$nodedata"     
-json_get_var gw vpn_gw             
-json_cleanup                   
+if [ -f "/usr/bin/fastd" ]; then
+	gw="$(ip r s ta 50|grep 'default via'|cut -d ' ' -f3)"
+	if [ -z $gw ] || [ "$(traceroute -r -w1 $gw|wc -l)" -ne 2 ]; then
+		log "fastd seems not to work, restarting it"
+		/etc/init.d/fastd restart
+	fi
+else
+	nodedata="$(node2nets_json "$nodenumber")"
 
-$(ping -c1 -q -W1 $gw &>/dev/null) || {
-	log "can't ping vpn endpoint"
-	ifdown vpn
-	ifup vpn
-}
+	json_load "$nodedata"     
+	json_get_var gw vpn_gw             
+	json_cleanup                   
+
+	$(ping -c1 -q -W1 $gw &>/dev/null) || {
+		log "can't ping vpn endpoint"
+		ifdown vpn
+		ifup vpn
+	}
+fi

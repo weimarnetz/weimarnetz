@@ -5,7 +5,8 @@
 	[ $(uci -q get ffwizard.vpn.enabled) -eq 1 ] || return
 
 	case "$ACTION" in 
-		ifup) 
+		ifup)
+			[ -f "/usr/bin/fastd" ] && return
 			ifup vpn
 		;;
 		ifdown)
@@ -15,6 +16,7 @@
 }
 
 [ "$INTERFACE" = "vpn" ] && {
+	[ -f "/usr/bin/fastd" ] && return
     logger -t vpn_hotplug -p daemon.info "[OK] VPN connection changed!"
     # no need to set default-gw when in innercity mode
 	[ "$(uci -q get ffwizard.vpn.mode)" = "innercity" ] && return

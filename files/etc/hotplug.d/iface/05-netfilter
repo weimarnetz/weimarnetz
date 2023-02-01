@@ -54,7 +54,7 @@ up_rules() {
 				iptables -A FORWARD -j paranoia-vpn
 			}
 		;;
-		vpn|vap|roam|radio0_*|radio1_*)
+		vpn|fastd|vap|roam|radio0_*|radio1_*)
 			# mss clamping 
 			iptables -t mangle -A POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
@@ -110,7 +110,7 @@ down_rules() {
 				iptables -X paranoia-vpn
 			}
 			;;
-		    vpn|vap|roam|radio0_*|radio1_*)
+		    vpn|fastd|vap|roam|radio0_*|radio1_*)
 			# mss clamping 
 			iptables -t mangle -D POSTROUTING -p tcp \
 				--tcp-flags SYN,RST SYN -o "$dev" \
