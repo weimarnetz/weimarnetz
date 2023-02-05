@@ -36,16 +36,4 @@ if [ -f "/usr/bin/fastd" ]; then
 		log "fastd seems not to work, restarting it"
 		/etc/init.d/fastd restart
 	fi
-else
-	nodedata="$(node2nets_json "$nodenumber")"
-
-	json_load "$nodedata"     
-	json_get_var gw vpn_gw             
-	json_cleanup                   
-
-	$(ping -c1 -q -W1 $gw &>/dev/null) || {
-		log "can't ping vpn endpoint"
-		ifdown vpn
-		ifup vpn
-	}
 fi

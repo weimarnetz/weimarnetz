@@ -58,11 +58,9 @@ setup_ip() {
 	if uci_get network "$cfg" type bridge >/dev/null; then 
 		uci_remove network "$cfg" type
 	fi
-	if [ "$cfg" = "vpn" ] ; then
-		uci_set network "$cfg" proto 'vtun'
-	else
-		uci_set network "$cfg" proto 'static'
-	fi
+
+	uci_set network "$cfg" proto 'static'
+
 	# uci_set network "$cfg" ip6assign '64'
 	log_net ${cfg}: $ipaddr $gateway
 }
@@ -77,33 +75,6 @@ setup_bridge() {
 		true
 	fi
 	uci_set network "$cfg" type 'bridge'
-}
-
-setup_vpn() {
-	local cfg="$1"
-	if uci_get network "$cfg" >/dev/null; then 
-		uci_remove network "$cfg"
-	fi
-	# remove old settings
-	if uci_get network "tap0" >/dev/null; then 
-		uci_remove network "tap0"
-	fi
-	uci_add network interface "$cfg"
-	config_get type "$cfg" type "vtun"
-	if [ "$type" = "vtun" ]; then
-		uci_set network "$cfg" proto "vtun"
-		uci_set network "$cfg" auto "0"
-		json_init
-		json_load "$nodedata"
-		json_get_var ipaddr vpn
-		json_get_var gw vpn_gw
-		[ -n "$ipaddr" ] || {
-			log_net "ERR $cfg - missing ip" 
-			return 1
-		}
-		setup_ip "$cfg" "$ipaddr" "$gw"
-		json_cleanup
-	fi
 }
 
 setup_ether() {
@@ -332,7 +303,6 @@ uci_commit network
 config_load ffwizard
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber" "vap" "roam"
-config_foreach setup_vpn vpn 
 
 config_get ip6prefix ffwizard ip6prefix
 if [ -n "$ip6prefix" ] ; then

@@ -12,7 +12,7 @@ case "$ACTION" in
     		wan)
   	        	tc qdisc replace dev "$DEVICE" root cake nat conservative "$memlimit"
 			;;
-			vpn|fastd)
+			fastd)
 	    		tc qdisc replace dev "$DEVICE" root cake nonat conservative "$memlimit"
 			;;
 			radio*)

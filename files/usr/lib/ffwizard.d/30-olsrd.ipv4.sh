@@ -158,19 +158,6 @@ setup_wifi() {
 	olsr_enabled=1
 }
 
-setup_vpn() {
-	local cfg="$1"
-	local nodenumber="$2"
-	local device="vpn"
-
-	log_olsr4 "Setup vpn $cfg"
-	uci_add olsrd Interface ; iface_sec="$CONFIG_SECTION"
-	uci_set olsrd "$iface_sec" interface "${device}"
-	uci_set olsrd "$iface_sec" ignore "0"
-	uci_set olsrd "$iface_sec" Mode "ether"
-	olsr_enabled=1
-}
-
 setup_hna4() {
 	local ipaddr="$1"
 
@@ -219,7 +206,6 @@ config_load ffwizard
 config_get nodenumber settings nodenumber
 config_foreach setup_ether ether "$nodenumber"
 config_foreach setup_wifi wifi "$nodenumber"
-config_foreach setup_vpn vpn "$nodenumber"
 
 # setup hna4 
 json_init
