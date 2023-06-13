@@ -31,10 +31,10 @@ setup_wifi() {
 	if ! uci_get ffwizard $cfg >/dev/null ; then
 		uci_add ffwizard wifi "$cfg"
 	fi
-	uci_set ffwizard $cfg enabled "1"
+	uci_set ffwizard $cfg enabled "$(uci_get ffwizard $cfg enabled '1')"
 	uci_set ffwizard $cfg idx $idx
-	uci_set ffwizard $cfg olsr_mesh "1"
-	uci_set ffwizard $cfg vap "1"
+	uci_set ffwizard $cfg olsr_mesh "$(uci_get ffwizard $cfg olsr_mesh '1')"
+	uci_set ffwizard $cfg vap "$(uci_get ffwizard $cfg vap '1')"
 }
 
 setup_vpn() {
