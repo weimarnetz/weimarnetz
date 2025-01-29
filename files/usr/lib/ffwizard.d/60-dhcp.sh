@@ -30,6 +30,10 @@ setup_dhcp() {
 	fi
 	uci_set dhcp $cfg_dhcp leasetime "15m"
 	uci_add_list dhcp $cfg_dhcp dhcp_option "119,olsr,lan,p2p"
+	captive_url=$(uci_get profile_${community} profile captive "")
+	if [ -n "$captive_url" ]; then
+		uci_add_list dhcp $cfg_dhcp dhcp_option "114,$captive_url"
+	fi
 	uci_add_list dhcp $cfg_dhcp domain "olsr"
 	uci_add_list dhcp $cfg_dhcp domain "lan"
 	uci_add_list dhcp $cfg_dhcp domain "p2p"
@@ -59,6 +63,10 @@ setup_roaming_dhcp() {
 	uci_set dhcp $cfg_dhcp limit "254"
 	uci_set dhcp $cfg_dhcp leasetime "6h"
 	uci_add_list dhcp $cfg_dhcp dhcp_option "119,olsr,lan,p2p"
+	captive_url=$(uci_get profile_${community} profile captive "")
+	if [ -n "$captive_url" ]; then
+		uci_add_list dhcp $cfg_dhcp dhcp_option "114,$captive_url"
+	fi
 	uci_add_list dhcp $cfg_dhcp domain "olsr"
 	uci_add_list dhcp $cfg_dhcp domain "lan"
 	uci_add_list dhcp $cfg_dhcp domain "p2p"
