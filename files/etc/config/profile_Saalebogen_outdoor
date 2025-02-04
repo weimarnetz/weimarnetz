@@ -9,4 +9,5 @@ config community 'profile'
         option 'longitude' '11.2636508'
         option 'channel5ghz' '104'
         option 'channel2ghz' '5'
+        option 'captive' 'https://weimarnetz.de/ab/captive-saalebogen.json'
         
