@@ -123,6 +123,7 @@ setup_dhcpbase() {
 	uci_set dhcp $cfg local "/olsr/"
 	uci_set dhcp $cfg domain "olsr"
 	uci_set dhcp $cfg allservers "1"
+	uci_add_list dhcp $cfg rebind_domein '/eckner.net/'
 	uci_remove dhcp $cfg server
 	uci_add_list dhcp $cfg server "5.1.66.255" #  https://ffmuc.net/wiki/doku.php?id=knb:dohdot
 	uci_add_list dhcp $cfg server "46.182.19.48" # https://digitalcourage.de/support/zensurfreier-dns-server
